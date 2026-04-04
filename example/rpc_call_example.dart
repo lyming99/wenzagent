@@ -18,14 +18,14 @@ Future<void> rpcCallExample() async {
   print('Host 已启动: ${host.localIp}:${host.port}');
 
   // 2. Server Client 连接（提供 RPC 服务）
-  final serverClient = LanClientServiceImpl(spaceId: 'server-space');
+  final serverClient = LanClientServiceImpl(deviceId: 'server-device');
   await serverClient.connect(host.localIp!, port: host.port);
   print('Server Client 已连接: server-space');
 
   // 3. 创建 RPC Server 并注册方法
   final rpcServer = RemoteCallServer(
     clientService: serverClient,
-    localSpaceId: 'server-space',
+    localDeviceId: 'server-device',
   );
 
   // 注册一些测试方法
@@ -65,7 +65,7 @@ Future<void> rpcCallExample() async {
   await Future.delayed(Duration(milliseconds: 500));
 
   // 4. Caller Client 连接（调用 RPC）
-  final callerClient = LanClientServiceImpl(spaceId: 'caller-space');
+  final callerClient = LanClientServiceImpl(deviceId: 'caller-device');
   await callerClient.connect(host.localIp!, port: host.port);
   print('Caller Client 已连接: caller-space');
 
@@ -75,7 +75,7 @@ Future<void> rpcCallExample() async {
   // 5. 创建 RPC Manager
   final rpcManager = RemoteCallManager(
     clientService: callerClient,
-    localSpaceId: 'caller-space',
+    localDeviceId: 'caller-device',
   );
 
   // 处理 RPC 响应
@@ -107,7 +107,7 @@ Future<void> rpcCallExample() async {
     final result1 = await rpcManager.invoke<Map<String, dynamic>>(
       'echo',
       {'message': 'Hello from caller!'},
-      toSpaceId: 'server-space',
+      toDeviceId: 'server-device',
     );
     print('echo 结果: $result1');
   } catch (e) {
@@ -119,7 +119,7 @@ Future<void> rpcCallExample() async {
     final result2 = await rpcManager.invoke<Map<String, dynamic>>(
       'add',
       {'a': 10, 'b': 25},
-      toSpaceId: 'server-space',
+      toDeviceId: 'server-device',
     );
     print('add(10, 25) = ${result2['result']}');
   } catch (e) {
@@ -131,7 +131,7 @@ Future<void> rpcCallExample() async {
     final result3 = await rpcManager.invoke<Map<String, dynamic>>(
       'getServerInfo',
       {},
-      toSpaceId: 'server-space',
+      toDeviceId: 'server-device',
     );
     print('服务器信息: $result3');
   } catch (e) {

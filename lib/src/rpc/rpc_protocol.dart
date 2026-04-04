@@ -3,16 +3,16 @@ class RpcRequest {
   final String requestId;
   final String method;
   final Map<String, dynamic> params;
-  final String fromSpaceId;
-  final String toSpaceId;
+  final String fromDeviceId;
+  final String toDeviceId;
   final int timeout;
 
   RpcRequest({
     required this.requestId,
     required this.method,
     required this.params,
-    required this.fromSpaceId,
-    required this.toSpaceId,
+    required this.fromDeviceId,
+    required this.toDeviceId,
     this.timeout = 30000,
   });
 
@@ -20,8 +20,8 @@ class RpcRequest {
         'requestId': requestId,
         'method': method,
         'params': params,
-        'fromSpaceId': fromSpaceId,
-        'toSpaceId': toSpaceId,
+        'fromDeviceId': fromDeviceId,
+        'toDeviceId': toDeviceId,
         'timeout': timeout,
       };
 
@@ -29,8 +29,8 @@ class RpcRequest {
         requestId: json['requestId'] as String,
         method: json['method'] as String,
         params: json['params'] as Map<String, dynamic>? ?? {},
-        fromSpaceId: json['fromSpaceId'] as String,
-        toSpaceId: json['toSpaceId'] as String,
+        fromDeviceId: json['fromDeviceId'] as String,
+        toDeviceId: json['toDeviceId'] as String,
         timeout: json['timeout'] as int? ?? 30000,
       );
 }

@@ -32,8 +32,8 @@ abstract class LanHostService {
   /// 发送消息到指定客户端
   void sendToClient(String clientId, LanMessage message);
 
-  /// 发送消息到指定 spaceId
-  void sendToSpaceId(String spaceId, LanMessage message);
+  /// 发送消息到指定 deviceId
+  void sendToDeviceId(String deviceId, LanMessage message);
 
   /// 断开指定客户端
   void disconnectClient(String clientId);

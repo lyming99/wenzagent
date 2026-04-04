@@ -8,10 +8,10 @@ import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-import '../entity/lan_client.dart';
-import '../entity/lan_message.dart';
+import '../../entity/lan_client.dart';
+import '../../entity/lan_message.dart';
 import 'lan_file_cache_service.dart';
-import 'lan_host_service.dart';
+import '../lan_host_service.dart';
 
 /// LAN 服务端实现
 class LanHostServiceImpl implements LanHostService {
@@ -123,8 +123,8 @@ class LanHostServiceImpl implements LanHostService {
   }
 
   @override
-  void sendToSpaceId(String spaceId, LanMessage message) {
-    final idx = _clients.indexWhere((c) => c.spaceId == spaceId);
+  void sendToDeviceId(String deviceId, LanMessage message) {
+    final idx = _clients.indexWhere((c) => c.deviceId == deviceId);
     if (idx == -1) return;
 
     final channel = _clientChannels[idx];
@@ -291,17 +291,17 @@ class LanHostServiceImpl implements LanHostService {
 
       final idx = _clients.indexWhere((c) => c.id == clientId);
       if (idx != -1) {
-        final newSpaceId = msg.fileName;
+        final newDeviceId = msg.fileName;
 
-        // 断线重连时清理同一 spaceId 的旧连接
-        if (newSpaceId != null && newSpaceId.isNotEmpty) {
-          _removeStaleClientsWithSpaceId(newSpaceId, excludeClientId: clientId);
+        // 断线重连时清理同一 deviceId 的旧连接
+        if (newDeviceId != null && newDeviceId.isNotEmpty) {
+          _removeStaleClientsWithDeviceId(newDeviceId, excludeClientId: clientId);
         }
 
         _clients[idx] = _clients[idx].copyWith(
           ip: msg.content,
           name: msg.fromName,
-          spaceId: msg.fileName,
+          deviceId: msg.fileName,
           topic: msg.topic,
         );
       }
@@ -346,22 +346,22 @@ class LanHostServiceImpl implements LanHostService {
   /// 定向转发消息
   void _forwardMessage(
       String fromClientId, LanMessage msg, String? topic, String data) {
-    // 优先检查消息顶层的 toSpaceId
-    String? toSpaceId = msg.toSpaceId;
+    // 优先检查消息顶层的 toDeviceId
+    String? toDeviceId = msg.toDeviceId;
 
     // 如果顶层没有，尝试从 content 中解析
-    if ((toSpaceId == null || toSpaceId.isEmpty) &&
+    if ((toDeviceId == null || toDeviceId.isEmpty) &&
         msg.content != null &&
         msg.content!.isNotEmpty) {
       try {
         final contentData = jsonDecode(msg.content!) as Map<String, dynamic>;
         final payload = contentData['payload'] as Map<String, dynamic>?;
-        toSpaceId = payload?['toSpaceId'] as String?;
+        toDeviceId = payload?['toDeviceId'] as String?;
       } catch (_) {}
     }
 
-    if (toSpaceId != null && toSpaceId.isNotEmpty) {
-      final idx = _clients.indexWhere((c) => c.spaceId == toSpaceId);
+    if (toDeviceId != null && toDeviceId.isNotEmpty) {
+      final idx = _clients.indexWhere((c) => c.deviceId == toDeviceId);
       if (idx != -1 && _clients[idx].id != fromClientId) {
         try {
           _clientChannels[idx].sink.add(data);
@@ -370,7 +370,7 @@ class LanHostServiceImpl implements LanHostService {
         }
       }
     } else {
-      // 没有 toSpaceId，广播给同 topic 的其他客户端
+      // 没有 toDeviceId，广播给同 topic 的其他客户端
       for (int i = 0; i < _clientChannels.length; i++) {
         if (_clients[i].id == fromClientId) continue;
         if (topic != null && _clients[i].topic != topic) continue;
@@ -387,11 +387,11 @@ class LanHostServiceImpl implements LanHostService {
     } catch (_) {}
   }
 
-  void _removeStaleClientsWithSpaceId(String spaceId,
+  void _removeStaleClientsWithDeviceId(String deviceId,
       {required String excludeClientId}) {
     final staleIndices = <int>[];
     for (int i = 0; i < _clients.length; i++) {
-      if (_clients[i].spaceId == spaceId && _clients[i].id != excludeClientId) {
+      if (_clients[i].deviceId == deviceId && _clients[i].id != excludeClientId) {
         staleIndices.add(i);
       }
     }

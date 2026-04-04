@@ -5,29 +5,29 @@ import 'dart:io';
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-import '../entity/lan_message.dart';
-import 'lan_chunk_service.dart';
-import 'lan_client_service.dart';
+import '../../entity/lan_message.dart';
+import '../lan_chunk_service.dart';
+import '../lan_client_service.dart';
 
 /// LAN 客户端实现
 class LanClientServiceImpl implements LanClientService {
-  // 多实例管理：key = spaceId
+  // 多实例管理：key = deviceId
   static final Map<String, LanClientServiceImpl> _instances = {};
 
-  factory LanClientServiceImpl({String? spaceId, String? topic}) {
-    final id = spaceId ?? 'default';
+  factory LanClientServiceImpl({String? deviceId, String? topic}) {
+    final id = deviceId ?? 'default';
     return _instances.putIfAbsent(
       id,
       () => LanClientServiceImpl._internal(id, topic: topic),
     );
   }
 
-  LanClientServiceImpl._internal(this._spaceId, {String? topic})
+  LanClientServiceImpl._internal(this._deviceId, {String? topic})
       : _topic = topic;
 
-  /// 释放指定 spaceId 的实例
-  static Future<void> dispose(String spaceId) async {
-    final instance = _instances.remove(spaceId);
+  /// 释放指定 deviceId 的实例
+  static Future<void> dispose(String deviceId) async {
+    final instance = _instances.remove(deviceId);
     if (instance != null) {
       await instance._doDisconnect();
     }
@@ -42,14 +42,14 @@ class LanClientServiceImpl implements LanClientService {
     }
   }
 
-  /// 获取所有活跃的 spaceId
-  static List<String> get activeSpaceIds => _instances.keys.toList();
+  /// 获取所有活跃的 deviceId
+  static List<String> get activeDeviceIds => _instances.keys.toList();
 
-  /// 检查指定 spaceId 是否已连接
-  static bool isSpaceConnected(String spaceId) =>
-      _instances[spaceId]?._isConnected ?? false;
+  /// 检查指定 deviceId 是否已连接
+  static bool isDeviceConnected(String deviceId) =>
+      _instances[deviceId]?._isConnected ?? false;
 
-  final String _spaceId;
+  final String _deviceId;
   final String? _topic;
 
   WebSocketChannel? _channel;
@@ -80,7 +80,7 @@ class LanClientServiceImpl implements LanClientService {
   bool get isConnecting => _isConnecting;
 
   @override
-  String get spaceId => _spaceId;
+  String get deviceId => _deviceId;
 
   @override
   String? get topic => _topic;
@@ -254,7 +254,7 @@ class LanClientServiceImpl implements LanClientService {
       'hostIp': _hostIp,
       'hostPort': _hostPort,
       'isConnected': _isConnected,
-      'spaceId': _spaceId,
+      'deviceId': _deviceId,
       'topic': _topic,
       'name': _getDeviceName(),
     };
@@ -325,7 +325,7 @@ class LanClientServiceImpl implements LanClientService {
       fromId: _myId,
       fromName: _getDeviceName(),
       content: _localIp ?? '',
-      fileName: _spaceId,
+      fileName: _deviceId,
       topic: _topic ?? '',
     );
     _channel?.sink.add(jsonEncode(msg.toJson()));

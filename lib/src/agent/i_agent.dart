@@ -5,7 +5,7 @@ import 'agent_state.dart';
 /// Agent 主体接口
 ///
 /// 定义单个 AI Agent 的所有对外操作。
-/// 每个 Agent 实例对应一个员工，由 IAgentManager 统一管理。
+/// 每个 Agent 实例对应一个员工。
 ///
 /// 设计原则：
 /// - 纯 Dart 实现，不依赖 Flutter

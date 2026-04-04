@@ -8,8 +8,8 @@ abstract class LanClientService {
   /// 是否正在连接
   bool get isConnecting;
 
-  /// 空间 ID
-  String get spaceId;
+  /// 设备 ID
+  String get deviceId;
 
   /// 分组 Topic
   String? get topic;

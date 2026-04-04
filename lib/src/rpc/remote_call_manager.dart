@@ -16,7 +16,7 @@ import 'rpc_config.dart';
 /// - 支持同步调用和流式调用
 class RemoteCallManager {
   final LanClientService _clientService;
-  final String _localSpaceId;
+  final String _localDeviceId;
 
   final _uuid = const Uuid();
 
@@ -34,15 +34,15 @@ class RemoteCallManager {
 
   RemoteCallManager({
     required LanClientService clientService,
-    required String localSpaceId,
+    required String localDeviceId,
   })  : _clientService = clientService,
-        _localSpaceId = localSpaceId;
+        _localDeviceId = localDeviceId;
 
   /// 发起同步 RPC 调用
   Future<T> invoke<T>(
     String method,
     Map<String, dynamic> params, {
-    required String toSpaceId,
+    required String toDeviceId,
     int timeout = RpcConfig.defaultTimeout,
   }) async {
     if (_disposed) {
@@ -56,8 +56,8 @@ class RemoteCallManager {
       requestId: requestId,
       method: method,
       params: params,
-      fromSpaceId: _localSpaceId,
-      toSpaceId: toSpaceId,
+      fromDeviceId: _localDeviceId,
+      toDeviceId: toDeviceId,
       timeout: timeout,
     );
 
@@ -95,7 +95,7 @@ class RemoteCallManager {
   Stream<RpcStreamEvent> invokeStream(
     String method,
     Map<String, dynamic> params, {
-    required String toSpaceId,
+    required String toDeviceId,
     int timeout = RpcConfig.streamTimeout,
   }) {
     if (_disposed) {
@@ -109,8 +109,8 @@ class RemoteCallManager {
       requestId: requestId,
       method: method,
       params: params,
-      fromSpaceId: _localSpaceId,
-      toSpaceId: toSpaceId,
+      fromDeviceId: _localDeviceId,
+      toDeviceId: toDeviceId,
       timeout: timeout,
     );
 
@@ -279,8 +279,8 @@ class RemoteCallManager {
     final message = LanMessage(
       id: _uuid.v4(),
       type: LanMessageType.rpcRequest,
-      fromId: _localSpaceId,
-      toSpaceId: request.toSpaceId,
+      fromId: _localDeviceId,
+      toDeviceId: request.toDeviceId,
       content: jsonEncode({
         'action': 'rpcRequest',
         'payload': request.toJson(),

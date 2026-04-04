@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'agent_state.dart';
-import 'i_agent.dart';
-import 'processor/message_processor.dart';
+import '../agent_state.dart';
+import '../i_agent.dart';
+import '../processor/message_processor.dart';
 
 /// Agent 主体实现类（纯 Dart）
 ///

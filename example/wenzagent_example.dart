@@ -12,7 +12,7 @@ void main() async {
   });
 
   // 示例：创建 LAN Client
-  final client = LanClientServiceImpl(spaceId: 'client-001');
+  final client = LanClientServiceImpl(deviceId: 'client-001');
   await client.connect(host.localIp!, port: 9090);
   print('Client connected');
 

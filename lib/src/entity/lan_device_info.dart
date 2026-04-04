@@ -11,9 +11,6 @@ class LanDeviceInfo {
   /// 设备 IP
   final String? ip;
 
-  /// 设备所属空间 ID
-  final String? spaceId;
-
   /// 连接时间
   final DateTime? connectedAt;
 
@@ -24,7 +21,6 @@ class LanDeviceInfo {
     required this.id,
     this.name,
     this.ip,
-    this.spaceId,
     this.connectedAt,
     this.isHost = false,
   });
@@ -33,17 +29,15 @@ class LanDeviceInfo {
         'id': id,
         'name': name,
         'ip': ip,
-        'spaceId': spaceId,
         'connectedAt': connectedAt?.toIso8601String(),
         'isHost': isHost,
       };
 
   factory LanDeviceInfo.fromMap(Map<String, dynamic> map) {
     return LanDeviceInfo(
-      id: map['id'] as String? ?? '',
+      id: map['deviceId'] as String? ?? map['id'] as String? ?? '',
       name: map['name'] as String?,
       ip: map['ip'] as String?,
-      spaceId: map['spaceId'] as String?,
       connectedAt: map['connectedAt'] != null
           ? DateTime.parse(map['connectedAt'] as String)
           : null,
@@ -53,10 +47,9 @@ class LanDeviceInfo {
 
   factory LanDeviceInfo.fromLanClient(LanClient client) {
     return LanDeviceInfo(
-      id: client.id ?? '',
+      id: client.deviceId ?? client.id ?? '',
       name: client.name,
       ip: client.ip,
-      spaceId: client.spaceId,
       connectedAt: client.connectedAt,
       isHost: false,
     );
@@ -64,6 +57,6 @@ class LanDeviceInfo {
 
   @override
   String toString() {
-    return 'LanDeviceInfo(id: ${id.substring(0, id.length > 8 ? 8 : id.length)}, name: $name, ip: $ip, spaceId: $spaceId)';
+    return 'LanDeviceInfo(id: ${id.substring(0, id.length > 8 ? 8 : id.length)}, name: $name, ip: $ip)';
   }
 }

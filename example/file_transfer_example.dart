@@ -25,7 +25,7 @@ Future<void> fileTransferExample() async {
   print('创建测试文件: ${uploadFile.path}');
 
   // 3. Client 连接到 Host
-  final client = LanClientServiceImpl(spaceId: 'file-client');
+  final client = LanClientServiceImpl(deviceId: 'file-client');
   await client.connect(host.localIp!, port: host.port);
   print('Client 已连接');
 

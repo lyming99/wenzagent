@@ -8,6 +8,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:wenzagent/wenzagent.dart';
@@ -24,64 +25,84 @@ void main() async {
 
   // 启动 Host
   final host = LanHostServiceImpl();
-  await host.start();
+  await host.start(port: 0);
   final hostIp = host.localIp!;
   final hostPort = host.port;
   print('✓ Host 已启动: $hostIp:$hostPort');
 
   // 启动 Server Client (提供流式 RPC 服务)
-  final serverClient = LanClientServiceImpl(spaceId: 'stream-server');
+  final serverClient = LanClientServiceImpl(deviceId: 'stream-server');
   await serverClient.connect(hostIp, port: hostPort);
   print('✓ Server Client 已连接: stream-server');
 
   // 注册流式 RPC 服务
   final rpcServer = RemoteCallServer(
     clientService: serverClient,
-    localSpaceId: 'stream-server',
+    localDeviceId: 'stream-server',
   );
 
-  // 注册一个长时间运行的流式方法 - 心跳流
-  rpcServer.registerStreamMethod('heartbeatStream', (params) async* {
+  // 注册心跳流方法
+  rpcServer.registerStream('heartbeatStream', (params) {
     final count = params['count'] as int? ?? 30;
     final intervalMs = params['interval'] as int? ?? 1000;
+    final controller = StreamController<RpcStreamEvent>();
 
-    for (var i = 1; i <= count; i++) {
-      await Future.delayed(Duration(milliseconds: intervalMs));
-      yield {
-        'seq': i,
+    () async {
+      for (var i = 1; i <= count; i++) {
+        await Future.delayed(Duration(milliseconds: intervalMs));
+        controller.add(RpcStreamEvent.chunk(jsonEncode({
+          'seq': i,
+          'total': count,
+          'timestamp': DateTime.now().toIso8601String(),
+          'message': '心跳 #$i',
+        })));
+      }
+      controller.add(RpcStreamEvent.done({
+        'completed': true,
         'total': count,
-        'timestamp': DateTime.now().toIso8601String(),
-        'message': '心跳 #$i',
-      };
-    }
+      }));
+      await controller.close();
+    }();
 
-    yield {'completed': true, 'total': count};
+    return controller.stream;
   });
 
-  // 注册一个数据流方法
-  rpcServer.registerStreamMethod('dataStream', (params) async* {
+  // 注册数据流方法
+  rpcServer.registerStream('dataStream', (params) {
     final total = params['total'] as int? ?? 20;
     final intervalMs = params['interval'] as int? ?? 500;
+    final controller = StreamController<RpcStreamEvent>();
 
-    for (var i = 1; i <= total; i++) {
-      await Future.delayed(Duration(milliseconds: intervalMs));
-      yield {
-        'index': i,
+    () async {
+      for (var i = 1; i <= total; i++) {
+        await Future.delayed(Duration(milliseconds: intervalMs));
+        controller.add(RpcStreamEvent.chunk(jsonEncode({
+          'index': i,
+          'total': total,
+          'value': i * 100,
+          'random': DateTime.now().millisecondsSinceEpoch % 1000,
+        })));
+      }
+      controller.add(RpcStreamEvent.done({
+        'finished': true,
         'total': total,
-        'value': i * 100,
-        'random': DateTime.now().millisecondsSinceEpoch % 1000,
-      };
-    }
+      }));
+      await controller.close();
+    }();
 
-    yield {'finished': true, 'total': total};
+    return controller.stream;
   });
 
   // 监听来自 Host 的消息并转发给 RPC Server
   serverClient.messageStream.listen((msg) {
-    if (msg.type == LanMessageType.rpcRequest ||
-        msg.type == LanMessageType.rpcStreamChunk ||
-        msg.type == LanMessageType.rpcStreamEnd) {
-      rpcServer.handleMessage(msg);
+    if (msg.type == LanMessageType.rpcRequest) {
+      try {
+        final content = jsonDecode(msg.content!) as Map<String, dynamic>;
+        final payload = content['payload'] as Map<String, dynamic>;
+        rpcServer.handleRequest(payload);
+      } catch (e) {
+        print('Server 处理请求错误: $e');
+      }
     }
   });
 
@@ -93,19 +114,43 @@ void main() async {
   print('└─────────────────────────────────────────────────────────┘\n');
 
   // 启动 Caller Client
-  var callerClient = LanClientServiceImpl(spaceId: 'stream-caller');
+  var callerClient = LanClientServiceImpl(deviceId: 'stream-caller');
   await callerClient.connect(hostIp, port: hostPort);
   print('✓ Caller Client 已连接: stream-caller');
 
   // 创建 RPC Manager
   var rpcManager = RemoteCallManager(
     clientService: callerClient,
-    localSpaceId: 'stream-caller',
+    localDeviceId: 'stream-caller',
   );
 
   // 监听来自 Host 的消息并转发给 RPC Manager
   var callerSubscription = callerClient.messageStream.listen((msg) {
-    rpcManager.handleMessage(msg);
+    if (msg.type == LanMessageType.rpcStreamChunk) {
+      try {
+        final content = jsonDecode(msg.content!) as Map<String, dynamic>;
+        final payload = content['payload'] as Map<String, dynamic>;
+        rpcManager.handleStreamChunk(payload);
+      } catch (e) {
+        print('处理流式 chunk 错误: $e');
+      }
+    } else if (msg.type == LanMessageType.rpcStreamEnd) {
+      try {
+        final content = jsonDecode(msg.content!) as Map<String, dynamic>;
+        final payload = content['payload'] as Map<String, dynamic>;
+        rpcManager.handleStreamEnd(payload);
+      } catch (e) {
+        print('处理流式结束错误: $e');
+      }
+    } else if (msg.type == LanMessageType.rpcError) {
+      try {
+        final content = jsonDecode(msg.content!) as Map<String, dynamic>;
+        final payload = content['payload'] as Map<String, dynamic>;
+        rpcManager.handleError(payload);
+      } catch (e) {
+        print('处理 RPC 错误: $e');
+      }
+    }
   });
 
   await Future.delayed(const Duration(milliseconds: 500));
@@ -122,24 +167,22 @@ void main() async {
   StreamSubscription? streamSubscription;
 
   try {
-    final stream = rpcManager.callStream(
+    final stream = rpcManager.invokeStream(
       'heartbeatStream',
       {'count': 30, 'interval': 1000},
-      toSpaceId: 'stream-server',
+      toDeviceId: 'stream-server',
+      timeout: 60000,
     );
 
     streamSubscription = stream.listen(
-      (data) {
-        receivedCount++;
-        final seq = data['seq'];
-        final msg = data['message'];
-        final completed = data['completed'] == true;
-
-        if (completed) {
+      (event) {
+        if (event.isDone) {
           completedCount++;
-          print('✅ 流完成: $data');
+          print('✅ 流完成: ${event.result}');
         } else {
-          print('  📨 [$receivedCount] $msg');
+          receivedCount++;
+          final data = jsonDecode(event.chunk!);
+          print('  📨 [$receivedCount] ${data['message']}');
         }
       },
       onError: (error) {
@@ -183,18 +226,42 @@ void main() async {
   // 清理旧实例
   await LanClientServiceImpl.dispose('stream-caller');
 
-  callerClient = LanClientServiceImpl(spaceId: 'stream-caller');
+  callerClient = LanClientServiceImpl(deviceId: 'stream-caller');
   await callerClient.connect(hostIp, port: hostPort);
   print('✓ Caller Client 已重连: stream-caller');
 
   // 重新创建 RPC Manager
   rpcManager = RemoteCallManager(
     clientService: callerClient,
-    localSpaceId: 'stream-caller',
+    localDeviceId: 'stream-caller',
   );
 
   callerSubscription = callerClient.messageStream.listen((msg) {
-    rpcManager.handleMessage(msg);
+    if (msg.type == LanMessageType.rpcStreamChunk) {
+      try {
+        final content = jsonDecode(msg.content!) as Map<String, dynamic>;
+        final payload = content['payload'] as Map<String, dynamic>;
+        rpcManager.handleStreamChunk(payload);
+      } catch (e) {
+        print('处理流式 chunk 错误: $e');
+      }
+    } else if (msg.type == LanMessageType.rpcStreamEnd) {
+      try {
+        final content = jsonDecode(msg.content!) as Map<String, dynamic>;
+        final payload = content['payload'] as Map<String, dynamic>;
+        rpcManager.handleStreamEnd(payload);
+      } catch (e) {
+        print('处理流式结束错误: $e');
+      }
+    } else if (msg.type == LanMessageType.rpcError) {
+      try {
+        final content = jsonDecode(msg.content!) as Map<String, dynamic>;
+        final payload = content['payload'] as Map<String, dynamic>;
+        rpcManager.handleError(payload);
+      } catch (e) {
+        print('处理 RPC 错误: $e');
+      }
+    }
   });
 
   await Future.delayed(const Duration(milliseconds: 500));
@@ -215,27 +282,25 @@ void main() async {
   print('─────────────────────────────────────────');
 
   try {
-    final stream = rpcManager.callStream(
+    final stream = rpcManager.invokeStream(
       'heartbeatStream',
       {'count': 15, 'interval': 1000},
-      toSpaceId: 'stream-server',
+      toDeviceId: 'stream-server',
+      timeout: 30000,
     );
 
     final completer = Completer<void>();
 
     streamSubscription = stream.listen(
-      (data) {
-        receivedCount++;
-        final seq = data['seq'];
-        final msg = data['message'];
-        final completed = data['completed'] == true;
-
-        if (completed) {
+      (event) {
+        if (event.isDone) {
           completedCount++;
-          print('✅ 流完成: $data');
+          print('✅ 流完成: ${event.result}');
           if (!completer.isCompleted) completer.complete();
         } else {
-          print('  📨 [$receivedCount] $msg');
+          receivedCount++;
+          final data = jsonDecode(event.chunk!);
+          print('  📨 [$receivedCount] ${data['message']}');
         }
       },
       onError: (error) {
@@ -272,23 +337,23 @@ void main() async {
   var dataErrors = 0;
 
   try {
-    final stream = rpcManager.callStream(
+    final stream = rpcManager.invokeStream(
       'dataStream',
       {'total': 20, 'interval': 500},
-      toSpaceId: 'stream-server',
+      toDeviceId: 'stream-server',
+      timeout: 30000,
     );
 
     final completer = Completer<void>();
 
     streamSubscription = stream.listen(
-      (data) {
-        dataReceived++;
-        final finished = data['finished'] == true;
-
-        if (finished) {
-          print('✅ 数据流完成: $data');
+      (event) {
+        if (event.isDone) {
+          print('✅ 数据流完成: ${event.result}');
           if (!completer.isCompleted) completer.complete();
         } else {
+          dataReceived++;
+          final data = jsonDecode(event.chunk!);
           print('  📊 [$dataReceived] index=${data['index']}, value=${data['value']}');
         }
       },

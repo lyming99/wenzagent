@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'agent_state.dart';
-import 'i_agent.dart';
-import 'rpc/agent_rpc_config.dart';
+import '../agent_state.dart';
+import '../i_agent.dart';
+import '../rpc/agent_rpc_config.dart';
 
 /// RPC 调用回调类型
 typedef RpcCall = Future<Map<String, dynamic>> Function(

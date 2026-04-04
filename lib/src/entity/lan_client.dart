@@ -6,8 +6,8 @@ class LanClient {
   /// 客户端 IP
   String? ip;
 
-  /// 空间 ID
-  String? spaceId;
+  /// 设备 ID
+  String? deviceId;
 
   /// 设备名称
   String? name;
@@ -21,7 +21,7 @@ class LanClient {
   LanClient({
     this.id,
     this.ip,
-    this.spaceId,
+    this.deviceId,
     this.name,
     this.topic,
     this.connectedAt,
@@ -30,16 +30,16 @@ class LanClient {
   Map<String, dynamic> toJson() => {
         'id': id,
         'ip': ip,
-        'spaceId': spaceId,
+        'deviceId': deviceId,
         'name': name,
         'topic': topic,
         'connectedAt': connectedAt?.toIso8601String(),
       };
 
   factory LanClient.fromJson(Map<String, dynamic> json) => LanClient(
-        id: json['id'] as String?,
+        id: json['deviceId'] as String? ?? json['id'] as String?,
         ip: json['ip'] as String?,
-        spaceId: json['spaceId'] as String?,
+        deviceId: json['deviceId'] as String?,
         name: json['name'] as String?,
         topic: json['topic'] as String?,
         connectedAt: json['connectedAt'] != null
@@ -50,7 +50,7 @@ class LanClient {
   LanClient copyWith({
     String? id,
     String? ip,
-    String? spaceId,
+    String? deviceId,
     String? name,
     String? topic,
     DateTime? connectedAt,
@@ -58,7 +58,7 @@ class LanClient {
     return LanClient(
       id: id ?? this.id,
       ip: ip ?? this.ip,
-      spaceId: spaceId ?? this.spaceId,
+      deviceId: deviceId ?? this.deviceId,
       name: name ?? this.name,
       topic: topic ?? this.topic,
       connectedAt: connectedAt ?? this.connectedAt,
@@ -67,6 +67,6 @@ class LanClient {
 
   @override
   String toString() {
-    return 'LanClient(id: $id, spaceId: $spaceId, name: $name, ip: $ip)';
+    return 'LanClient(id: $id, deviceId: $deviceId, name: $name, ip: $ip)';
   }
 }

@@ -15,14 +15,14 @@ Future<void> rpcStreamExample() async {
   print('Host 已启动: ${host.localIp}:${host.port}');
 
   // 2. Server Client 连接（提供流式 RPC 服务）
-  final serverClient = LanClientServiceImpl(spaceId: 'stream-server');
+  final serverClient = LanClientServiceImpl(deviceId: 'stream-server');
   await serverClient.connect(host.localIp!, port: host.port);
   print('Server Client 已连接: stream-server');
 
   // 3. 创建 RPC Server 并注册流式方法
   final rpcServer = RemoteCallServer(
     clientService: serverClient,
-    localSpaceId: 'stream-server',
+    localDeviceId: 'stream-server',
   );
 
   // 注册流式方法：计数器
@@ -109,7 +109,7 @@ Future<void> rpcStreamExample() async {
   await Future.delayed(Duration(milliseconds: 500));
 
   // 4. Caller Client 连接
-  final callerClient = LanClientServiceImpl(spaceId: 'stream-caller');
+  final callerClient = LanClientServiceImpl(deviceId: 'stream-caller');
   await callerClient.connect(host.localIp!, port: host.port);
   print('Caller Client 已连接: stream-caller');
 
@@ -119,7 +119,7 @@ Future<void> rpcStreamExample() async {
   // 5. 创建 RPC Manager
   final rpcManager = RemoteCallManager(
     clientService: callerClient,
-    localSpaceId: 'stream-caller',
+    localDeviceId: 'stream-caller',
   );
 
   // 处理流式响应
@@ -157,7 +157,7 @@ Future<void> rpcStreamExample() async {
     final stream1 = rpcManager.invokeStream(
       'counter',
       {'count': 5, 'interval': 400},
-      toSpaceId: 'stream-server',
+      toDeviceId: 'stream-server',
       timeout: 10000,
     );
 
@@ -177,7 +177,7 @@ Future<void> rpcStreamExample() async {
     final stream2 = rpcManager.invokeStream(
       'logStream',
       {},
-      toSpaceId: 'stream-server',
+      toDeviceId: 'stream-server',
       timeout: 10000,
     );
 
@@ -197,7 +197,7 @@ Future<void> rpcStreamExample() async {
     final stream3 = rpcManager.invokeStream(
       'dataGenerator',
       {'count': 6},
-      toSpaceId: 'stream-server',
+      toDeviceId: 'stream-server',
       timeout: 10000,
     );
 

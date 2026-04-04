@@ -12,3 +12,6 @@ export 'src/rpc/rpc.dart';
 
 // Agent
 export 'src/agent/agent.dart';
+
+// Device
+export 'src/device/device.dart';

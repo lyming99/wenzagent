@@ -74,28 +74,28 @@ class FullExample {
     });
 
     // Server Client 连接
-    serverClient = LanClientServiceImpl(spaceId: 'server-001');
+    serverClient = LanClientServiceImpl(deviceId: 'server-001');
     await serverClient.connect(host.localIp!, port: host.port);
     print('✓ Server Client 已连接: server-001');
 
     // 创建 RPC Server
     rpcServer = RemoteCallServer(
       clientService: serverClient,
-      localSpaceId: 'server-001',
+      localDeviceId: 'server-001',
     );
     _registerRpcMethods();
     _listenServerMessages();
     print('✓ RPC Server 已注册方法');
 
     // Caller Client 连接
-    callerClient = LanClientServiceImpl(spaceId: 'caller-001');
+    callerClient = LanClientServiceImpl(deviceId: 'caller-001');
     await callerClient.connect(host.localIp!, port: host.port);
     print('✓ Caller Client 已连接: caller-001');
 
     // 创建 RPC Manager
     rpcManager = RemoteCallManager(
       clientService: callerClient,
-      localSpaceId: 'caller-001',
+      localDeviceId: 'caller-001',
     );
     _listenCallerMessages();
     print('✓ RPC Manager 已就绪');
@@ -240,7 +240,7 @@ class FullExample {
     var result = await rpcManager.invoke<Map<String, dynamic>>(
       'ping',
       {},
-      toSpaceId: 'server-001',
+      toDeviceId: 'server-001',
     );
     print('  返回: $result\n');
 
@@ -249,7 +249,7 @@ class FullExample {
     result = await rpcManager.invoke<Map<String, dynamic>>(
       'add',
       {'a': 100, 'b': 200},
-      toSpaceId: 'server-001',
+      toDeviceId: 'server-001',
     );
     print('  结果: ${result['result']}\n');
 
@@ -258,7 +258,7 @@ class FullExample {
     result = await rpcManager.invoke<Map<String, dynamic>>(
       'getSystemInfo',
       {},
-      toSpaceId: 'server-001',
+      toDeviceId: 'server-001',
     );
     print('  系统: ${result['os']}');
     print('  主机名: ${result['hostname']}');
@@ -276,7 +276,7 @@ class FullExample {
     final stream1 = rpcManager.invokeStream(
       'countDown',
       {'start': 5},
-      toSpaceId: 'server-001',
+      toDeviceId: 'server-001',
       timeout: 10000,
     );
     await for (final event in stream1) {
@@ -291,7 +291,7 @@ class FullExample {
     final stream2 = rpcManager.invokeStream(
       'heartbeat',
       {'count': 3},
-      toSpaceId: 'server-001',
+      toDeviceId: 'server-001',
       timeout: 10000,
     );
     await for (final event in stream2) {
@@ -343,7 +343,7 @@ class FullExample {
     var result = await rpcManager.invoke<Map<String, dynamic>>(
       'agentGetOrCreate',
       {'employeeUuid': 'agent-demo-001'},
-      toSpaceId: 'server-001',
+      toDeviceId: 'server-001',
     );
     print('  Agent ID: ${result['employeeUuid']}');
     print('  会话 ID: ${result['sessionUuid']}');
@@ -353,7 +353,7 @@ class FullExample {
     result = await rpcManager.invoke<Map<String, dynamic>>(
       'agentGetState',
       {'employeeUuid': 'agent-demo-001'},
-      toSpaceId: 'server-001',
+      toDeviceId: 'server-001',
     );
     print('  状态: ${result['status']}');
     print('  队列长度: ${result['queueLength']}\n');
@@ -365,7 +365,7 @@ class FullExample {
         'employeeUuid': 'agent-demo-001',
         'messageData': {'content': 'Hello from remote!'},
       },
-      toSpaceId: 'server-001',
+      toDeviceId: 'server-001',
     );
     print('  消息 ID: ${result['messageId']}');
     print('  状态: ${result['status']}\n');

@@ -16,7 +16,7 @@ import 'rpc_config.dart';
 /// - 构造并发送响应消息
 class RemoteCallServer {
   final LanClientService _clientService;
-  final String _localSpaceId;
+  final String _localDeviceId;
 
   final _uuid = const Uuid();
 
@@ -37,9 +37,9 @@ class RemoteCallServer {
 
   RemoteCallServer({
     required LanClientService clientService,
-    required String localSpaceId,
+    required String localDeviceId,
   })  : _clientService = clientService,
-        _localSpaceId = localSpaceId;
+        _localDeviceId = localDeviceId;
 
   /// 注册同步方法处理器
   void register(
@@ -74,7 +74,7 @@ class RemoteCallServer {
       final method = request.method;
 
       // 检查是否发给本机的请求
-      if (request.toSpaceId.isNotEmpty && request.toSpaceId != _localSpaceId) {
+      if (request.toDeviceId.isNotEmpty && request.toDeviceId != _localDeviceId) {
         return;
       }
 
@@ -87,7 +87,7 @@ class RemoteCallServer {
         await _handleSyncRequest(request);
       } else {
         _sendError(
-          request.fromSpaceId,
+          request.fromDeviceId,
           request.requestId,
           RpcError(
             code: RpcConfig.errorCodeMethodNotRegistered,
@@ -122,13 +122,13 @@ class RemoteCallServer {
         final result = await _hostHandler!(request.method, request.params);
 
         _sendResponse(
-          request.fromSpaceId,
+          request.fromDeviceId,
           RpcResponse.success(request.requestId, result),
         );
       }
     } catch (e) {
       _sendError(
-        request.fromSpaceId,
+        request.fromDeviceId,
         request.requestId,
         RpcError(
           code: RpcConfig.errorCodeInternalError,
@@ -147,12 +147,12 @@ class RemoteCallServer {
       final result = await handler(request.params);
 
       _sendResponse(
-        request.fromSpaceId,
+        request.fromDeviceId,
         RpcResponse.success(request.requestId, result),
       );
     } catch (e) {
       _sendError(
-        request.fromSpaceId,
+        request.fromDeviceId,
         request.requestId,
         RpcError(
           code: RpcConfig.errorCodeInternalError,
@@ -174,7 +174,7 @@ class RemoteCallServer {
         (event) {
           if (event.isDone) {
             _sendStreamEnd(
-              request.fromSpaceId,
+              request.fromDeviceId,
               RpcStreamEnd(
                 requestId: request.requestId,
                 result: event.result,
@@ -182,7 +182,7 @@ class RemoteCallServer {
             );
           } else if (event.chunk != null) {
             _sendStreamChunk(
-              request.fromSpaceId,
+              request.fromDeviceId,
               RpcStreamChunk(
                 requestId: request.requestId,
                 chunk: event.chunk!,
@@ -192,7 +192,7 @@ class RemoteCallServer {
         },
         onError: (error) {
           _sendError(
-            request.fromSpaceId,
+            request.fromDeviceId,
             request.requestId,
             RpcError(
               code: RpcConfig.errorCodeInternalError,
@@ -213,7 +213,7 @@ class RemoteCallServer {
       }
     } catch (e) {
       _sendError(
-        request.fromSpaceId,
+        request.fromDeviceId,
         request.requestId,
         RpcError(
           code: RpcConfig.errorCodeInternalError,
@@ -224,12 +224,12 @@ class RemoteCallServer {
   }
 
   /// 发送响应消息
-  void _sendResponse(String toSpaceId, RpcResponse response) {
+  void _sendResponse(String toDeviceId, RpcResponse response) {
     final message = LanMessage(
       id: _uuid.v4(),
       type: LanMessageType.rpcResponse,
-      fromId: _localSpaceId,
-      toSpaceId: toSpaceId,
+      fromId: _localDeviceId,
+      toDeviceId: toDeviceId,
       content: jsonEncode({
         'action': 'rpcResponse',
         'payload': response.toJson(),
@@ -240,12 +240,12 @@ class RemoteCallServer {
   }
 
   /// 发送流式 chunk 消息
-  void _sendStreamChunk(String toSpaceId, RpcStreamChunk chunk) {
+  void _sendStreamChunk(String toDeviceId, RpcStreamChunk chunk) {
     final message = LanMessage(
       id: _uuid.v4(),
       type: LanMessageType.rpcStreamChunk,
-      fromId: _localSpaceId,
-      toSpaceId: toSpaceId,
+      fromId: _localDeviceId,
+      toDeviceId: toDeviceId,
       content: jsonEncode({
         'action': 'rpcStreamChunk',
         'payload': chunk.toJson(),
@@ -256,12 +256,12 @@ class RemoteCallServer {
   }
 
   /// 发送流式结束消息
-  void _sendStreamEnd(String toSpaceId, RpcStreamEnd end) {
+  void _sendStreamEnd(String toDeviceId, RpcStreamEnd end) {
     final message = LanMessage(
       id: _uuid.v4(),
       type: LanMessageType.rpcStreamEnd,
-      fromId: _localSpaceId,
-      toSpaceId: toSpaceId,
+      fromId: _localDeviceId,
+      toDeviceId: toDeviceId,
       content: jsonEncode({
         'action': 'rpcStreamEnd',
         'payload': end.toJson(),
@@ -272,12 +272,12 @@ class RemoteCallServer {
   }
 
   /// 发送错误消息
-  void _sendError(String toSpaceId, String requestId, RpcError error) {
+  void _sendError(String toDeviceId, String requestId, RpcError error) {
     final message = LanMessage(
       id: _uuid.v4(),
       type: LanMessageType.rpcError,
-      fromId: _localSpaceId,
-      toSpaceId: toSpaceId,
+      fromId: _localDeviceId,
+      toDeviceId: toDeviceId,
       content: jsonEncode({
         'action': 'rpcError',
         'payload': {

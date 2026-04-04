@@ -69,8 +69,8 @@ class LanMessage {
   /// 分组 Topic
   String? topic;
 
-  /// 目标 SpaceId（用于定向转发）
-  String? toSpaceId;
+  /// 目标设备ID（用于定向转发）
+  String? toDeviceId;
 
   /// 时间戳
   DateTime? timestamp;
@@ -86,7 +86,7 @@ class LanMessage {
     this.fileId,
     this.fileHash,
     this.topic,
-    this.toSpaceId,
+    this.toDeviceId,
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
 
@@ -94,14 +94,14 @@ class LanMessage {
   factory LanMessage.rpcRequest({
     required String id,
     required String fromId,
-    required String toSpaceId,
+    required String toDeviceId,
     required String content,
   }) {
     return LanMessage(
       id: id,
       type: LanMessageType.rpcRequest,
       fromId: fromId,
-      toSpaceId: toSpaceId,
+      toDeviceId: toDeviceId,
       content: content,
     );
   }
@@ -110,14 +110,14 @@ class LanMessage {
   factory LanMessage.rpcResponse({
     required String id,
     required String fromId,
-    required String toSpaceId,
+    required String toDeviceId,
     required String content,
   }) {
     return LanMessage(
       id: id,
       type: LanMessageType.rpcResponse,
       fromId: fromId,
-      toSpaceId: toSpaceId,
+      toDeviceId: toDeviceId,
       content: content,
     );
   }
@@ -141,7 +141,7 @@ class LanMessage {
         'fileId': fileId,
         'fileHash': fileHash,
         'topic': topic,
-        'toSpaceId': toSpaceId,
+        'toDeviceId': toDeviceId,
         'timestamp': timestamp?.millisecondsSinceEpoch,
       };
 
@@ -161,7 +161,7 @@ class LanMessage {
         fileId: json['fileId'] as String?,
         fileHash: json['fileHash'] as String?,
         topic: json['topic'] as String?,
-        toSpaceId: json['toSpaceId'] as String?,
+        toDeviceId: json['toDeviceId'] as String?,
         timestamp: json['timestamp'] != null
             ? DateTime.fromMillisecondsSinceEpoch(json['timestamp'] as int)
             : null,
@@ -169,6 +169,6 @@ class LanMessage {
 
   @override
   String toString() {
-    return 'LanMessage(id: $id, type: $type, fromId: $fromId, toSpaceId: $toSpaceId)';
+    return 'LanMessage(id: $id, type: $type, fromId: $fromId, toDeviceId: $toDeviceId)';
   }
 }
