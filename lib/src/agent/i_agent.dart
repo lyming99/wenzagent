@@ -63,6 +63,11 @@ abstract class IAgent {
   /// 中断当前处理
   Future<void> interrupt();
 
+  /// 撤回消息
+  ///
+  /// [messageId] 要撤回的消息ID
+  Future<void> revokeMessage(String messageId);
+
   // ===== 会话管理 =====
 
   /// 获取会话列表
@@ -133,6 +138,11 @@ abstract class IAgent {
     String requestId,
     PermissionDecision decision,
   );
+
+  /// 获取当前权限请求（如果有）
+  ///
+  /// Agent 处于 waitingPermission 状态时返回权限请求信息
+  AgentPermissionRequest? getPendingPermissionRequest();
 
   // ===== 状态查询 =====
 

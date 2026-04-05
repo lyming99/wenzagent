@@ -166,6 +166,13 @@ abstract class IChatAdapter {
     void Function(Map<String, dynamic> event)? callback,
   );
 
+  /// 更新消息状态（用于持久化）
+  void updateMessageStatus(
+    String messageId,
+    AgentMessageStatus status, {
+    String? error,
+  });
+
   /// 释放资源
   Future<void> dispose();
 }
@@ -226,6 +233,7 @@ class MessageProcessor {
     Map<String, dynamic> messageData, {
     List<Map<String, dynamic>>? recentContext,
   }) async {
+    print('[MessageProcessor] submitMessage: $messageId');
     if (_disposed) throw Exception('MessageProcessor 已销毁');
 
     final item = MessageQueueItem(
@@ -235,9 +243,12 @@ class MessageProcessor {
 
     _queue.enqueue(item);
     onMessageStatusChanged?.call(messageId, AgentMessageStatus.queued);
+    print('[MessageProcessor] message queued, queue length: ${_queue.length}');
+    print('[MessageProcessor] current status: $_status');
 
     // 如果当前没有在处理，开始处理
     if (_status == AgentStatus.idle) {
+      print('[MessageProcessor] status is idle, calling _processNext');
       _processNext();
     }
   }
@@ -293,14 +304,17 @@ class MessageProcessor {
   // ===== 私有方法 =====
 
   void _processNext() {
+    print('[MessageProcessor] _processNext called, disposed: $_disposed');
     if (_disposed) return;
 
     final item = _queue.dequeue();
     if (item == null) {
+      print('[MessageProcessor] queue is empty, setting status to idle');
       _setStatus(AgentStatus.idle);
       return;
     }
 
+    print('[MessageProcessor] processing message: ${item.messageId}');
     _currentProcessingMessageId = item.messageId;
     _currentCancellationToken = CancellationToken();
     _setStatus(AgentStatus.processing);
@@ -313,6 +327,7 @@ class MessageProcessor {
     String messageId,
     Map<String, dynamic> messageData,
   ) async {
+    print('[MessageProcessor] _processMessage: $messageId');
     try {
       final stream = _streamMessage(
         messageId,
@@ -323,11 +338,14 @@ class MessageProcessor {
       bool hasContent = false;
 
       await for (final response in stream) {
+        print('[MessageProcessor] response: ${response.isDone ? "DONE" : response.error != null ? "ERROR: ${response.error}" : "CHUNK: ${response.content?.substring(0, (response.content?.length ?? 0).clamp(0, 30))}"}');
         if (_currentCancellationToken?.isCancelled ?? false) {
+          print('[MessageProcessor] cancelled');
           break;
         }
 
         if (response.error != null) {
+          print('[MessageProcessor] error: ${response.error}');
           onMessageStatusChanged?.call(
             messageId,
             AgentMessageStatus.failed,
@@ -345,6 +363,7 @@ class MessageProcessor {
         }
 
         if (response.isDone) {
+          print('[MessageProcessor] message completed: $messageId');
           onMessageStatusChanged?.call(messageId, AgentMessageStatus.completed);
           _finishProcessing();
           return;
@@ -357,6 +376,7 @@ class MessageProcessor {
         _finishProcessing();
       }
     } catch (e) {
+      print('[MessageProcessor] exception: $e');
       if (!_disposed && _currentProcessingMessageId == messageId) {
         onMessageStatusChanged?.call(
           messageId,

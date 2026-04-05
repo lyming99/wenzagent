@@ -38,8 +38,11 @@ class AgentImpl implements IAgent {
   /// 权限管理器
   final ToolPermissionManager _permissionManager = ToolPermissionManager();
 
-  /// 待处理的权限请求
+  /// 待处理的权限请求 Completer
   final Map<String, Completer<PermissionDecision>> _pendingPermissions = {};
+
+  /// 待处理的权限请求信息
+  final Map<String, AgentPermissionRequest> _pendingPermissionRequests = {};
 
   // ===== 内部状态 =====
 
@@ -113,6 +116,7 @@ class AgentImpl implements IAgent {
     _permissionManager.onPermissionRequest = (request) async {
       final completer = Completer<PermissionDecision>();
       _pendingPermissions[request.requestId] = completer;
+      _pendingPermissionRequests[request.requestId] = request;
 
       // 设置处理器状态为等待权限
       _processor?.setPermissionBlocked(request.requestId);
@@ -128,6 +132,7 @@ class AgentImpl implements IAgent {
         return await completer.future;
       } finally {
         _pendingPermissions.remove(request.requestId);
+        _pendingPermissionRequests.remove(request.requestId);
         // 恢复处理状态
         _processor?.setPermissionBlocked(null);
       }
@@ -187,6 +192,7 @@ class AgentImpl implements IAgent {
       }
     }
     _pendingPermissions.clear();
+    _pendingPermissionRequests.clear();
 
     _processor?.dispose();
     _processor = null;
@@ -215,6 +221,8 @@ class AgentImpl implements IAgent {
   @override
   Future<String> sendMessage(Map<String, dynamic> messageData) async {
     _touch();
+    print('[AgentImpl] sendMessage: ${messageData['content']?.toString().substring(0, (messageData['content']?.toString().length ?? 0).clamp(0, 50))}');
+    print('[AgentImpl] currentSessionUuid: $currentSessionUuid');
 
     return await _withLock(() async {
       // 生成消息ID
@@ -226,6 +234,7 @@ class AgentImpl implements IAgent {
       messageData['type'] = messageData['type'] as String? ?? 'text';
       messageData['createdAt'] = DateTime.now().toIso8601String();
 
+      print('[AgentImpl] submitting message to processor, messageId: $messageId');
       // 提交到处理器
       await _processor?.submitMessage(messageId, messageData);
 
@@ -273,6 +282,19 @@ class AgentImpl implements IAgent {
 
       await _chatAdapter.switchSession(sessionUuid);
     });
+  }
+
+  @override
+  Future<void> revokeMessage(String messageId) async {
+    _touch();
+    await _processor?.revokeMessage(messageId);
+  }
+
+  @override
+  AgentPermissionRequest? getPendingPermissionRequest() {
+    // 返回第一个待处理的权限请求
+    if (_pendingPermissionRequests.isEmpty) return null;
+    return _pendingPermissionRequests.values.first;
   }
 
   @override

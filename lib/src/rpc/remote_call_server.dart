@@ -57,6 +57,17 @@ class RemoteCallServer {
     _streamHandlers[method] = handler;
   }
 
+  /// 取消注册方法处理器
+  void unregister(String method) {
+    _handlers.remove(method);
+    _streamHandlers.remove(method);
+  }
+
+  /// 检查方法是否已注册
+  bool hasMethod(String method) {
+    return _handlers.containsKey(method) || _streamHandlers.containsKey(method);
+  }
+
   /// 设置 Host 级别的 RPC 处理器
   void setHostHandler(
     Future<Map<String, dynamic>> Function(String method, Map<String, dynamic> params)

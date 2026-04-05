@@ -5,6 +5,7 @@
 library;
 
 export 'langchain_chat_adapter.dart';
+export 'persistent_chat_adapter.dart';
 export 'chat_model_factory.dart';
 export 'session_memory_manager.dart';
 export 'provider_config.dart';

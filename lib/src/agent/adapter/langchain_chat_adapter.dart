@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:langchain_core/chat_models.dart';
 import 'package:langchain_core/prompts.dart';
+import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 
 import '../agent_state.dart';
@@ -32,11 +33,13 @@ class LangChainChatAdapter implements IChatAdapter {
   /// 提供商配置
   ProviderConfig? _providerConfig;
 
-  /// 会话记忆管理器
-  final SessionMemoryManager _memoryManager = SessionMemoryManager();
+  /// 会话记忆管理器（protected，供子类访问）
+  @protected
+  final SessionMemoryManager memoryManager = SessionMemoryManager();
 
-  /// 当前会话 UUID
-  String? _currentSessionUuid;
+  /// 当前会话 UUID（protected，供子类访问）
+  @protected
+  String? currentSessionUuidValue;
 
   /// 当前上下文
   Map<String, dynamic>? _context;
@@ -61,13 +64,13 @@ class LangChainChatAdapter implements IChatAdapter {
   // ===== IChatAdapter 属性实现 =====
 
   @override
-  String? get currentSessionUuid => _currentSessionUuid;
+  String? get currentSessionUuid => currentSessionUuidValue;
 
   @override
   List<Map<String, dynamic>> get currentMessages {
-    if (_currentSessionUuid == null) return [];
+    if (currentSessionUuidValue == null) return [];
 
-    final session = _memoryManager.getSession(_currentSessionUuid!);
+    final session = memoryManager.getSession(currentSessionUuidValue!);
     if (session == null) return [];
 
     return session.messages.map(_chatMessageToMap).toList();
@@ -86,11 +89,11 @@ class LangChainChatAdapter implements IChatAdapter {
     required String employeeUuid,
     String? sessionUuid,
   }) async {
-    _currentSessionUuid =
+    currentSessionUuidValue =
         sessionUuid ??
         'session-${DateTime.now().millisecondsSinceEpoch}-${employeeUuid.substring(0, 8)}';
 
-    _memoryManager.getOrCreateSession(_currentSessionUuid!, employeeUuid);
+    memoryManager.getOrCreateSession(currentSessionUuidValue!, employeeUuid);
   }
 
   @override
@@ -98,17 +101,25 @@ class LangChainChatAdapter implements IChatAdapter {
     Map<String, dynamic> messageData, {
     CancellationToken? cancellationToken,
   }) async* {
+    print('[LangChainChatAdapter] streamMessage called');
+    print('[LangChainChatAdapter] _chatModel: $_chatModel');
+    print('[LangChainChatAdapter] _providerConfig: $_providerConfig');
+    print('[LangChainChatAdapter] currentSessionUuidValue: $currentSessionUuidValue');
+
     if (_chatModel == null) {
+      print('[LangChainChatAdapter] ERROR: _chatModel is null');
       yield StreamResponse.error('未配置 LLM Provider，请先调用 updateProvider()');
       return;
     }
 
     if (_isStreaming) {
+      print('[LangChainChatAdapter] ERROR: already streaming');
       yield StreamResponse.error('正在处理中，请等待当前请求完成');
       return;
     }
 
-    if (_currentSessionUuid == null) {
+    if (currentSessionUuidValue == null) {
+      print('[LangChainChatAdapter] ERROR: currentSessionUuidValue is null');
       yield StreamResponse.error('未初始化会话，请先调用 initSession()');
       return;
     }
@@ -125,7 +136,7 @@ class LangChainChatAdapter implements IChatAdapter {
 
       // 添加用户消息到历史
       final userMessage = ChatMessage.humanText(userContent);
-      _memoryManager.addMessage(_currentSessionUuid!, userMessage);
+      memoryManager.addMessage(currentSessionUuidValue!, userMessage);
 
       // 检查是否有可用工具
       final hasTools = _toolRegistry != null && !_toolRegistry!.isEmpty;
@@ -133,10 +144,10 @@ class LangChainChatAdapter implements IChatAdapter {
       // 准备上下文压缩（每轮用户消息调用一次）
       final systemPrompt = _buildSystemPrompt();
       if (_compressor != null) {
-        final session = _memoryManager.getSession(_currentSessionUuid!);
+        final session = memoryManager.getSession(currentSessionUuidValue!);
         if (session != null) {
           await _compressor!.prepareCompression(
-            sessionUuid: _currentSessionUuid!,
+            sessionUuid: currentSessionUuidValue!,
             allMessages: session.messages,
             session: session,
             systemPrompt: systemPrompt,
@@ -155,15 +166,15 @@ class LangChainChatAdapter implements IChatAdapter {
         // 构建消息列表（启用压缩时使用压缩器）
         final List<ChatMessage> messages;
         if (_compressor != null) {
-          final session = _memoryManager.getSession(_currentSessionUuid!);
+          final session = memoryManager.getSession(currentSessionUuidValue!);
           messages = _compressor!.buildCompressedMessages(
-            sessionUuid: _currentSessionUuid!,
+            sessionUuid: currentSessionUuidValue!,
             allMessages: session?.messages ?? [],
             systemPrompt: systemPrompt,
           );
         } else {
-          messages = _memoryManager.buildMessages(
-            sessionUuid: _currentSessionUuid!,
+          messages = memoryManager.buildMessages(
+            sessionUuid: currentSessionUuidValue!,
             systemPrompt: systemPrompt,
           );
         }
@@ -176,6 +187,8 @@ class LangChainChatAdapter implements IChatAdapter {
               )
             : null;
 
+        print('[LangChainChatAdapter] calling LLM, messages count: ${messages.length}, hasTools: $hasTools');
+
         // 调用 LLM 流式接口并累积完整响应
         ChatResult? accumulatedResult;
         final aiContentBuffer = StringBuffer();
@@ -185,28 +198,35 @@ class LangChainChatAdapter implements IChatAdapter {
           cancelled = true;
         });
 
-        final stream = _chatModel!.stream(
-          PromptValue.chat(messages),
-          options: options,
-        );
+        try {
+          final stream = _chatModel!.stream(
+            PromptValue.chat(messages),
+            options: options,
+          );
 
-        await for (final result in stream) {
-          if (cancelled || cancellationToken?.isCancelled == true) {
-            yield StreamResponse.error('Cancelled');
-            return;
+          await for (final result in stream) {
+            if (cancelled || cancellationToken?.isCancelled == true) {
+              yield StreamResponse.error('Cancelled');
+              return;
+            }
+
+            // 累积完整结果（含 toolCalls 合并）
+            accumulatedResult = accumulatedResult == null
+                ? result
+                : accumulatedResult.concat(result);
+
+            // 流式输出文本 chunk
+            final chunk = result.output.content;
+            if (chunk.isNotEmpty) {
+              aiContentBuffer.write(chunk);
+              yield StreamResponse.chunk(chunk);
+            }
           }
-
-          // 累积完整结果（含 toolCalls 合并）
-          accumulatedResult = accumulatedResult == null
-              ? result
-              : accumulatedResult.concat(result);
-
-          // 流式输出文本 chunk
-          final chunk = result.output.content;
-          if (chunk.isNotEmpty) {
-            aiContentBuffer.write(chunk);
-            yield StreamResponse.chunk(chunk);
-          }
+        } catch (e, st) {
+          print('[LangChainChatAdapter] LLM stream error: $e');
+          print('[LangChainChatAdapter] stack trace: $st');
+          yield StreamResponse.error('LLM 调用异常: $e');
+          return;
         }
 
         // 检查取消
@@ -227,8 +247,8 @@ class LangChainChatAdapter implements IChatAdapter {
           // 没有工具调用 → 将 AI 文本加入历史，结束循环
           final aiContent = aiContentBuffer.toString();
           if (aiContent.isNotEmpty) {
-            _memoryManager.addMessage(
-              _currentSessionUuid!,
+            memoryManager.addMessage(
+              currentSessionUuidValue!,
               ChatMessage.ai(aiContent),
             );
           }
@@ -236,7 +256,7 @@ class LangChainChatAdapter implements IChatAdapter {
         }
 
         // 有工具调用 → 将 AI 消息（含 toolCalls）加入历史
-        _memoryManager.addMessage(_currentSessionUuid!, aiMessage);
+        memoryManager.addMessage(currentSessionUuidValue!, aiMessage);
 
         // 逐个执行工具调用
         for (final toolCall in toolCalls) {
@@ -270,8 +290,8 @@ class LangChainChatAdapter implements IChatAdapter {
           if (tool == null) {
             // 工具未找到
             final errorResult = '工具 "$toolName" 未注册';
-            _memoryManager.addMessage(
-              _currentSessionUuid!,
+            memoryManager.addMessage(
+              currentSessionUuidValue!,
               ToolChatMessage(toolCallId: toolCallId, content: errorResult),
             );
             yield StreamResponse.toolCallResult(
@@ -292,8 +312,8 @@ class LangChainChatAdapter implements IChatAdapter {
 
             if (decision == PermissionDecision.deny) {
               final denyResult = '权限被拒绝: 用户拒绝了工具 "$toolName" 的执行';
-              _memoryManager.addMessage(
-                _currentSessionUuid!,
+              memoryManager.addMessage(
+                currentSessionUuidValue!,
                 ToolChatMessage(toolCallId: toolCallId, content: denyResult),
               );
               yield StreamResponse.toolCallResult(
@@ -317,8 +337,8 @@ class LangChainChatAdapter implements IChatAdapter {
           stopwatch.stop();
 
           // 将工具结果加入历史
-          _memoryManager.addMessage(
-            _currentSessionUuid!,
+          memoryManager.addMessage(
+            currentSessionUuidValue!,
             ToolChatMessage(toolCallId: toolCallId, content: result.content),
           );
 
@@ -363,7 +383,7 @@ class LangChainChatAdapter implements IChatAdapter {
   Future<List<Map<String, dynamic>>> getSessionsByEmployee(
     String employeeUuid,
   ) async {
-    final sessions = _memoryManager.getSessionsByEmployee(employeeUuid);
+    final sessions = memoryManager.getSessionsByEmployee(employeeUuid);
     return sessions
         .map(
           (s) => {
@@ -382,7 +402,7 @@ class LangChainChatAdapter implements IChatAdapter {
   Future<List<Map<String, dynamic>>> getSessionMessages(
     String sessionUuid,
   ) async {
-    final session = _memoryManager.getSession(sessionUuid);
+    final session = memoryManager.getSession(sessionUuid);
     if (session == null) return [];
 
     return session.messages.map(_chatMessageToMap).toList();
@@ -396,7 +416,7 @@ class LangChainChatAdapter implements IChatAdapter {
     final sessionUuid =
         'session-${DateTime.now().millisecondsSinceEpoch}-${employeeUuid.substring(0, 8)}';
 
-    _memoryManager.getOrCreateSession(sessionUuid, employeeUuid, title: title);
+    memoryManager.getOrCreateSession(sessionUuid, employeeUuid, title: title);
 
     return sessionUuid;
   }
@@ -407,18 +427,18 @@ class LangChainChatAdapter implements IChatAdapter {
       await stopStreaming();
     }
 
-    final session = _memoryManager.getSession(sessionUuid);
+    final session = memoryManager.getSession(sessionUuid);
     if (session == null) {
       throw ArgumentError('会话不存在: $sessionUuid');
     }
 
-    _currentSessionUuid = sessionUuid;
+    currentSessionUuidValue = sessionUuid;
   }
 
   @override
   Future<void> clearCurrentSession() async {
-    if (_currentSessionUuid != null) {
-      _memoryManager.clearSession(_currentSessionUuid!);
+    if (currentSessionUuidValue != null) {
+      memoryManager.clearSession(currentSessionUuidValue!);
     }
   }
 
@@ -434,11 +454,15 @@ class LangChainChatAdapter implements IChatAdapter {
 
   @override
   Future<void> updateProvider(Map<String, dynamic> providerConfig) async {
+    print('[LangChainChatAdapter] updateProvider called with: $providerConfig');
     final config = ProviderConfig.fromMap(providerConfig);
+    print('[LangChainChatAdapter] parsed config: provider=${config.provider}, model=${config.model}, baseUrl=${config.baseUrl}');
     config.validate();
+    print('[LangChainChatAdapter] config validated successfully');
 
     _chatModel = ChatModelFactory.create(config);
     _providerConfig = config;
+    print('[LangChainChatAdapter] _chatModel created: $_chatModel');
 
     // 配置上下文压缩器
     final compression = config.compressionConfig;
@@ -490,15 +514,24 @@ class LangChainChatAdapter implements IChatAdapter {
   }
 
   @override
+  void updateMessageStatus(
+    String messageId,
+    AgentMessageStatus status, {
+    String? error,
+  }) {
+    // 内存适配器不需要持久化，子类 PersistentChatAdapter 可重写此方法
+  }
+
+  @override
   Future<void> dispose() async {
     await stopStreaming();
-    _memoryManager.dispose();
+    memoryManager.dispose();
     _compressor?.dispose();
     _compressor = null;
     _chatModel = null;
     _providerConfig = null;
     _context = null;
-    _currentSessionUuid = null;
+    currentSessionUuidValue = null;
     _toolRegistry = null;
     _permissionManager = null;
     _toolEventCallback = null;

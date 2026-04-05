@@ -97,9 +97,12 @@ class AgentProxy {
 
   /// 发送消息
   Future<String> sendMessage(Map<String, dynamic> messageData) async {
+    print('[AgentProxy] sendMessage isLocalMode: $isLocalMode');
     if (isLocalMode && _localAgent != null) {
+      print('[AgentProxy] calling local agent sendMessage');
       return _localAgent.sendMessage(messageData);
     }
+    print('[AgentProxy] calling RPC sendMessage');
     final result = await _rpc(AgentRpcConfig.methodSendMessage, {
       'employeeUuid': employeeUuid,
       'messageData': messageData,
@@ -113,6 +116,38 @@ class AgentProxy {
       return _localAgent.interrupt();
     }
     await _rpc(AgentRpcConfig.methodInterrupt, {'employeeUuid': employeeUuid});
+  }
+
+  /// 撤回消息
+  Future<void> revokeMessage(String messageId) async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.revokeMessage(messageId);
+    }
+    await _rpc(AgentRpcConfig.methodRevokeMessage, {
+      'employeeUuid': employeeUuid,
+      'messageId': messageId,
+    });
+  }
+
+  /// 获取当前权限请求（如果有，同步版本仅适用于本地模式）
+  AgentPermissionRequest? getPendingPermissionRequest() {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.getPendingPermissionRequest();
+    }
+    return null;
+  }
+
+  /// 获取当前权限请求（异步版本，支持远程 RPC）
+  Future<AgentPermissionRequest?> getPendingPermissionRequestAsync() async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.getPendingPermissionRequest();
+    }
+    final result = await _rpc(AgentRpcConfig.methodGetPendingPermission, {
+      'employeeUuid': employeeUuid,
+    });
+    final requestData = result['request'] as Map<String, dynamic>?;
+    if (requestData == null) return null;
+    return AgentPermissionRequest.fromMap(requestData);
   }
 
   // ===== 会话管理 =====

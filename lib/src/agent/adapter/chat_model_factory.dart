@@ -1,7 +1,7 @@
 import 'package:langchain_anthropic/langchain_anthropic.dart';
 import 'package:langchain_core/chat_models.dart';
 import 'package:langchain_core/tools.dart';
-import 'package:langchain_google/langchain_google.dart';
+// import 'package:langchain_google/langchain_google.dart';  // 暂时禁用：存在 googleai_dart API 兼容性问题
 import 'package:langchain_openai/langchain_openai.dart';
 
 import 'provider_config.dart';
@@ -42,7 +42,9 @@ class ChatModelFactory {
       case LLMProvider.anthropic:
         return ChatAnthropicOptions(tools: toolSpecs);
       case LLMProvider.google:
-        return ChatGoogleGenerativeAIOptions(tools: toolSpecs);
+        // 暂时禁用：存在 googleai_dart API 兼容性问题
+        // return ChatGoogleGenerativeAIOptions(tools: toolSpecs);
+        throw UnimplementedError('Google AI support is temporarily disabled');
     }
   }
 
@@ -76,17 +78,24 @@ class ChatModelFactory {
   }
 
   /// 创建 Google AI ChatModel (Gemini)
-  static ChatGoogleGenerativeAI _createGoogle(ProviderConfig config) {
-    return ChatGoogleGenerativeAI(
-      apiKey: config.apiKey!,
-      defaultOptions: ChatGoogleGenerativeAIOptions(
-        model: config.model,
-        temperature: config.options.temperature,
-        maxOutputTokens: config.options.maxTokens,
-        topP: config.options.topP,
-        stopSequences: config.options.stop,
-      ),
+  /// 暂时禁用：存在 googleai_dart API 兼容性问题
+  static BaseChatModel _createGoogle(ProviderConfig config) {
+    // 暂时使用 OpenAI 兼容 API 作为替代
+    // TODO: 恢复 Google AI 支持当 langchain_google 修复后
+    throw UnimplementedError(
+      'Google AI support is temporarily disabled due to langchain_google compatibility issues. '
+      'Use OpenAI or Anthropic provider instead.',
     );
+    // return ChatGoogleGenerativeAI(
+    //   apiKey: config.apiKey!,
+    //   defaultOptions: ChatGoogleGenerativeAIOptions(
+    //     model: config.model,
+    //     temperature: config.options.temperature,
+    //     maxOutputTokens: config.options.maxTokens,
+    //     topP: config.options.topP,
+    //     stopSequences: config.options.stop,
+    //   ),
+    // );
   }
 
   /// 创建 Ollama ChatModel (本地模型)

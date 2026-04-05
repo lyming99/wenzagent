@@ -69,7 +69,7 @@ class LanHostServiceImpl implements LanHostService {
         shelf.Cascade().add(_webSocketHandler()).add(_httpHandler()).handler;
 
     _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);
-    _port = _server!.port; // 更新为实际分配的端口
+    _port = port; // 更新为实际分配的端口
 
     _addSystemMessage('服务端已启动，IP: $_localIp:$_port');
   }

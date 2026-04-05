@@ -15,3 +15,12 @@ export 'src/agent/agent.dart';
 
 // Device
 export 'src/device/device.dart';
+
+// Persistence
+export 'src/persistence/persistence.dart';
+
+// Service
+export 'src/service/service.dart';
+
+// Host
+export 'src/host/host.dart';

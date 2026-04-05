@@ -12,6 +12,9 @@ enum LanMessageType {
   /// 客户端信息
   clientInfo,
 
+  /// Wenzbak 数据同步
+  wenzbakSync,
+
   /// RPC 请求
   rpcRequest,
 
@@ -35,6 +38,56 @@ enum LanMessageType {
 
   /// Agent 权限请求变更
   agentPermissionChanged,
+
+  // ===== AI Employee 消息类型 =====
+
+  /// AI 聊天请求
+  aiChatRequest,
+
+  /// AI 聊天响应
+  aiChatResponse,
+
+  /// AI 聊天完成
+  aiChatDone,
+
+  /// AI 聊天错误
+  aiChatError,
+
+  /// AI 会话状态
+  aiSessionStatus,
+
+  /// AI 中断
+  aiInterrupt,
+
+  /// AI 员工绑定
+  aiEmployeeBind,
+
+  /// AI 员工绑定响应
+  aiEmployeeBound,
+
+  /// AI 切换员工
+  aiSwitchEmployee,
+
+  /// AI 员工列表
+  aiEmployeeList,
+
+  /// AI 会话列表
+  aiSessionList,
+
+  /// AI 会话历史
+  aiSessionHistory,
+
+  /// AI 员工变更
+  aiEmployeeChange,
+
+  /// AI 查询员工列表广播
+  aiQueryEmployeeListBroadcast,
+
+  /// AI 查询会话列表广播
+  aiQuerySessionListBroadcast,
+
+  /// AI 查询会话消息广播
+  aiQuerySessionMessagesBroadcast,
 }
 
 /// LAN 消息实体
