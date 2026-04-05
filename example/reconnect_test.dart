@@ -283,12 +283,8 @@ class ReconnectTest {
     print('\n  [Device-B 查询断线期间的消息]');
     final agentProxy = await deviceB.getOrCreateAgentProxy(employeeUuid: employeeAliceUuid);
 
-    // 获取会话列表
-    final sessions = await agentProxy.getSessionList();
-    final sessionUuid = sessions.first['uuid'] as String;
-
-    // 读取消息列表
-    final messages = await agentProxy.getSessionMessages(sessionUuid);
+    // 读取消息列表（使用 Agent 当前会话）
+    final messages = await agentProxy.getSessionMessages();
     print('  Device-B 消息总数: ${messages.length}');
 
     // 查找断线期间的消息
@@ -337,20 +333,15 @@ class ReconnectTest {
   Future<void> _verifyFinalMessageSync() async {
     print('\n  [验证最终消息同步]');
 
-    // 通过 AgentProxy 获取消息（使用正确的 sessionUuid）
+    // 通过 AgentProxy 获取消息（使用 Agent 当前会话）
     final agentProxyA = await deviceA.getOrCreateAgentProxy(employeeUuid: employeeAliceUuid);
-    final sessionsA = await agentProxyA.getSessionList();
-    final sessionUuidA = sessionsA.first['uuid'] as String;
-    final messagesA = await agentProxyA.getSessionMessages(sessionUuidA);
+    final messagesA = await agentProxyA.getSessionMessages();
 
     final agentProxyB = await deviceB.getOrCreateAgentProxy(employeeUuid: employeeAliceUuid);
-    final sessionsB = await agentProxyB.getSessionList();
-    final sessionUuidB = sessionsB.first['uuid'] as String;
-    final messagesB = await agentProxyB.getSessionMessages(sessionUuidB);
+    final messagesB = await agentProxyB.getSessionMessages();
 
     print('  Device-A 消息数量: ${messagesA.length}');
     print('  Device-B 消息数量: ${messagesB.length}');
-    print('  Session UUID: $sessionUuidA');
 
     // 验证消息数量一致
     assert(messagesA.length == messagesB.length,

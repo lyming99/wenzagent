@@ -37,9 +37,13 @@ class LangChainChatAdapter implements IChatAdapter {
   @protected
   final SessionMemoryManager memoryManager = SessionMemoryManager();
 
-  /// 当前会话 UUID（protected，供子类访问）
+  /// 当前员工 UUID（同时作为会话 ID）
   @protected
-  String? currentSessionUuidValue;
+  String? currentEmployeeUuid;
+
+  /// 当前设备 ID（用于区分不同设备的消息记录）
+  @protected
+  String? deviceId;
 
   /// 当前上下文
   Map<String, dynamic>? _context;
@@ -63,17 +67,16 @@ class LangChainChatAdapter implements IChatAdapter {
 
   // ===== IChatAdapter 属性实现 =====
 
-  @override
-  String? get currentSessionUuid => currentSessionUuidValue;
+  String? get currentSessionUuid => currentEmployeeUuid;
 
   @override
   List<Map<String, dynamic>> get currentMessages {
-    if (currentSessionUuidValue == null) return [];
+    if (currentEmployeeUuid == null) return [];
 
-    final session = memoryManager.getSession(currentSessionUuidValue!);
+    final session = memoryManager.getSession(currentEmployeeUuid!);
     if (session == null) return [];
 
-    return session.messages.map(_chatMessageToMap).toList();
+    return session.allMessages.map(_chatMessageToMap).toList();
   }
 
   @override
@@ -87,13 +90,10 @@ class LangChainChatAdapter implements IChatAdapter {
   @override
   Future<void> initSession({
     required String employeeUuid,
-    String? sessionUuid,
+    String? employeeId,
   }) async {
-    currentSessionUuidValue =
-        sessionUuid ??
-        'session-${DateTime.now().millisecondsSinceEpoch}-${employeeUuid.substring(0, 8)}';
-
-    memoryManager.getOrCreateSession(currentSessionUuidValue!, employeeUuid);
+    currentEmployeeUuid = employeeUuid;
+    memoryManager.getOrCreateSession(employeeUuid);
   }
 
   @override
@@ -104,7 +104,7 @@ class LangChainChatAdapter implements IChatAdapter {
     print('[LangChainChatAdapter] streamMessage called');
     print('[LangChainChatAdapter] _chatModel: $_chatModel');
     print('[LangChainChatAdapter] _providerConfig: $_providerConfig');
-    print('[LangChainChatAdapter] currentSessionUuidValue: $currentSessionUuidValue');
+    print('[LangChainChatAdapter] currentEmployeeUuid: $currentEmployeeUuid');
 
     if (_chatModel == null) {
       print('[LangChainChatAdapter] ERROR: _chatModel is null');
@@ -118,8 +118,8 @@ class LangChainChatAdapter implements IChatAdapter {
       return;
     }
 
-    if (currentSessionUuidValue == null) {
-      print('[LangChainChatAdapter] ERROR: currentSessionUuidValue is null');
+    if (currentEmployeeUuid == null) {
+      print('[LangChainChatAdapter] ERROR: currentEmployeeUuid is null');
       yield StreamResponse.error('未初始化会话，请先调用 initSession()');
       return;
     }
@@ -136,7 +136,11 @@ class LangChainChatAdapter implements IChatAdapter {
 
       // 添加用户消息到历史
       final userMessage = ChatMessage.humanText(userContent);
-      memoryManager.addMessage(currentSessionUuidValue!, userMessage);
+      memoryManager.addMessage(
+        currentEmployeeUuid!,
+        deviceId ?? 'default',
+        userMessage,
+      );
 
       // 检查是否有可用工具
       final hasTools = _toolRegistry != null && !_toolRegistry!.isEmpty;
@@ -144,11 +148,11 @@ class LangChainChatAdapter implements IChatAdapter {
       // 准备上下文压缩（每轮用户消息调用一次）
       final systemPrompt = _buildSystemPrompt();
       if (_compressor != null) {
-        final session = memoryManager.getSession(currentSessionUuidValue!);
+        final session = memoryManager.getSession(currentEmployeeUuid!);
         if (session != null) {
           await _compressor!.prepareCompression(
-            sessionUuid: currentSessionUuidValue!,
-            allMessages: session.messages,
+            employeeId: currentEmployeeUuid!,
+            allMessages: session.allMessages,
             session: session,
             systemPrompt: systemPrompt,
           );
@@ -166,15 +170,15 @@ class LangChainChatAdapter implements IChatAdapter {
         // 构建消息列表（启用压缩时使用压缩器）
         final List<ChatMessage> messages;
         if (_compressor != null) {
-          final session = memoryManager.getSession(currentSessionUuidValue!);
+          final session = memoryManager.getSession(currentEmployeeUuid!);
           messages = _compressor!.buildCompressedMessages(
-            sessionUuid: currentSessionUuidValue!,
-            allMessages: session?.messages ?? [],
+            employeeId: currentEmployeeUuid!,
+            allMessages: session?.allMessages ?? [],
             systemPrompt: systemPrompt,
           );
         } else {
           messages = memoryManager.buildMessages(
-            sessionUuid: currentSessionUuidValue!,
+            employeeUuid: currentEmployeeUuid!,
             systemPrompt: systemPrompt,
           );
         }
@@ -248,7 +252,8 @@ class LangChainChatAdapter implements IChatAdapter {
           final aiContent = aiContentBuffer.toString();
           if (aiContent.isNotEmpty) {
             memoryManager.addMessage(
-              currentSessionUuidValue!,
+              currentEmployeeUuid!,
+              deviceId ?? 'default',
               ChatMessage.ai(aiContent),
             );
           }
@@ -256,7 +261,11 @@ class LangChainChatAdapter implements IChatAdapter {
         }
 
         // 有工具调用 → 将 AI 消息（含 toolCalls）加入历史
-        memoryManager.addMessage(currentSessionUuidValue!, aiMessage);
+        memoryManager.addMessage(
+          currentEmployeeUuid!,
+          deviceId ?? 'default',
+          aiMessage,
+        );
 
         // 逐个执行工具调用
         for (final toolCall in toolCalls) {
@@ -291,7 +300,8 @@ class LangChainChatAdapter implements IChatAdapter {
             // 工具未找到
             final errorResult = '工具 "$toolName" 未注册';
             memoryManager.addMessage(
-              currentSessionUuidValue!,
+              currentEmployeeUuid!,
+              deviceId ?? 'default',
               ToolChatMessage(toolCallId: toolCallId, content: errorResult),
             );
             yield StreamResponse.toolCallResult(
@@ -313,7 +323,8 @@ class LangChainChatAdapter implements IChatAdapter {
             if (decision == PermissionDecision.deny) {
               final denyResult = '权限被拒绝: 用户拒绝了工具 "$toolName" 的执行';
               memoryManager.addMessage(
-                currentSessionUuidValue!,
+                currentEmployeeUuid!,
+                deviceId ?? 'default',
                 ToolChatMessage(toolCallId: toolCallId, content: denyResult),
               );
               yield StreamResponse.toolCallResult(
@@ -338,7 +349,8 @@ class LangChainChatAdapter implements IChatAdapter {
 
           // 将工具结果加入历史
           memoryManager.addMessage(
-            currentSessionUuidValue!,
+            currentEmployeeUuid!,
+            deviceId ?? 'default',
             ToolChatMessage(toolCallId: toolCallId, content: result.content),
           );
 
@@ -387,11 +399,11 @@ class LangChainChatAdapter implements IChatAdapter {
     return sessions
         .map(
           (s) => {
-            'uuid': s.sessionUuid,
+            'uuid': s.employeeUuid,
             'employeeUuid': s.employeeUuid,
             'title': s.title ?? 'New Chat',
             'createdAt': s.createdAt.toIso8601String(),
-            'messageCount': s.messages.length,
+            'messageCount': s.messageCount,
           },
         )
         .toList()
@@ -400,12 +412,13 @@ class LangChainChatAdapter implements IChatAdapter {
 
   @override
   Future<List<Map<String, dynamic>>> getSessionMessages(
-    String sessionUuid,
+    String employeeId,
   ) async {
-    final session = memoryManager.getSession(sessionUuid);
+    // employeeId 实际上就是 employeeUuid
+    final session = memoryManager.getSession(employeeId);
     if (session == null) return [];
 
-    return session.messages.map(_chatMessageToMap).toList();
+    return session.allMessages.map(_chatMessageToMap).toList();
   }
 
   @override
@@ -413,32 +426,31 @@ class LangChainChatAdapter implements IChatAdapter {
     required String employeeUuid,
     String? title,
   }) async {
-    final sessionUuid =
-        'session-${DateTime.now().millisecondsSinceEpoch}-${employeeUuid.substring(0, 8)}';
-
-    memoryManager.getOrCreateSession(sessionUuid, employeeUuid, title: title);
-
-    return sessionUuid;
+    // 员工UUID就是会话ID，不需要生成新的employeeId
+    memoryManager.getOrCreateSession(employeeUuid, title: title);
+    currentEmployeeUuid = employeeUuid;
+    return employeeUuid;
   }
 
   @override
-  Future<void> switchSession(String sessionUuid) async {
+  Future<void> switchSession(String employeeId) async {
     if (_isStreaming) {
       await stopStreaming();
     }
 
-    final session = memoryManager.getSession(sessionUuid);
+    // employeeId 实际上就是 employeeUuid
+    final session = memoryManager.getSession(employeeId);
     if (session == null) {
-      throw ArgumentError('会话不存在: $sessionUuid');
+      throw ArgumentError('会话不存在: $employeeId');
     }
 
-    currentSessionUuidValue = sessionUuid;
+    currentEmployeeUuid = employeeId;
   }
 
   @override
   Future<void> clearCurrentSession() async {
-    if (currentSessionUuidValue != null) {
-      memoryManager.clearSession(currentSessionUuidValue!);
+    if (currentEmployeeUuid != null) {
+      memoryManager.clearSession(currentEmployeeUuid!);
     }
   }
 
@@ -531,7 +543,7 @@ class LangChainChatAdapter implements IChatAdapter {
     _chatModel = null;
     _providerConfig = null;
     _context = null;
-    currentSessionUuidValue = null;
+    currentEmployeeUuid = null;
     _toolRegistry = null;
     _permissionManager = null;
     _toolEventCallback = null;

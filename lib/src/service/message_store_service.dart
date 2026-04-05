@@ -16,13 +16,13 @@ enum MessageChangeType {
 class MessageChangeEvent {
   final MessageChangeType type;
   final String messageUuid;
-  final String sessionUuid;
+  final String employeeId;
   final AiEmployeeMessageEntity? message;
 
   MessageChangeEvent({
     required this.type,
     required this.messageUuid,
-    required this.sessionUuid,
+    required this.employeeId,
     this.message,
   });
 }
@@ -31,7 +31,7 @@ class MessageChangeEvent {
 abstract class MessageStoreService {
   /// 获取会话消息列表
   Future<List<AiEmployeeMessageEntity>> getMessages(
-    String sessionUuid, {
+    String employeeId, {
     int? limit,
     int? offset,
   });
@@ -56,10 +56,10 @@ abstract class MessageStoreService {
   });
 
   /// 删除会话的所有消息
-  Future<void> deleteMessages(String sessionUuid);
+  Future<void> deleteMessages(String employeeId);
 
   /// 获取最后一条消息
-  Future<AiEmployeeMessageEntity?> getLastMessage(String sessionUuid);
+  Future<AiEmployeeMessageEntity?> getLastMessage(String employeeId);
 
   /// 消息变更通知流
   Stream<MessageChangeEvent> get onMessageChanged;
@@ -79,11 +79,11 @@ class MessageStoreServiceImpl implements MessageStoreService {
 
   @override
   Future<List<AiEmployeeMessageEntity>> getMessages(
-    String sessionUuid, {
+    String employeeId, {
     int? limit,
     int? offset,
   }) async {
-    return _store.getMessages(_spaceId, sessionUuid,
+    return _store.getMessages(_spaceId, employeeId,
         limit: limit, offset: offset);
   }
 
@@ -131,13 +131,13 @@ class MessageStoreServiceImpl implements MessageStoreService {
   }
 
   @override
-  Future<void> deleteMessages(String sessionUuid) async {
-    await _store.deleteBySession(_spaceId, sessionUuid);
+  Future<void> deleteMessages(String employeeId) async {
+    await _store.deleteBySession(_spaceId, employeeId);
   }
 
   @override
-  Future<AiEmployeeMessageEntity?> getLastMessage(String sessionUuid) async {
-    return _store.getLastMessage(_spaceId, sessionUuid);
+  Future<AiEmployeeMessageEntity?> getLastMessage(String employeeId) async {
+    return _store.getLastMessage(_spaceId, employeeId);
   }
 
   @override
@@ -148,14 +148,14 @@ class MessageStoreServiceImpl implements MessageStoreService {
     _changeController.add(MessageChangeEvent(
       type: type,
       messageUuid: message.uuid,
-      sessionUuid: message.sessionUuid,
+      employeeId: message.employeeId,
       message: message,
     ));
   }
 
   /// 创建新消息实体
   AiEmployeeMessageEntity createMessage({
-    required String sessionUuid,
+    required String employeeId,
     required String role,
     required String type,
     String? content,
@@ -169,7 +169,7 @@ class MessageStoreServiceImpl implements MessageStoreService {
     final now = DateTime.now();
     return AiEmployeeMessageEntity(
       uuid: uuid,
-      sessionUuid: sessionUuid,
+      employeeId: employeeId,
       role: role,
       type: type,
       content: content,

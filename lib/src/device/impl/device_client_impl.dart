@@ -226,12 +226,13 @@ class DeviceClientImpl implements DeviceClient {
       params,
     ) async {
       final employeeUuid = params['employeeUuid'] as String?;
-      final sessionUuid = params['sessionUuid'] as String;
+      final employeeId = params['employeeId'] as String?;
       final agent = employeeUuid != null ? _localAgents[employeeUuid] : null;
       if (agent == null) {
         throw Exception('Agent not found: $employeeUuid');
       }
-      final messages = await agent.getSessionMessages(sessionUuid);
+      final uuid = employeeId ?? agent.employeeUuid;
+      final messages = await agent.getSessionMessages(uuid);
       return {'messages': messages};
     });
 
@@ -241,18 +242,18 @@ class DeviceClientImpl implements DeviceClient {
       if (agent == null) {
         throw Exception('Agent not found: $employeeUuid');
       }
-      final sessionUuid = await agent.createSession();
-      return {'sessionUuid': sessionUuid};
+      final employeeId = await agent.createSession();
+      return {'employeeId': employeeId};
     });
 
     _rpcServer!.register(AgentRpcConfig.methodSwitchSession, (params) async {
       final employeeUuid = params['employeeUuid'] as String;
-      final sessionUuid = params['sessionUuid'] as String;
+      final employeeId = params['employeeId'] as String;
       final agent = _localAgents[employeeUuid];
       if (agent == null) {
         throw Exception('Agent not found: $employeeUuid');
       }
-      await agent.switchSession(sessionUuid);
+      await agent.switchSession(employeeId);
       return {};
     });
 
@@ -332,7 +333,6 @@ class DeviceClientImpl implements DeviceClient {
       }
       return {
         'employeeUuid': employeeUuid,
-        'sessionUuid': agent.currentSessionUuid,
         'status': agent.status.name,
       };
     });
@@ -636,8 +636,8 @@ class DeviceClientImpl implements DeviceClient {
       await _messageStoreService.addMessage(entity);
     };
 
-    adapter.loadSession = (sessionUuid) async {
-      // sessionUuid现在实际上是employeeUuid
+    adapter.loadSession = (employeeId) async {
+      // employeeId现在实际上是employeeUuid
       final session = await _sessionManager.getSession(employeeUuid);
       if (session == null) return null;
 
@@ -656,8 +656,8 @@ class DeviceClientImpl implements DeviceClient {
       };
     };
 
-    adapter.loadMessages = (sessionUuid) async {
-      final messages = await _messageStoreService.getMessages(sessionUuid);
+    adapter.loadMessages = (employeeId) async {
+      final messages = await _messageStoreService.getMessages(employeeId);
       return messages.map((m) => m.toMap()).toList();
     };
 
@@ -673,7 +673,7 @@ class DeviceClientImpl implements DeviceClient {
   AiEmployeeMessageEntity _mapToMessageEntity(Map<String, dynamic> message) {
     return AiEmployeeMessageEntity(
       uuid: message['id'] ?? '',
-      sessionUuid: message['sessionUuid'] ?? '',
+      employeeId: message['employeeId'] ?? '',
       role: message['role'] ?? 'user',
       type: message['type'] ?? 'text',
       content: message['content'],

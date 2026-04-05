@@ -11,8 +11,8 @@ import 'langchain_chat_adapter.dart';
 /// 持久化回调函数类型
 typedef PersistMessageFunc = Future<void> Function(Map<String, dynamic> message);
 typedef PersistSessionFunc = Future<void> Function(Map<String, dynamic> session);
-typedef LoadSessionFunc = Future<Map<String, dynamic>?> Function(String sessionUuid);
-typedef LoadMessagesFunc = Future<List<Map<String, dynamic>>> Function(String sessionUuid);
+typedef LoadSessionFunc = Future<Map<String, dynamic>?> Function(String employeeId);
+typedef LoadMessagesFunc = Future<List<Map<String, dynamic>>> Function(String employeeId);
 typedef UpdateMessageStatusFunc = Future<void> Function(String messageId, AgentMessageStatus status, {String? error});
 
 /// 持久化聊天适配器
@@ -43,13 +43,13 @@ class PersistentChatAdapter extends LangChainChatAdapter {
   @override
   Future<void> initSession({
     required String employeeUuid,
-    String? sessionUuid,
+    String? employeeId,
   }) async {
-    await super.initSession(employeeUuid: employeeUuid, sessionUuid: sessionUuid);
+    await super.initSession(employeeUuid: employeeUuid);
 
     // 如果提供了会话UUID且存在加载回调，尝试从数据库加载
-    if (sessionUuid != null && loadSession != null) {
-      final sessionData = await loadSession!(sessionUuid);
+    if (employeeId != null && loadSession != null) {
+      final sessionData = await loadSession!(employeeId);
       if (sessionData != null) {
         // 恢复会话配置（如 provider_config 等）
         final providerConfig = sessionData['providerConfig'];
@@ -72,7 +72,7 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     required String employeeUuid,
     String? title,
   }) async {
-    final sessionUuid = await super.createNewSession(
+    final employeeId = await super.createNewSession(
       employeeUuid: employeeUuid,
       title: title,
     );
@@ -80,55 +80,55 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     // 持久化新会话
     await _notifyPersistSession();
 
-    return sessionUuid;
+    return employeeId;
   }
 
   @override
-  Future<void> switchSession(String sessionUuid) async {
+  Future<void> switchSession(String employeeId) async {
     // 停止流式输出
     if (isStreaming) {
       await stopStreaming();
     }
 
     // 尝试从内存获取会话
-    var session = memoryManager.getSession(sessionUuid);
+    var session = memoryManager.getSession(employeeId);
 
     // 如果内存中不存在，尝试从数据库加载
     if (session == null && loadSession != null) {
-      final sessionData = await loadSession!(sessionUuid);
+      final sessionData = await loadSession!(employeeId);
       if (sessionData != null) {
         // 从数据库加载会话到内存
-        final employeeUuid = sessionData['employeeUuid'] as String? ??
-            currentSessionUuid?.split('-').last ?? 'unknown';
-        session = memoryManager.getOrCreateSession(sessionUuid, employeeUuid);
+        final employeeUuid = sessionData['employeeUuid'] as String? ?? employeeId;
+        session = memoryManager.getOrCreateSession(employeeUuid);
         // 不再调用 _notifyPersistSession，避免重复创建
       }
     }
 
     // 如果仍然不存在，创建新会话但不持久化（让调用方决定是否持久化）
     if (session == null) {
-      final employeeUuid = currentSessionUuid?.split('-').last ?? 'unknown';
-      session = memoryManager.getOrCreateSession(sessionUuid, employeeUuid);
+      session = memoryManager.getOrCreateSession(employeeId);
       // 注意：这里不调用 _notifyPersistSession()，避免自动持久化
     }
 
-    // 更新当前会话 UUID
-    currentSessionUuidValue = sessionUuid;
+    // 更新当前员工 UUID
+    currentEmployeeUuid = employeeId;
 
     // 从数据库加载消息到内存（如果有加载回调）
     final loadCb = loadMessages;
     if (loadCb == null) return;
 
     try {
-      final messagesData = await loadCb(sessionUuid);
+      final messagesData = await loadCb(employeeId);
       if (messagesData.isEmpty) return;
 
       // 清空现有消息并加载新消息
-      session.messages.clear();
+      session.messagesMap.clear();
       for (final msgData in messagesData) {
         final chatMessage = _mapToChatMessage(msgData);
         if (chatMessage != null) {
-          session.messages.add(chatMessage);
+          // 获取设备ID，如果没有则使用默认设备
+          final msgDeviceId = msgData['deviceId'] as String? ?? 'default';
+          session.addMessage(msgDeviceId, chatMessage);
           // 记录已持久化的消息 ID
           final msgId = msgData['id'] as String?;
           if (msgId != null) {
@@ -208,10 +208,10 @@ class PersistentChatAdapter extends LangChainChatAdapter {
 
   @override
   Future<List<Map<String, dynamic>>> getSessionMessages(
-    String sessionUuid,
+    String employeeId,
   ) async {
     // 直接返回内存中的消息，不触发持久化
-    return await super.getSessionMessages(sessionUuid);
+    return await super.getSessionMessages(employeeId);
   }
 
   /// 持久化新添加的消息
@@ -235,10 +235,10 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     if (persistMessage == null) return;
 
     try {
-      // 添加 sessionUuid
+      // 添加 employeeId
       final messageWithSession = {
         ...message,
-        'sessionUuid': currentSessionUuid,
+        'employeeId': currentSessionUuid,
       };
       await persistMessage!(messageWithSession);
     } catch (_) {
@@ -260,11 +260,11 @@ class PersistentChatAdapter extends LangChainChatAdapter {
 
   /// 构建会话数据用于持久化
   Map<String, dynamic> _buildSessionData() {
-    final sessionUuid = currentSessionUuid ?? '';
+    final employeeId = currentSessionUuid ?? '';
     final context = currentContext ?? {};
 
     return {
-      'uuid': sessionUuid,
+      'uuid': employeeId,
       'title': context['title'] ?? '新对话',
       'contextData': context['contextData'],
       'providerConfig': getProviderConfig(),

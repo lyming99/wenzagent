@@ -52,18 +52,18 @@ class AgentClient {
   /// 创建或获取 Agent
   Future<Map<String, dynamic>> getOrCreateAgent({
     required String employeeUuid,
-    String? sessionUuid,
+    String? employeeId,
   }) async {
     final result = await _rpcCall(
       AgentRpcConfig.methodGetOrCreateAgent,
       {
         'employeeUuid': employeeUuid,
-        if (sessionUuid != null) 'sessionUuid': sessionUuid,
+        if (employeeId != null) 'employeeId': employeeId,
       },
     );
 
     _currentEmployeeUuid = employeeUuid;
-    _currentSessionUuid = result['sessionUuid'] as String?;
+    _currentSessionUuid = result['employeeId'] as String?;
 
     return result;
   }
@@ -72,7 +72,7 @@ class AgentClient {
   Future<String> sendMessage({
     required String content,
     String? employeeUuid,
-    String? sessionUuid,
+    String? employeeId,
   }) async {
     final empUuid = employeeUuid ?? _currentEmployeeUuid;
     if (empUuid == null) {
@@ -83,10 +83,10 @@ class AgentClient {
       AgentRpcConfig.methodSendMessage,
       {
         'employeeUuid': empUuid,
-        if (sessionUuid != null) 'sessionUuid': sessionUuid,
+        if (employeeId != null) 'employeeId': employeeId,
         'messageData': {
           'content': content,
-          if (sessionUuid != null) 'sessionUuid': sessionUuid,
+          if (employeeId != null) 'employeeId': employeeId,
         },
       },
     );
@@ -131,13 +131,13 @@ class AgentClient {
       'employeeUuid': empUuid,
     });
 
-    _currentSessionUuid = result['sessionUuid'] as String;
+    _currentSessionUuid = result['employeeId'] as String;
     return _currentSessionUuid!;
   }
 
   /// 切换会话
   Future<void> switchSession({
-    required String sessionUuid,
+    required String employeeId,
     String? employeeUuid,
   }) async {
     final empUuid = employeeUuid ?? _currentEmployeeUuid;
@@ -147,19 +147,19 @@ class AgentClient {
 
     await _rpcCall(AgentRpcConfig.methodSwitchSession, {
       'employeeUuid': empUuid,
-      'sessionUuid': sessionUuid,
+      'employeeId': employeeId,
     });
 
-    _currentSessionUuid = sessionUuid;
+    _currentSessionUuid = employeeId;
   }
 
   /// 获取会话消息
   Future<List<Map<String, dynamic>>> getSessionMessages({
-    required String sessionUuid,
+    required String employeeId,
     String? employeeUuid,
   }) async {
     final result = await _rpcCall(AgentRpcConfig.methodGetSessionMessages, {
-      'sessionUuid': sessionUuid,
+      'employeeId': employeeId,
       if (employeeUuid != null) 'employeeUuid': employeeUuid,
     });
 

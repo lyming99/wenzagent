@@ -82,18 +82,18 @@ class MessageRouter {
 
   /// 广播会话变更
   ///
-  /// [sessionUuid] 会话UUID
+  /// [employeeId] 会话UUID
   /// [change] 变更数据
   /// [topic] 主题（可选，用于限定广播范围）
   void broadcastSessionChange(
-    String sessionUuid,
+    String employeeId,
     Map<String, dynamic> change, {
     String? topic,
   }) {
     final msg = LanMessage(
       type: LanMessageType.aiSessionStatus,
       content: jsonEncode({
-        'sessionUuid': sessionUuid,
+        'employeeId': employeeId,
         ...change,
       }),
       topic: topic,

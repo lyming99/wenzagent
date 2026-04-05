@@ -15,7 +15,7 @@ class AiEmployeeMessageAdapter extends TypeAdapter<AiEmployeeMessageEntity> {
     };
     return AiEmployeeMessageEntity(
       uuid: fields[0] as String,
-      sessionUuid: fields[1] as String,
+      employeeId: fields[1] as String,
       role: fields[2] as String? ?? 'user',
       type: fields[3] as String? ?? 'text',
       content: fields[4] as String?,
@@ -46,7 +46,7 @@ class AiEmployeeMessageAdapter extends TypeAdapter<AiEmployeeMessageEntity> {
       ..writeByte(0)
       ..write(obj.uuid)
       ..writeByte(1)
-      ..write(obj.sessionUuid)
+      ..write(obj.employeeId)
       ..writeByte(2)
       ..write(obj.role)
       ..writeByte(3)

@@ -64,9 +64,6 @@ class AgentImpl implements IAgent {
   // ===== IAgent: 基础信息 =====
 
   @override
-  String? get currentSessionUuid => _chatAdapter.currentSessionUuid;
-
-  @override
   AgentStatus get status => _status;
 
   @override
@@ -98,11 +95,11 @@ class AgentImpl implements IAgent {
   // ===== IAgent: 生命周期 =====
 
   @override
-  Future<void> initialize({String? sessionUuid}) async {
+  Future<void> initialize({String? employeeId}) async {
     // 初始化适配器
     await _chatAdapter.initSession(
       employeeUuid: employeeUuid,
-      sessionUuid: sessionUuid,
+      employeeId: employeeId,
     );
 
     // 注册内置工具
@@ -222,7 +219,6 @@ class AgentImpl implements IAgent {
   Future<String> sendMessage(Map<String, dynamic> messageData) async {
     _touch();
     print('[AgentImpl] sendMessage: ${messageData['content']?.toString().substring(0, (messageData['content']?.toString().length ?? 0).clamp(0, 50))}');
-    print('[AgentImpl] currentSessionUuid: $currentSessionUuid');
 
     return await _withLock(() async {
       // 生成消息ID
@@ -258,9 +254,9 @@ class AgentImpl implements IAgent {
 
   @override
   Future<List<Map<String, dynamic>>> getSessionMessages(
-    String sessionUuid,
+    String employeeId,
   ) async {
-    return _chatAdapter.getSessionMessages(sessionUuid);
+    return _chatAdapter.getSessionMessages(employeeId);
   }
 
   @override
@@ -273,14 +269,14 @@ class AgentImpl implements IAgent {
   }
 
   @override
-  Future<void> switchSession(String sessionUuid) async {
+  Future<void> switchSession(String employeeId) async {
     _touch();
     await _withLock(() async {
       if (_chatAdapter.isStreaming) {
         await _chatAdapter.stopStreaming();
       }
 
-      await _chatAdapter.switchSession(sessionUuid);
+      await _chatAdapter.switchSession(employeeId);
     });
   }
 

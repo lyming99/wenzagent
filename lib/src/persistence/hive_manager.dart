@@ -120,8 +120,8 @@ class HiveManager {
   }
 
   /// 构建会话消息索引key
-  String buildSessionMessagesKey(String? spaceId, String sessionUuid) {
-    return 'sessmsgs:$spaceId:$sessionUuid';
+  String buildSessionMessagesKey(String? spaceId, String employeeId) {
+    return 'sessmsgs:$spaceId:$employeeId';
   }
 
   /// 构建员工会话索引key

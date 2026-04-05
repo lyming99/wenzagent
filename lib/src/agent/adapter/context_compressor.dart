@@ -75,7 +75,7 @@ class ContextCompressor {
   /// 分析当前消息历史，决定压缩策略，必要时生成 LLM 摘要。
   /// 结果缓存供后续 [buildCompressedMessages] 使用。
   Future<void> prepareCompression({
-    required String sessionUuid,
+    required String employeeId,
     required List<ChatMessage> allMessages,
     required SessionHistory session,
     String? systemPrompt,
@@ -101,7 +101,7 @@ class ContextCompressor {
 
     // 获取或创建缓存
     final cache = _sessionCaches.putIfAbsent(
-      sessionUuid,
+      employeeId,
       () => _CompressionCache(
         summary: session.conversationSummary,
         summarizedUpToIndex: session.summarizedUpToIndex,
@@ -162,7 +162,7 @@ class ContextCompressor {
   ///
   /// 在 tool calling loop 的每次迭代中调用。
   List<ChatMessage> buildCompressedMessages({
-    required String sessionUuid,
+    required String employeeId,
     required List<ChatMessage> allMessages,
     String? systemPrompt,
   }) {
@@ -191,7 +191,7 @@ class ContextCompressor {
     final recentStart = turns.length - recentCount;
 
     // 2. 获取缓存
-    final cache = _sessionCaches[sessionUuid];
+    final cache = _sessionCaches[employeeId];
 
     // 3. 注入摘要（如果有）
     if (cache?.summary != null && cache!.summary!.isNotEmpty) {
@@ -227,8 +227,8 @@ class ContextCompressor {
   }
 
   /// 清除指定会话的压缩缓存
-  void clearCache(String sessionUuid) {
-    _sessionCaches.remove(sessionUuid);
+  void clearCache(String employeeId) {
+    _sessionCaches.remove(employeeId);
   }
 
   /// 清除所有缓存

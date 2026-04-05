@@ -231,18 +231,9 @@ class RemoteSessionMessageTest {
     assert(!agentProxy.isLocalMode, '应该是远程模式');
     print('  ✓ AgentProxy 为远程模式');
 
-    // 获取会话列表
-    final sessions = await agentProxy.getSessionList();
-    print('  会话数量: ${sessions.length}');
-    assert(sessions.isNotEmpty, '应该有会话');
-
-    // 获取会话 UUID
-    final sessionUuid = sessions.first['uuid'] as String;
-    print('  Session UUID: $sessionUuid');
-
-    // 读取消息列表
+    // 读取消息列表（使用 Agent 当前会话）
     print('\n  [读取消息列表]');
-    final messages = await agentProxy.getSessionMessages(sessionUuid);
+    final messages = await agentProxy.getSessionMessages();
     print('  消息数量: ${messages.length}');
 
     for (int i = 0; i < messages.length; i++) {
@@ -266,11 +257,9 @@ class RemoteSessionMessageTest {
     final agentProxy = await deviceB.getOrCreateAgentProxy(
       employeeUuid: employeeAliceUuid,
     );
-    final sessions = await agentProxy.getSessionList();
-    final sessionUuid = sessions.first['uuid'] as String;
 
     print('\n  [读取消息状态]');
-    final messages = await agentProxy.getSessionMessages(sessionUuid);
+    final messages = await agentProxy.getSessionMessages();
 
     // 验证消息状态
     int userMessages = 0;
@@ -323,9 +312,7 @@ class RemoteSessionMessageTest {
     print('    ✓ 消息处理完成');
 
     // 验证消息已添加到列表
-    final sessions = await agentProxy.getSessionList();
-    final sessionUuid = sessions.first['uuid'] as String;
-    final messages = await agentProxy.getSessionMessages(sessionUuid);
+    final messages = await agentProxy.getSessionMessages();
 
     // 检查最后一条消息是否是刚发送的
     final lastMessage = messages.last;

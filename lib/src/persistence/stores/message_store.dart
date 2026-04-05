@@ -11,7 +11,7 @@ class MessageStore {
   /// 获取会话的消息列表
   Future<List<AiEmployeeMessageEntity>> getMessages(
     String? spaceId,
-    String sessionUuid, {
+    String employeeId, {
     int? limit,
     int? offset,
   }) async {
@@ -19,7 +19,7 @@ class MessageStore {
     final indexBox = _hiveManager.sessionMessagesBox;
 
     // 获取消息UUID列表
-    final indexKey = _hiveManager.buildSessionMessagesKey(spaceId, sessionUuid);
+    final indexKey = _hiveManager.buildSessionMessagesKey(spaceId, employeeId);
     List<dynamic> messageUuids = indexBox.get(indexKey) ?? [];
 
     // 应用偏移和限制
@@ -53,8 +53,8 @@ class MessageStore {
   /// 添加消息
   Future<void> add(AiEmployeeMessageEntity entity) async {
     final box = _hiveManager.messageBox;
-    final key = _hiveManager.buildMessageKey(entity.sessionUuid.split('-').first, entity.uuid);
-    // 从sessionUuid推断spaceId，实际使用时应该传入
+    final key = _hiveManager.buildMessageKey(entity.employeeId.split('-').first, entity.uuid);
+    // 从employeeId推断spaceId，实际使用时应该传入
     await box.put(key, entity);
 
     // 更新会话消息索引
@@ -73,8 +73,8 @@ class MessageStore {
 
   /// 更新会话消息索引
   Future<void> _updateSessionMessagesIndex(AiEmployeeMessageEntity entity) async {
-    // 从sessionUuid推断spaceId（简化处理）
-    final parts = entity.sessionUuid.split('-');
+    // 从employeeId推断spaceId（简化处理）
+    final parts = entity.employeeId.split('-');
     final spaceId = parts.isNotEmpty ? parts.first : null;
     await _updateSessionMessagesIndexWithSpaceId(spaceId, entity);
   }
@@ -85,7 +85,7 @@ class MessageStore {
     AiEmployeeMessageEntity entity,
   ) async {
     final indexBox = _hiveManager.sessionMessagesBox;
-    final indexKey = _hiveManager.buildSessionMessagesKey(spaceId, entity.sessionUuid);
+    final indexKey = _hiveManager.buildSessionMessagesKey(spaceId, entity.employeeId);
 
     List<dynamic> messageUuids = indexBox.get(indexKey) ?? [];
     if (!messageUuids.contains(entity.uuid)) {
@@ -97,7 +97,7 @@ class MessageStore {
   /// 更新消息
   Future<void> update(AiEmployeeMessageEntity entity) async {
     final box = _hiveManager.messageBox;
-    final key = _hiveManager.buildMessageKey(entity.sessionUuid.split('-').first, entity.uuid);
+    final key = _hiveManager.buildMessageKey(entity.employeeId.split('-').first, entity.uuid);
     await box.put(key, entity);
   }
 
@@ -127,11 +127,11 @@ class MessageStore {
   }
 
   /// 删除会话的所有消息
-  Future<void> deleteBySession(String? spaceId, String sessionUuid) async {
+  Future<void> deleteBySession(String? spaceId, String employeeId) async {
     final indexBox = _hiveManager.sessionMessagesBox;
     final box = _hiveManager.messageBox;
 
-    final indexKey = _hiveManager.buildSessionMessagesKey(spaceId, sessionUuid);
+    final indexKey = _hiveManager.buildSessionMessagesKey(spaceId, employeeId);
     List<dynamic> messageUuids = indexBox.get(indexKey) ?? [];
 
     for (final uuid in messageUuids) {
@@ -145,17 +145,17 @@ class MessageStore {
   /// 获取最后一条消息
   Future<AiEmployeeMessageEntity?> getLastMessage(
     String? spaceId,
-    String sessionUuid,
+    String employeeId,
   ) async {
-    final messages = await getMessages(spaceId, sessionUuid, limit: 1);
+    final messages = await getMessages(spaceId, employeeId, limit: 1);
     if (messages.isEmpty) return null;
     return messages.first;
   }
 
   /// 获取消息数量
-  Future<int> count(String? spaceId, String sessionUuid) async {
+  Future<int> count(String? spaceId, String employeeId) async {
     final indexBox = _hiveManager.sessionMessagesBox;
-    final indexKey = _hiveManager.buildSessionMessagesKey(spaceId, sessionUuid);
+    final indexKey = _hiveManager.buildSessionMessagesKey(spaceId, employeeId);
     List<dynamic> messageUuids = indexBox.get(indexKey) ?? [];
     return messageUuids.length;
   }

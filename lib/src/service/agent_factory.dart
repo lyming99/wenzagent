@@ -32,11 +32,11 @@ abstract class AgentFactory {
   /// 创建或获取Agent实例
   ///
   /// [employeeUuid] 员工UUID
-  /// [sessionUuid] 会话UUID，为null则使用最近会话或创建新会话
+  /// [employeeId] 会话UUID，为null则使用最近会话或创建新会话
   /// [autoCreate] 如果Agent不存在是否自动创建
   Future<IAgent> getOrCreateAgent({
     required String employeeUuid,
-    String? sessionUuid,
+    String? employeeId,
     bool autoCreate = true,
   });
 
@@ -88,14 +88,14 @@ class AgentFactoryImpl implements AgentFactory {
   @override
   Future<IAgent> getOrCreateAgent({
     required String employeeUuid,
-    String? sessionUuid,
+    String? employeeId,
     bool autoCreate = true,
   }) async {
     // 检查是否已存在
     var agent = _agents[employeeUuid];
     if (agent != null) {
-      if (sessionUuid != null) {
-        await agent.switchSession(sessionUuid);
+      if (employeeId != null) {
+        await agent.switchSession(employeeId);
       }
       return agent;
     }
@@ -118,7 +118,7 @@ class AgentFactoryImpl implements AgentFactory {
     agent = AgentImpl(employeeUuid: employeeUuid, chatAdapter: chatAdapter);
 
     // 初始化Agent
-    await agent.initialize(sessionUuid: sessionUuid);
+    await agent.initialize(employeeId: employeeId);
 
     // 设置Provider配置
     if (employee.provider != null && employee.provider!.isNotEmpty) {
@@ -184,7 +184,7 @@ class AgentFactoryImpl implements AgentFactory {
     };
 
     // 加载会话回调
-    adapter.loadSession = (sessionUuid) async {
+    adapter.loadSession = (employeeId) async {
       final session = await _sessionManager.getSession(employeeUuid);
       if (session == null) return null;
 
@@ -198,8 +198,8 @@ class AgentFactoryImpl implements AgentFactory {
     };
 
     // 加载消息回调
-    adapter.loadMessages = (sessionUuid) async {
-      final messages = await _messageStore.getMessages(sessionUuid);
+    adapter.loadMessages = (employeeId) async {
+      final messages = await _messageStore.getMessages(employeeId);
       return messages.map((m) => m.toMap()).toList();
     };
 
@@ -216,7 +216,7 @@ class AgentFactoryImpl implements AgentFactory {
   AiEmployeeMessageEntity _mapToMessageEntity(Map<String, dynamic> message) {
     return AiEmployeeMessageEntity(
       uuid: message['id'] as String? ?? '',
-      sessionUuid: message['sessionUuid'] as String? ?? '',
+      employeeId: message['employeeId'] as String? ?? '',
       role: message['role'] as String? ?? 'user',
       type: message['type'] as String? ?? 'text',
       content: message['content'] as String?,

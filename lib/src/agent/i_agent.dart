@@ -19,9 +19,6 @@ abstract class IAgent {
   /// 员工UUID
   String get employeeUuid;
 
-  /// 当前会话UUID
-  String? get currentSessionUuid;
-
   /// 当前状态
   AgentStatus get status;
 
@@ -32,8 +29,8 @@ abstract class IAgent {
 
   /// 初始化 Agent
   ///
-  /// [sessionUuid] 指定会话UUID，为 null 则查找或创建新会话
-  Future<void> initialize({String? sessionUuid});
+  /// [employeeId] 指定员工ID，为 null 则查找或创建新会话
+  Future<void> initialize({String? employeeId});
 
   /// 销毁 Agent，释放所有资源
   Future<void> dispose();
@@ -55,7 +52,7 @@ abstract class IAgent {
   ///
   /// [messageData] 消息数据，必须包含:
   ///   - `content` (String): 消息内容
-  ///   - `sessionUuid` (String?): 目标会话UUID，为 null 使用当前会话
+  ///   - `employeeId` (String?): 目标会话UUID，为 null 使用当前会话
   ///
   /// 返回消息ID
   Future<String> sendMessage(Map<String, dynamic> messageData);
@@ -74,7 +71,7 @@ abstract class IAgent {
   Future<List<Map<String, dynamic>>> getSessionList();
 
   /// 获取会话消息列表
-  Future<List<Map<String, dynamic>>> getSessionMessages(String sessionUuid);
+  Future<List<Map<String, dynamic>>> getSessionMessages(String employeeId);
 
   /// 创建新会话
   ///
@@ -82,7 +79,7 @@ abstract class IAgent {
   Future<String> createSession();
 
   /// 切换会话
-  Future<void> switchSession(String sessionUuid);
+  Future<void> switchSession(String employeeId);
 
   /// 清空当前会话消息
   Future<void> clearCurrentSession();

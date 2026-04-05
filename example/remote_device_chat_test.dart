@@ -274,11 +274,11 @@ class RemoteDeviceChatTest {
       print('    注意: 状态获取 ($e)');
     }
 
-    // 2. 获取会话列表
-    print('\n  [AgentProxy] 获取远程会话列表...');
+    // 2. 获取会话消息（验证 RPC 连通性）
+    print('\n  [AgentProxy] 获取远程会话消息...');
     try {
-      final sessions = await agentProxy.getSessionList();
-      print('    会话数量: ${sessions.length}');
+      final messages = await agentProxy.getSessionMessages();
+      print('    消息数量: ${messages.length}');
       print('    ✓ RPC 调用成功');
     } catch (e) {
       print('    注意: RPC 调用需要实际的网络连接 ($e)');
@@ -381,34 +381,19 @@ class RemoteDeviceChatTest {
     // 获取对话历史消息并打印
     print('\n  [对话测试] 获取对话历史消息...');
     try {
-      // 远程模式下 currentSessionUuid 可能为 null，需要从会话列表获取
-      var sessionUuid = agentProxy.currentSessionUuid;
-      if (sessionUuid == null) {
-        // 通过会话列表获取第一个会话
-        final sessions = await agentProxy.getSessionList();
-        if (sessions.isNotEmpty) {
-          sessionUuid = sessions.first['uuid'] as String?;
-          print('  [对话测试] 从会话列表获取 sessionUuid: $sessionUuid');
-        }
+      final messages = await agentProxy.getSessionMessages();
+      print('  [对话测试] 消息历史数量: ${messages.length}');
+      print('\n  ======== 对话内容 ========');
+      for (final msg in messages) {
+        final role = msg['role'] as String? ?? 'unknown';
+        final content = msg['content'] as String? ?? '';
+        final roleLabel = role == 'user' ? '用户' : (role == 'assistant' ? '助手' : role);
+        print('  [$roleLabel] $content');
       }
+      print('  ==========================\n');
       
-      if (sessionUuid != null) {
-        final messages = await agentProxy.getSessionMessages(sessionUuid);
-        print('  [对话测试] 消息历史数量: ${messages.length}');
-        print('\n  ======== 对话内容 ========');
-        for (final msg in messages) {
-          final role = msg['role'] as String? ?? 'unknown';
-          final content = msg['content'] as String? ?? '';
-          final roleLabel = role == 'user' ? '用户' : (role == 'assistant' ? '助手' : role);
-          print('  [$roleLabel] $content');
-        }
-        print('  ==========================\n');
-        
-        // 验证输出
-        _verifyChatOutput(messages, testMessage);
-      } else {
-        print('  [对话测试] 无法获取 sessionUuid');
-      }
+      // 验证输出
+      _verifyChatOutput(messages, testMessage);
     } catch (e) {
       print('  [对话测试] 获取消息失败: $e');
     }

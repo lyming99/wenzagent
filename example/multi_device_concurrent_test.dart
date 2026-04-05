@@ -318,25 +318,19 @@ class MultiDeviceConcurrentTest {
     final proxyA = await deviceA.getOrCreateAgentProxy(
       employeeUuid: employeeAliceUuid,
     );
-    final sessionsA = await proxyA.getSessionList();
-    final sessionUuidA = sessionsA.first['uuid'] as String;
-    final messagesA = await proxyA.getSessionMessages(sessionUuidA);
+    final messagesA = await proxyA.getSessionMessages();
 
     // 获取设备B的会话数据
     final proxyB = await deviceB.getOrCreateAgentProxy(
       employeeUuid: employeeAliceUuid,
     );
-    final sessionsB = await proxyB.getSessionList();
-    final sessionUuidB = sessionsB.first['uuid'] as String;
-    final messagesB = await proxyB.getSessionMessages(sessionUuidB);
+    final messagesB = await proxyB.getSessionMessages();
 
     // 获取设备C的会话数据
     final proxyC = await deviceC.getOrCreateAgentProxy(
       employeeUuid: employeeAliceUuid,
     );
-    final sessionsC = await proxyC.getSessionList();
-    final sessionUuidC = sessionsC.first['uuid'] as String;
-    final messagesC = await proxyC.getSessionMessages(sessionUuidC);
+    final messagesC = await proxyC.getSessionMessages();
 
     print('  设备A 消息数量: ${messagesA.length}');
     print('  设备B 消息数量: ${messagesB.length}');

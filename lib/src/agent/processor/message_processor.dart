@@ -98,9 +98,6 @@ class StreamResponse {
 /// 定义 Agent 与 AI 模型交互的接口。
 /// 具体实现由外部注入。
 abstract class IChatAdapter {
-  /// 当前会话UUID
-  String? get currentSessionUuid;
-
   /// 当前消息列表
   List<Map<String, dynamic>> get currentMessages;
 
@@ -111,7 +108,7 @@ abstract class IChatAdapter {
   bool get isStreaming;
 
   /// 初始化会话
-  Future<void> initSession({required String employeeUuid, String? sessionUuid});
+  Future<void> initSession({required String employeeUuid, String? employeeId});
 
   /// 流式发送消息
   Stream<StreamResponse> streamMessage(
@@ -126,7 +123,7 @@ abstract class IChatAdapter {
   Future<List<Map<String, dynamic>>> getSessionsByEmployee(String employeeUuid);
 
   /// 获取会话消息
-  Future<List<Map<String, dynamic>>> getSessionMessages(String sessionUuid);
+  Future<List<Map<String, dynamic>>> getSessionMessages(String employeeId);
 
   /// 创建新会话
   Future<String> createNewSession({
@@ -135,7 +132,7 @@ abstract class IChatAdapter {
   });
 
   /// 切换会话
-  Future<void> switchSession(String sessionUuid);
+  Future<void> switchSession(String employeeId);
 
   /// 清空当前会话
   Future<void> clearCurrentSession();

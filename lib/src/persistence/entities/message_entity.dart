@@ -4,7 +4,7 @@ class AiEmployeeMessageEntity {
   final String uuid;
 
   /// 会话UUID
-  String sessionUuid;
+  String employeeId;
 
   /// 消息角色 (user/assistant/system/tool)
   String role;
@@ -56,7 +56,7 @@ class AiEmployeeMessageEntity {
 
   AiEmployeeMessageEntity({
     required this.uuid,
-    required this.sessionUuid,
+    required this.employeeId,
     this.role = 'user',
     this.type = 'text',
     this.content,
@@ -79,7 +79,7 @@ class AiEmployeeMessageEntity {
   factory AiEmployeeMessageEntity.fromMap(Map<String, dynamic> map) {
     return AiEmployeeMessageEntity(
       uuid: map['uuid'] as String,
-      sessionUuid: map['sessionUuid'] as String,
+      employeeId: map['employeeId'] as String,
       role: map['role'] as String? ?? 'user',
       type: map['type'] as String? ?? 'text',
       content: map['content'] as String?,
@@ -107,7 +107,7 @@ class AiEmployeeMessageEntity {
   Map<String, dynamic> toMap() {
     return {
       'uuid': uuid,
-      'sessionUuid': sessionUuid,
+      'employeeId': employeeId,
       'role': role,
       'type': type,
       'content': content,
@@ -130,7 +130,7 @@ class AiEmployeeMessageEntity {
   /// 复制并修改
   AiEmployeeMessageEntity copyWith({
     String? uuid,
-    String? sessionUuid,
+    String? employeeId,
     String? role,
     String? type,
     String? content,
@@ -150,7 +150,7 @@ class AiEmployeeMessageEntity {
   }) {
     return AiEmployeeMessageEntity(
       uuid: uuid ?? this.uuid,
-      sessionUuid: sessionUuid ?? this.sessionUuid,
+      employeeId: employeeId ?? this.employeeId,
       role: role ?? this.role,
       type: type ?? this.type,
       content: content ?? this.content,

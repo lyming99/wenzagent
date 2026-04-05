@@ -77,14 +77,6 @@ class AgentProxy {
     return _remoteCache.status;
   }
 
-  /// 当前会话UUID
-  String? get currentSessionUuid {
-    if (isLocalMode && _localAgent != null) {
-      return _localAgent.currentSessionUuid;
-    }
-    return null;
-  }
-
   /// 是否存活
   bool get isAlive {
     if (isLocalMode && _localAgent != null) {
@@ -150,53 +142,20 @@ class AgentProxy {
     return AgentPermissionRequest.fromMap(requestData);
   }
 
-  // ===== 会话管理 =====
-
-  /// 获取会话列表
-  Future<List<Map<String, dynamic>>> getSessionList() async {
-    if (isLocalMode && _localAgent != null) {
-      return _localAgent.getSessionList();
-    }
-    final result = await _rpc(AgentRpcConfig.methodGetSessionList, {
-      'employeeUuid': employeeUuid,
-    });
-    return (result['sessions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-  }
+  // ===== 会话消息 =====
 
   /// 获取会话消息
-  Future<List<Map<String, dynamic>>> getSessionMessages(
-    String sessionUuid,
-  ) async {
+  ///
+  /// [employeeId] 可选，不提供时使用 Agent 当前活跃会话
+  Future<List<Map<String, dynamic>>> getSessionMessages() async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.getSessionMessages(sessionUuid);
+      final uuid = _localAgent.employeeUuid;
+      return _localAgent.getSessionMessages(uuid);
     }
     final result = await _rpc(AgentRpcConfig.methodGetSessionMessages, {
       'employeeUuid': employeeUuid,
-      'sessionUuid': sessionUuid,
     });
     return (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-  }
-
-  /// 创建新会话
-  Future<String> createSession() async {
-    if (isLocalMode && _localAgent != null) {
-      return _localAgent.createSession();
-    }
-    final result = await _rpc(AgentRpcConfig.methodCreateSession, {
-      'employeeUuid': employeeUuid,
-    });
-    return result['sessionUuid'] as String? ?? '';
-  }
-
-  /// 切换会话
-  Future<void> switchSession(String sessionUuid) async {
-    if (isLocalMode && _localAgent != null) {
-      return _localAgent.switchSession(sessionUuid);
-    }
-    await _rpc(AgentRpcConfig.methodSwitchSession, {
-      'employeeUuid': employeeUuid,
-      'sessionUuid': sessionUuid,
-    });
   }
 
   // ===== 上下文管理 =====
