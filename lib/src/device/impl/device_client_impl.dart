@@ -759,6 +759,11 @@ class DeviceClientImpl implements DeviceClient {
     }
 
     try {
+      // 使用 LanClient 的 hostIp 和 hostPort（HTTP API 地址）
+      // 而不是 DeviceClient 的 host/port（RPC 连接地址）
+      final apiHost = _lanClient?.hostIp ?? host;
+      final apiPort = _lanClient?.hostPort ?? port;
+
       // 构造查询参数，包含 topic 过滤
       final queryParameters = <String, String>{};
       if (topic != null && topic!.isNotEmpty) {
@@ -766,7 +771,7 @@ class DeviceClientImpl implements DeviceClient {
       }
 
       final uri = Uri.http(
-        '$host:$port',
+        '$apiHost:$apiPort',
         'api/devices/online',
         queryParameters.isEmpty ? null : queryParameters,
       );
@@ -874,10 +879,43 @@ class DeviceClientImpl implements DeviceClient {
             data as Map<String, dynamic>,
           );
           final existing = await _employeeManager.getEmployee(employee.uuid);
+          
           if (existing == null) {
+            // 本地不存在 → 创建（包括已删除的员工）
             await _employeeManager.createEmployee(employee);
-          } else if (employee.updateTime.isAfter(existing.updateTime)) {
-            await _employeeManager.updateEmployee(employee);
+          } else {
+            // 本地已存在 → 判断是否需要更新
+            
+            // 优先比较 deletedTime（如果任一员工被删除）
+            if (employee.deleted == 1 || existing.deleted == 1) {
+              // 至少一方被删除，比较 deletedTime
+              final remoteDeletedTime = employee.deletedTime;
+              final localDeletedTime = existing.deletedTime;
+              
+              if (remoteDeletedTime != null && localDeletedTime != null) {
+                // 双方都有 deletedTime，比较哪个更新
+                if (remoteDeletedTime.isAfter(localDeletedTime)) {
+                  // 远程删除更新 → 同步删除状态
+                  await _employeeManager.updateEmployee(
+                    employee.copyWith(updateTime: DateTime.now()),
+                  );
+                }
+                // 否则保留本地的删除状态
+              } else if (remoteDeletedTime != null) {
+                // 远程已删除，本地未删除 → 标记删除
+                await _employeeManager.updateEmployee(
+                  employee.copyWith(updateTime: DateTime.now()),
+                );
+              }
+              // 如果只有本地删除了，保留本地状态
+            } else {
+              // 都未删除，正常比较 updateTime
+              if (employee.updateTime.isAfter(existing.updateTime)) {
+                // 远程更新 → 更新本地
+                await _employeeManager.updateEmployee(employee);
+              }
+              // 否则：本地更新或相同 → 保留本地
+            }
           }
         }
       } catch (e) {

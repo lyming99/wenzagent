@@ -74,6 +74,9 @@ class AiEmployeeEntity {
   /// 是否已删除
   int deleted;
 
+  /// 删除时间（软删除时使用）
+  DateTime? deletedTime;
+
   /// 创建时间
   DateTime createTime;
 
@@ -104,6 +107,7 @@ class AiEmployeeEntity {
     this.sortOrder = 0,
     this.isPinned = 0,
     this.deleted = 0,
+    this.deletedTime,
     required this.createTime,
     required this.updateTime,
   });
@@ -134,6 +138,11 @@ class AiEmployeeEntity {
       sortOrder: map['sortOrder'] as int? ?? 0,
       isPinned: map['isPinned'] as int? ?? 0,
       deleted: map['deleted'] as int? ?? 0,
+      deletedTime: map['deletedTime'] != null
+          ? (map['deletedTime'] is DateTime
+              ? map['deletedTime'] as DateTime
+              : DateTime.fromMillisecondsSinceEpoch(map['deletedTime'] as int))
+          : null,
       createTime: map['createTime'] is DateTime
           ? map['createTime'] as DateTime
           : DateTime.fromMillisecondsSinceEpoch(map['createTime'] as int? ?? 0),
@@ -169,6 +178,7 @@ class AiEmployeeEntity {
       'sortOrder': sortOrder,
       'isPinned': isPinned,
       'deleted': deleted,
+      'deletedTime': deletedTime?.millisecondsSinceEpoch,
       'createTime': createTime.millisecondsSinceEpoch,
       'updateTime': updateTime.millisecondsSinceEpoch,
     };
@@ -199,6 +209,7 @@ class AiEmployeeEntity {
     int? sortOrder,
     int? isPinned,
     int? deleted,
+    DateTime? deletedTime,
     DateTime? createTime,
     DateTime? updateTime,
   }) {
@@ -226,6 +237,7 @@ class AiEmployeeEntity {
       sortOrder: sortOrder ?? this.sortOrder,
       isPinned: isPinned ?? this.isPinned,
       deleted: deleted ?? this.deleted,
+      deletedTime: deletedTime ?? this.deletedTime,
       createTime: createTime ?? this.createTime,
       updateTime: updateTime ?? this.updateTime,
     );

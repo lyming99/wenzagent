@@ -63,7 +63,14 @@ class EmployeeStore {
     final key = _hiveManager.buildEmployeeKey(spaceId, uuid);
     final entity = box.get(key);
     if (entity != null) {
-      await box.put(key, entity.copyWith(deleted: 1));
+      // 软删除时设置 deleted=1 和 deletedTime
+      await box.put(
+        key,
+        entity.copyWith(
+          deleted: 1,
+          deletedTime: DateTime.now(),
+        ),
+      );
     }
   }
 
