@@ -55,15 +55,15 @@ class MessageTimeFieldTest {
 
   /// 初始化
   Future<void> _initialize() async {
-    final tempDir = await Directory.systemTemp.createTemp('wenzagent_time_field_test_');
+    final tempDir = await Directory.systemTemp.createTemp(
+      'wenzagent_time_field_test_',
+    );
     tempDirPath = tempDir.path;
     print('  临时目录: $tempDirPath');
 
     await HiveManager.instance.initialize(storagePath: tempDirPath);
 
-    messageStoreService = MessageStoreServiceImpl(
-      deviceId: deviceId,
-    );
+    messageStoreService = MessageStoreServiceImpl(deviceId: deviceId);
 
     print('  ✓ 初始化完成');
   }
@@ -98,7 +98,9 @@ class MessageTimeFieldTest {
     // 验证排序
     bool isSorted = true;
     for (int i = 1; i < loadedMessages.length; i++) {
-      if (loadedMessages[i].createTime.isBefore(loadedMessages[i - 1].createTime)) {
+      if (loadedMessages[i].createTime.isBefore(
+        loadedMessages[i - 1].createTime,
+      )) {
         isSorted = false;
         print('  ❌ 排序错误');
         break;
@@ -147,8 +149,10 @@ class MessageTimeFieldTest {
     };
 
     // 测试兼容逻辑
-    dynamic timeValue1 = createTimeMap['createTime'] ?? createTimeMap['createdAt'];
-    dynamic timeValue2 = createdAtMap['createTime'] ?? createdAtMap['createdAt'];
+    dynamic timeValue1 =
+        createTimeMap['createTime'] ?? createTimeMap['createdAt'];
+    dynamic timeValue2 =
+        createdAtMap['createTime'] ?? createdAtMap['createdAt'];
 
     print('  createTime Map 解析结果: $timeValue1 (类型: ${timeValue1.runtimeType})');
     print('  createdAt Map 解析结果: $timeValue2 (类型: ${timeValue2.runtimeType})');

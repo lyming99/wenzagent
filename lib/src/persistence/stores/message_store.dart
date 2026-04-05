@@ -6,7 +6,7 @@ class MessageStore {
   final HiveManager _hiveManager;
 
   MessageStore({HiveManager? hiveManager})
-      : _hiveManager = hiveManager ?? HiveManager.instance;
+    : _hiveManager = hiveManager ?? HiveManager.instance;
 
   /// 获取会话的消息列表
   Future<List<AiEmployeeMessageEntity>> getMessages(
@@ -61,7 +61,10 @@ class MessageStore {
   /// 添加消息
   Future<void> add(AiEmployeeMessageEntity entity) async {
     final box = _hiveManager.messageBox;
-    final key = _hiveManager.buildMessageKey(entity.employeeId.split('-').first, entity.uuid);
+    final key = _hiveManager.buildMessageKey(
+      entity.employeeId.split('-').first,
+      entity.uuid,
+    );
     // 从employeeId推断deviceId，实际使用时应该传入
     await box.put(key, entity);
 
@@ -70,7 +73,10 @@ class MessageStore {
   }
 
   /// 使用明确deviceId添加消息
-  Future<void> addWithDeviceId(String? deviceId, AiEmployeeMessageEntity entity) async {
+  Future<void> addWithDeviceId(
+    String? deviceId,
+    AiEmployeeMessageEntity entity,
+  ) async {
     final box = _hiveManager.messageBox;
     final key = _hiveManager.buildMessageKey(deviceId, entity.uuid);
     await box.put(key, entity);
@@ -80,7 +86,9 @@ class MessageStore {
   }
 
   /// 更新会话消息索引
-  Future<void> _updateSessionMessagesIndex(AiEmployeeMessageEntity entity) async {
+  Future<void> _updateSessionMessagesIndex(
+    AiEmployeeMessageEntity entity,
+  ) async {
     // 从employeeId推断deviceId（简化处理）
     final parts = entity.employeeId.split('-');
     final deviceId = parts.isNotEmpty ? parts.first : null;
@@ -93,7 +101,10 @@ class MessageStore {
     AiEmployeeMessageEntity entity,
   ) async {
     final indexBox = _hiveManager.sessionMessagesBox;
-    final indexKey = _hiveManager.buildSessionMessagesKey(deviceId, entity.employeeId);
+    final indexKey = _hiveManager.buildSessionMessagesKey(
+      deviceId,
+      entity.employeeId,
+    );
 
     List<dynamic> messageUuids = indexBox.get(indexKey) ?? [];
     if (!messageUuids.contains(entity.uuid)) {
@@ -105,12 +116,18 @@ class MessageStore {
   /// 更新消息
   Future<void> update(AiEmployeeMessageEntity entity) async {
     final box = _hiveManager.messageBox;
-    final key = _hiveManager.buildMessageKey(entity.employeeId.split('-').first, entity.uuid);
+    final key = _hiveManager.buildMessageKey(
+      entity.employeeId.split('-').first,
+      entity.uuid,
+    );
     await box.put(key, entity);
   }
 
   /// 使用明确deviceId更新消息
-  Future<void> updateWithDeviceId(String? deviceId, AiEmployeeMessageEntity entity) async {
+  Future<void> updateWithDeviceId(
+    String? deviceId,
+    AiEmployeeMessageEntity entity,
+  ) async {
     final box = _hiveManager.messageBox;
     final key = _hiveManager.buildMessageKey(deviceId, entity.uuid);
     await box.put(key, entity);

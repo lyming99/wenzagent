@@ -70,16 +70,16 @@ class MessageSortingTest {
 
   /// 初始化存储
   Future<void> _initializeStorage() async {
-    final tempDir = await Directory.systemTemp.createTemp('wenzagent_sorting_test_');
+    final tempDir = await Directory.systemTemp.createTemp(
+      'wenzagent_sorting_test_',
+    );
     tempDirPath = tempDir.path;
     print('  临时目录: $tempDirPath');
 
     await HiveManager.instance.initialize(storagePath: tempDirPath);
-    
-    messageStoreService = MessageStoreServiceImpl(
-      deviceId: deviceId,
-    );
-    
+
+    messageStoreService = MessageStoreServiceImpl(deviceId: deviceId);
+
     print('  ✓ Hive 初始化完成');
   }
 
@@ -117,9 +117,13 @@ class MessageSortingTest {
     // 验证是否按 createTime 排序
     bool isSorted = true;
     for (int i = 1; i < loadedMessages.length; i++) {
-      if (loadedMessages[i].createTime.isBefore(loadedMessages[i - 1].createTime)) {
+      if (loadedMessages[i].createTime.isBefore(
+        loadedMessages[i - 1].createTime,
+      )) {
         isSorted = false;
-        print('  ❌ 排序错误: ${loadedMessages[i].content} 应该在 ${loadedMessages[i - 1].content} 之前');
+        print(
+          '  ❌ 排序错误: ${loadedMessages[i].content} 应该在 ${loadedMessages[i - 1].content} 之前',
+        );
         break;
       }
     }
@@ -168,7 +172,8 @@ class MessageSortingTest {
     // 验证是否按 uuid 排序（稳定性保证）
     bool isStableSorted = true;
     for (int i = 1; i < sameTimeMessages.length; i++) {
-      if (sameTimeMessages[i].uuid.compareTo(sameTimeMessages[i - 1].uuid) < 0) {
+      if (sameTimeMessages[i].uuid.compareTo(sameTimeMessages[i - 1].uuid) <
+          0) {
         isStableSorted = false;
         print('  ❌ 稳定性排序错误: uuid 顺序不正确');
         break;
@@ -208,7 +213,9 @@ class MessageSortingTest {
     await messageStoreService.addMessages(messages);
 
     // 加载消息
-    final loadedMessages = await messageStoreService.getMessages(testEmployeeId);
+    final loadedMessages = await messageStoreService.getMessages(
+      testEmployeeId,
+    );
     print('  加载顺序: ${loadedMessages.map((m) => m.content).join(", ")}');
 
     // 验证是否按时间正序排列
@@ -216,7 +223,9 @@ class MessageSortingTest {
     for (int i = 0; i < loadedMessages.length; i++) {
       if (!loadedMessages[i].content!.contains('Reverse Message $i')) {
         isCorrectOrder = false;
-        print('  ❌ 顺序错误: 期望 Reverse Message $i，实际 ${loadedMessages[i].content}');
+        print(
+          '  ❌ 顺序错误: 期望 Reverse Message $i，实际 ${loadedMessages[i].content}',
+        );
         break;
       }
     }
@@ -255,7 +264,9 @@ class MessageSortingTest {
     await messageStoreService.addMessages(messages);
 
     // 加载消息
-    final loadedMessages = await messageStoreService.getMessages(testEmployeeId);
+    final loadedMessages = await messageStoreService.getMessages(
+      testEmployeeId,
+    );
 
     // 应用 wenzflow 中的排序逻辑
     final sortedMessages = List<AiEmployeeMessageEntity>.from(loadedMessages);
@@ -272,7 +283,9 @@ class MessageSortingTest {
     // 验证排序后是否正确
     bool isCorrectlySorted = true;
     for (int i = 1; i < sortedMessages.length; i++) {
-      final timeCompare = sortedMessages[i].createTime.compareTo(sortedMessages[i - 1].createTime);
+      final timeCompare = sortedMessages[i].createTime.compareTo(
+        sortedMessages[i - 1].createTime,
+      );
       if (timeCompare < 0) {
         isCorrectlySorted = false;
         print('  ❌ 排序错误');
@@ -319,7 +332,7 @@ class MessageSortingTest {
 
     // 打乱后添加
     messages.shuffle();
-    
+
     final stopwatch = Stopwatch()..start();
     await messageStoreService.addMessages(messages);
     final addTime = stopwatch.elapsedMilliseconds;
@@ -327,20 +340,26 @@ class MessageSortingTest {
 
     // 加载消息
     stopwatch.reset();
-    final loadedMessages = await messageStoreService.getMessages(testEmployeeId);
+    final loadedMessages = await messageStoreService.getMessages(
+      testEmployeeId,
+    );
     final loadTime = stopwatch.elapsedMilliseconds;
     print('  加载耗时: ${loadTime}ms');
 
     // 验证消息数量
     if (loadedMessages.length != messageCount) {
-      throw StateError('消息数量不匹配！期望: $messageCount, 实际: ${loadedMessages.length}');
+      throw StateError(
+        '消息数量不匹配！期望: $messageCount, 实际: ${loadedMessages.length}',
+      );
     }
 
     // 验证排序
     stopwatch.reset();
     bool isSorted = true;
     for (int i = 1; i < loadedMessages.length; i++) {
-      if (loadedMessages[i].createTime.isBefore(loadedMessages[i - 1].createTime)) {
+      if (loadedMessages[i].createTime.isBefore(
+        loadedMessages[i - 1].createTime,
+      )) {
         isSorted = false;
         break;
       }
@@ -352,7 +371,7 @@ class MessageSortingTest {
       print('  ✓ $messageCount 条消息已正确排序');
     } else {
       print('  ⚠ $messageCount 条消息未排序，需要在应用层排序');
-      
+
       // 测试应用层排序性能
       stopwatch.reset();
       final sortedMessages = List<AiEmployeeMessageEntity>.from(loadedMessages);

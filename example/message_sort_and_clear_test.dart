@@ -75,15 +75,15 @@ class MessageSortAndClearTest {
 
   /// 初始化
   Future<void> _initialize() async {
-    final tempDir = await Directory.systemTemp.createTemp('wenzagent_sort_clear_test_');
+    final tempDir = await Directory.systemTemp.createTemp(
+      'wenzagent_sort_clear_test_',
+    );
     tempDirPath = tempDir.path;
     print('  临时目录: $tempDirPath');
 
     await HiveManager.instance.initialize(storagePath: tempDirPath);
 
-    messageStoreService = MessageStoreServiceImpl(
-      deviceId: deviceId,
-    );
+    messageStoreService = MessageStoreServiceImpl(deviceId: deviceId);
 
     // 创建 DeviceClient
     device = DeviceClientImpl(
@@ -119,18 +119,24 @@ class MessageSortAndClearTest {
 
     // 打乱顺序后添加
     messages.shuffle();
-    print('  添加顺序（打乱）: ${messages.take(3).map((m) => m.content).join(", ")}...');
+    print(
+      '  添加顺序（打乱）: ${messages.take(3).map((m) => m.content).join(", ")}...',
+    );
 
     await messageStoreService.addMessages(messages);
 
     // 从数据库加载
     final loadedMessages = await messageStoreService.getMessages(employeeId);
-    print('  从数据库加载的消息顺序: ${loadedMessages.take(3).map((m) => m.content).join(", ")}...');
+    print(
+      '  从数据库加载的消息顺序: ${loadedMessages.take(3).map((m) => m.content).join(", ")}...',
+    );
 
     // 验证排序
     bool isSorted = true;
     for (int i = 1; i < loadedMessages.length; i++) {
-      if (loadedMessages[i].createTime.isBefore(loadedMessages[i - 1].createTime)) {
+      if (loadedMessages[i].createTime.isBefore(
+        loadedMessages[i - 1].createTime,
+      )) {
         isSorted = false;
         break;
       }
@@ -160,7 +166,9 @@ class MessageSortAndClearTest {
     await device.employeeManager.createEmployee(employee);
 
     // 获取 AgentProxy
-    final agentProxy = await device.getOrCreateAgentProxy(employeeId: employeeId);
+    final agentProxy = await device.getOrCreateAgentProxy(
+      employeeId: employeeId,
+    );
 
     // 等待消息加载
     await Future.delayed(const Duration(milliseconds: 500));
@@ -217,7 +225,9 @@ class MessageSortAndClearTest {
     await device.employeeManager.createEmployee(employee);
 
     // 获取 AgentProxy
-    final agentProxy = await device.getOrCreateAgentProxy(employeeId: testEmployeeId);
+    final agentProxy = await device.getOrCreateAgentProxy(
+      employeeId: testEmployeeId,
+    );
 
     // 发送几条消息
     for (int i = 0; i < 3; i++) {
@@ -259,15 +269,17 @@ class MessageSortAndClearTest {
     final baseTime = DateTime.now();
     final messages = <AiEmployeeMessageEntity>[];
     for (int i = 0; i < 5; i++) {
-      messages.add(AiEmployeeMessageEntity(
-        uuid: const Uuid().v4(),
-        employeeId: testEmployeeId,
-        role: 'user',
-        type: 'text',
-        content: 'DB Clear Test $i',
-        createTime: baseTime.add(Duration(seconds: i)),
-        updateTime: baseTime.add(Duration(seconds: i)),
-      ));
+      messages.add(
+        AiEmployeeMessageEntity(
+          uuid: const Uuid().v4(),
+          employeeId: testEmployeeId,
+          role: 'user',
+          type: 'text',
+          content: 'DB Clear Test $i',
+          createTime: baseTime.add(Duration(seconds: i)),
+          updateTime: baseTime.add(Duration(seconds: i)),
+        ),
+      );
     }
 
     await messageStoreService.addMessages(messages);
@@ -303,15 +315,17 @@ class MessageSortAndClearTest {
     final baseTime = DateTime.now();
     final messages = <AiEmployeeMessageEntity>[];
     for (int i = 0; i < 5; i++) {
-      messages.add(AiEmployeeMessageEntity(
-        uuid: const Uuid().v4(),
-        employeeId: testEmployeeId,
-        role: 'user',
-        type: 'text',
-        content: 'Reload Test $i',
-        createTime: baseTime.add(Duration(seconds: i)),
-        updateTime: baseTime.add(Duration(seconds: i)),
-      ));
+      messages.add(
+        AiEmployeeMessageEntity(
+          uuid: const Uuid().v4(),
+          employeeId: testEmployeeId,
+          role: 'user',
+          type: 'text',
+          content: 'Reload Test $i',
+          createTime: baseTime.add(Duration(seconds: i)),
+          updateTime: baseTime.add(Duration(seconds: i)),
+        ),
+      );
     }
 
     await messageStoreService.addMessages(messages);
@@ -345,7 +359,9 @@ class MessageSortAndClearTest {
     await device.employeeManager.createEmployee(employee);
 
     // 获取 AgentProxy（会触发从数据库加载消息）
-    final agentProxy = await device.getOrCreateAgentProxy(employeeId: testEmployeeId);
+    final agentProxy = await device.getOrCreateAgentProxy(
+      employeeId: testEmployeeId,
+    );
 
     // 等待消息加载
     await Future.delayed(const Duration(milliseconds: 500));
@@ -386,7 +402,9 @@ class MessageSortAndClearTest {
     await device.employeeManager.createEmployee(employee);
 
     // 获取 AgentProxy
-    final agentProxy = await device.getOrCreateAgentProxy(employeeId: testEmployeeId);
+    final agentProxy = await device.getOrCreateAgentProxy(
+      employeeId: testEmployeeId,
+    );
 
     // 发送消息
     for (int i = 0; i < 3; i++) {
