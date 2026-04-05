@@ -51,9 +51,6 @@ abstract class AgentFactory {
 
   /// Agent生命周期事件流
   Stream<AgentLifecycleEvent> get onAgentLifecycle;
-
-  /// 设置当前空间ID
-  void setSpaceId(String? spaceId);
 }
 
 /// Agent工厂实现
@@ -63,7 +60,6 @@ class AgentFactoryImpl implements AgentFactory {
   final SessionManager _sessionManager;
   final MessageStoreService _messageStore;
   final SkillManager _skillManager;
-  String? _spaceId;
 
   final _lifecycleController =
       StreamController<AgentLifecycleEvent>.broadcast();
@@ -73,17 +69,10 @@ class AgentFactoryImpl implements AgentFactory {
     required SessionManager sessionManager,
     required MessageStoreService messageStore,
     required SkillManager skillManager,
-    String? spaceId,
-  }) : _employeeManager = employeeManager,
+  })  : _employeeManager = employeeManager,
        _sessionManager = sessionManager,
        _messageStore = messageStore,
-       _skillManager = skillManager,
-       _spaceId = spaceId;
-
-  @override
-  void setSpaceId(String? spaceId) {
-    _spaceId = spaceId;
-  }
+       _skillManager = skillManager;
 
   @override
   Future<IAgent> getOrCreateAgent({
@@ -94,9 +83,6 @@ class AgentFactoryImpl implements AgentFactory {
     // 检查是否已存在
     var agent = _agents[employeeUuid];
     if (agent != null) {
-      if (employeeId != null) {
-        await agent.switchSession(employeeId);
-      }
       return agent;
     }
 

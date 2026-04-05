@@ -102,13 +102,12 @@ class DeviceClientImpl implements DeviceClient {
     this.port = 9090,
     this.topic,
   }) {
-    // 初始化服务层，使用 deviceId 作为 spaceId
-    _employeeManager = EmployeeManagerImpl();
-    _employeeManager.setSpace(deviceId);
+    // 初始化服务层，使用 deviceId
+    _employeeManager = EmployeeManagerImpl(deviceId: deviceId);
 
     _sessionManager = SessionManagerImpl();
-    _messageStoreService = MessageStoreServiceImpl(spaceId: deviceId);
-    _skillManager = SkillManagerImpl(spaceId: deviceId);
+    _messageStoreService = MessageStoreServiceImpl(deviceId: deviceId);
+    _skillManager = SkillManagerImpl(deviceId: deviceId);
 
     // 初始化员工配置服务
     _configService = EmployeeConfigServiceImpl(
@@ -212,16 +211,6 @@ class DeviceClientImpl implements DeviceClient {
       return {};
     });
 
-    _rpcServer!.register(AgentRpcConfig.methodGetSessionList, (params) async {
-      final employeeUuid = params['employeeUuid'] as String;
-      final agent = _localAgents[employeeUuid];
-      if (agent == null) {
-        throw Exception('Agent not found: $employeeUuid');
-      }
-      final sessions = await agent.getSessionList();
-      return {'sessions': sessions};
-    });
-
     _rpcServer!.register(AgentRpcConfig.methodGetSessionMessages, (
       params,
     ) async {
@@ -234,27 +223,6 @@ class DeviceClientImpl implements DeviceClient {
       final uuid = employeeId ?? agent.employeeUuid;
       final messages = await agent.getSessionMessages(uuid);
       return {'messages': messages};
-    });
-
-    _rpcServer!.register(AgentRpcConfig.methodCreateSession, (params) async {
-      final employeeUuid = params['employeeUuid'] as String;
-      final agent = _localAgents[employeeUuid];
-      if (agent == null) {
-        throw Exception('Agent not found: $employeeUuid');
-      }
-      final employeeId = await agent.createSession();
-      return {'employeeId': employeeId};
-    });
-
-    _rpcServer!.register(AgentRpcConfig.methodSwitchSession, (params) async {
-      final employeeUuid = params['employeeUuid'] as String;
-      final employeeId = params['employeeId'] as String;
-      final agent = _localAgents[employeeUuid];
-      if (agent == null) {
-        throw Exception('Agent not found: $employeeUuid');
-      }
-      await agent.switchSession(employeeId);
-      return {};
     });
 
     _rpcServer!.register(AgentRpcConfig.methodGetState, (params) async {
@@ -548,7 +516,7 @@ class DeviceClientImpl implements DeviceClient {
 
     // 创建 Agent
     agent = AgentImpl(employeeUuid: employeeUuid, chatAdapter: chatAdapter);
-    await agent.initialize();
+    await agent.initialize(employeeId: employeeUuid); // 传递 employeeUuid 以加载历史消息
 
     // 设置 Provider 配置（从当前设备配置获取）
     final deviceConfig = session.getConfig(deviceId);

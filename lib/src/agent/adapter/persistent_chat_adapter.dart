@@ -63,82 +63,37 @@ class PersistentChatAdapter extends LangChainChatAdapter {
       }
     }
 
-    // 持久化会话
-    await _notifyPersistSession();
-  }
-
-  @override
-  Future<String> createNewSession({
-    required String employeeUuid,
-    String? title,
-  }) async {
-    final employeeId = await super.createNewSession(
-      employeeUuid: employeeUuid,
-      title: title,
-    );
-
-    // 持久化新会话
-    await _notifyPersistSession();
-
-    return employeeId;
-  }
-
-  @override
-  Future<void> switchSession(String employeeId) async {
-    // 停止流式输出
-    if (isStreaming) {
-      await stopStreaming();
-    }
-
-    // 尝试从内存获取会话
-    var session = memoryManager.getSession(employeeId);
-
-    // 如果内存中不存在，尝试从数据库加载
-    if (session == null && loadSession != null) {
-      final sessionData = await loadSession!(employeeId);
-      if (sessionData != null) {
-        // 从数据库加载会话到内存
-        final employeeUuid = sessionData['employeeUuid'] as String? ?? employeeId;
-        session = memoryManager.getOrCreateSession(employeeUuid);
-        // 不再调用 _notifyPersistSession，避免重复创建
-      }
-    }
-
-    // 如果仍然不存在，创建新会话但不持久化（让调用方决定是否持久化）
-    if (session == null) {
-      session = memoryManager.getOrCreateSession(employeeId);
-      // 注意：这里不调用 _notifyPersistSession()，避免自动持久化
-    }
-
-    // 更新当前员工 UUID
-    currentEmployeeUuid = employeeId;
-
-    // 从数据库加载消息到内存（如果有加载回调）
-    final loadCb = loadMessages;
-    if (loadCb == null) return;
-
-    try {
-      final messagesData = await loadCb(employeeId);
-      if (messagesData.isEmpty) return;
-
-      // 清空现有消息并加载新消息
-      session.messagesMap.clear();
-      for (final msgData in messagesData) {
-        final chatMessage = _mapToChatMessage(msgData);
-        if (chatMessage != null) {
-          // 获取设备ID，如果没有则使用默认设备
-          final msgDeviceId = msgData['deviceId'] as String? ?? 'default';
-          session.addMessage(msgDeviceId, chatMessage);
-          // 记录已持久化的消息 ID
-          final msgId = msgData['id'] as String?;
-          if (msgId != null) {
-            _persistedMessageIds.add(msgId);
+    // 从数据库加载消息历史到内存（如果有加载回调）
+    if (employeeId != null && loadMessages != null) {
+      final session = memoryManager.getSession(employeeId);
+      if (session != null) {
+        try {
+          final messagesData = await loadMessages!(employeeId);
+          if (messagesData.isNotEmpty) {
+            // 加载历史消息
+            for (final msgData in messagesData) {
+              final chatMessage = _mapToChatMessage(msgData);
+              if (chatMessage != null) {
+                // 获取设备ID，如果没有则使用默认设备
+                final msgDeviceId = msgData['deviceId'] as String? ?? 'default';
+                session.addMessage(msgDeviceId, chatMessage);
+                // 记录已持久化的消息 ID，避免重复持久化
+                final msgId = msgData['id'] as String?;
+                if (msgId != null) {
+                  _persistedMessageIds.add(msgId);
+                }
+              }
+            }
+            print('[PersistentChatAdapter] initSession: 已从数据库加载 ${messagesData.length} 条历史消息');
           }
+        } catch (e) {
+          print('[PersistentChatAdapter] initSession: 加载历史消息失败: $e');
         }
       }
-    } catch (_) {
-      // 忽略加载失败
     }
+
+    // 持久化会话
+    await _notifyPersistSession();
   }
 
   @override
@@ -190,17 +145,27 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     final messagesBefore = currentMessages.length;
     print('[PersistentChatAdapter] messages before: $messagesBefore');
 
-    // 调用父类的流式消息方法
-    await for (final response in super.streamMessage(
-      messageData,
-      cancellationToken: cancellationToken,
-    )) {
-      print('[PersistentChatAdapter] response: ${response.isDone ? "DONE" : response.error != null ? "ERROR: ${response.error}" : "CHUNK: ${response.content?.substring(0, (response.content?.length ?? 0).clamp(0, 30))}"}');
-      yield response;
+    try {
+      // 调用父类的流式消息方法
+      await for (final response in super.streamMessage(
+        messageData,
+        cancellationToken: cancellationToken,
+      )) {
+        print('[PersistentChatAdapter] response: ${response.isDone ? "DONE" : response.error != null ? "ERROR: ${response.error}" : "CHUNK: ${response.content?.substring(0, (response.content?.length ?? 0).clamp(0, 30))}"}');
+        yield response;
 
-      // 流完成后持久化新消息
-      if (response.isDone) {
-        print('[PersistentChatAdapter] persisting new messages, before: $messagesBefore, after: ${currentMessages.length}');
+        // 流完成后持久化新消息
+        if (response.isDone) {
+          print('[PersistentChatAdapter] persisting new messages, before: $messagesBefore, after: ${currentMessages.length}');
+          await _persistNewMessages(messagesBefore);
+        }
+      }
+    } finally {
+      // 确保无论流如何结束，都持久化新增的消息
+      // 这处理了父类在异常情况下提前 return 的情况
+      final messagesAfter = currentMessages.length;
+      if (messagesAfter > messagesBefore) {
+        print('[PersistentChatAdapter] finally block: persisting ${messagesAfter - messagesBefore} new messages');
         await _persistNewMessages(messagesBefore);
       }
     }
@@ -217,13 +182,19 @@ class PersistentChatAdapter extends LangChainChatAdapter {
   /// 持久化新添加的消息
   Future<void> _persistNewMessages(int messagesBefore) async {
     final currentMsgs = currentMessages;
-    if (currentMsgs.length <= messagesBefore) return;
+    print('[PersistentChatAdapter] _persistNewMessages: before=$messagesBefore, after=${currentMsgs.length}');
+    if (currentMsgs.length <= messagesBefore) {
+      print('[PersistentChatAdapter] _persistNewMessages: no new messages, skipping');
+      return;
+    }
 
     // 只持久化新增的消息
+    print('[PersistentChatAdapter] _persistNewMessages: persisting ${currentMsgs.length - messagesBefore} new messages');
     for (var i = messagesBefore; i < currentMsgs.length; i++) {
       final message = currentMsgs[i];
       final messageId = message['id'] as String?;
       if (messageId != null && !_persistedMessageIds.contains(messageId)) {
+        print('[PersistentChatAdapter] _persistNewMessages: persisting message $messageId');
         await _persistMessage(message);
         _persistedMessageIds.add(messageId);
       }

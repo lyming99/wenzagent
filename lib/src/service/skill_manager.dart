@@ -53,23 +53,23 @@ abstract class SkillManager {
 /// 技能管理器实现
 class SkillManagerImpl implements SkillManager {
   final SkillStore _store;
-  final String? _spaceId;
+  final String? _deviceId;
   final _changeController = StreamController<SkillChangeEvent>.broadcast();
 
   SkillManagerImpl({
     SkillStore? store,
-    String? spaceId,
+    String? deviceId,
   })  : _store = store ?? SkillStore(),
-        _spaceId = spaceId;
+        _deviceId = deviceId;
 
   @override
   Future<List<AiEmployeeSkillEntity>> getSkills(String employeeUuid) async {
-    return _store.findByEmployeeWithSpaceId(_spaceId, employeeUuid);
+    return _store.findByEmployeeWithDeviceId(_deviceId, employeeUuid);
   }
 
   @override
   Future<AiEmployeeSkillEntity?> getSkill(String uuid) async {
-    return _store.find(_spaceId, uuid);
+    return _store.find(_deviceId, uuid);
   }
 
   @override
@@ -79,7 +79,7 @@ class SkillManagerImpl implements SkillManager {
       createTime: now,
       updateTime: now,
     );
-    await _store.saveWithSpaceId(_spaceId, newSkill);
+    await _store.saveWithDeviceId(_deviceId, newSkill);
     _notifyChange(SkillChangeType.created, newSkill);
     return newSkill;
   }
@@ -89,14 +89,14 @@ class SkillManagerImpl implements SkillManager {
     final updated = skill.copyWith(
       updateTime: DateTime.now(),
     );
-    await _store.saveWithSpaceId(_spaceId, updated);
+    await _store.saveWithDeviceId(_deviceId, updated);
     _notifyChange(SkillChangeType.updated, updated);
   }
 
   @override
   Future<void> deleteSkill(String uuid) async {
     final skill = await getSkill(uuid);
-    await _store.delete(_spaceId, uuid);
+    await _store.delete(_deviceId, uuid);
     if (skill != null) {
       _notifyChange(SkillChangeType.deleted, skill);
     }
@@ -111,7 +111,7 @@ class SkillManagerImpl implements SkillManager {
       enabled: enabled ? 1 : 0,
       updateTime: DateTime.now(),
     );
-    await _store.saveWithSpaceId(_spaceId, updated);
+    await _store.saveWithDeviceId(_deviceId, updated);
     _notifyChange(SkillChangeType.updated, updated);
   }
 

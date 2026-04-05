@@ -68,14 +68,14 @@ abstract class MessageStoreService {
 /// 消息存储服务实现
 class MessageStoreServiceImpl implements MessageStoreService {
   final MessageStore _store;
-  final String? _spaceId;
+  final String? _deviceId;
   final _changeController = StreamController<MessageChangeEvent>.broadcast();
 
   MessageStoreServiceImpl({
     MessageStore? store,
-    String? spaceId,
+    String? deviceId,
   })  : _store = store ?? MessageStore(),
-        _spaceId = spaceId;
+        _deviceId = deviceId;
 
   @override
   Future<List<AiEmployeeMessageEntity>> getMessages(
@@ -83,19 +83,19 @@ class MessageStoreServiceImpl implements MessageStoreService {
     int? limit,
     int? offset,
   }) async {
-    return _store.getMessages(_spaceId, employeeId,
+    return _store.getMessages(_deviceId, employeeId,
         limit: limit, offset: offset);
   }
 
   @override
   Future<AiEmployeeMessageEntity?> getMessage(String uuid) async {
-    return _store.find(_spaceId, uuid);
+    return _store.find(_deviceId, uuid);
   }
 
   @override
   Future<AiEmployeeMessageEntity> addMessage(
       AiEmployeeMessageEntity message) async {
-    await _store.addWithSpaceId(_spaceId, message);
+    await _store.addWithDeviceId(_deviceId, message);
     _notifyChange(MessageChangeType.added, message);
     return message;
   }
@@ -103,7 +103,7 @@ class MessageStoreServiceImpl implements MessageStoreService {
   @override
   Future<void> addMessages(List<AiEmployeeMessageEntity> messages) async {
     for (final message in messages) {
-      await _store.addWithSpaceId(_spaceId, message);
+      await _store.addWithDeviceId(_deviceId, message);
       _notifyChange(MessageChangeType.added, message);
     }
   }
@@ -113,7 +113,7 @@ class MessageStoreServiceImpl implements MessageStoreService {
     final updated = message.copyWith(
       updateTime: DateTime.now(),
     );
-    await _store.updateWithSpaceId(_spaceId, updated);
+    await _store.updateWithDeviceId(_deviceId, updated);
     _notifyChange(MessageChangeType.updated, updated);
   }
 
@@ -123,7 +123,7 @@ class MessageStoreServiceImpl implements MessageStoreService {
     String status, {
     String? error,
   }) async {
-    await _store.updateStatus(_spaceId, uuid, status, error: error);
+    await _store.updateStatus(_deviceId, uuid, status, error: error);
     final message = await getMessage(uuid);
     if (message != null) {
       _notifyChange(MessageChangeType.updated, message);
@@ -132,12 +132,12 @@ class MessageStoreServiceImpl implements MessageStoreService {
 
   @override
   Future<void> deleteMessages(String employeeId) async {
-    await _store.deleteBySession(_spaceId, employeeId);
+    await _store.deleteBySession(_deviceId, employeeId);
   }
 
   @override
   Future<AiEmployeeMessageEntity?> getLastMessage(String employeeId) async {
-    return _store.getLastMessage(_spaceId, employeeId);
+    return _store.getLastMessage(_deviceId, employeeId);
   }
 
   @override

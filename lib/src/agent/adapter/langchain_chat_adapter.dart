@@ -392,25 +392,6 @@ class LangChainChatAdapter implements IChatAdapter {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> getSessionsByEmployee(
-    String employeeUuid,
-  ) async {
-    final sessions = memoryManager.getSessionsByEmployee(employeeUuid);
-    return sessions
-        .map(
-          (s) => {
-            'uuid': s.employeeUuid,
-            'employeeUuid': s.employeeUuid,
-            'title': s.title ?? 'New Chat',
-            'createdAt': s.createdAt.toIso8601String(),
-            'messageCount': s.messageCount,
-          },
-        )
-        .toList()
-        .cast<Map<String, dynamic>>();
-  }
-
-  @override
   Future<List<Map<String, dynamic>>> getSessionMessages(
     String employeeId,
   ) async {
@@ -419,32 +400,6 @@ class LangChainChatAdapter implements IChatAdapter {
     if (session == null) return [];
 
     return session.allMessages.map(_chatMessageToMap).toList();
-  }
-
-  @override
-  Future<String> createNewSession({
-    required String employeeUuid,
-    String? title,
-  }) async {
-    // 员工UUID就是会话ID，不需要生成新的employeeId
-    memoryManager.getOrCreateSession(employeeUuid, title: title);
-    currentEmployeeUuid = employeeUuid;
-    return employeeUuid;
-  }
-
-  @override
-  Future<void> switchSession(String employeeId) async {
-    if (_isStreaming) {
-      await stopStreaming();
-    }
-
-    // employeeId 实际上就是 employeeUuid
-    final session = memoryManager.getSession(employeeId);
-    if (session == null) {
-      throw ArgumentError('会话不存在: $employeeId');
-    }
-
-    currentEmployeeUuid = employeeId;
   }
 
   @override

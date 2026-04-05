@@ -1,6 +1,7 @@
 import '../agent_state.dart';
-import '../tool/tool_registry.dart';
+import '../tool/agent_tool.dart';
 import '../tool/permission_manager.dart';
+import '../tool/tool_registry.dart';
 import 'cancellation_token.dart';
 import 'message_queue.dart';
 
@@ -119,20 +120,8 @@ abstract class IChatAdapter {
   /// 停止流式输出
   Future<void> stopStreaming();
 
-  /// 获取会话列表
-  Future<List<Map<String, dynamic>>> getSessionsByEmployee(String employeeUuid);
-
   /// 获取会话消息
   Future<List<Map<String, dynamic>>> getSessionMessages(String employeeId);
-
-  /// 创建新会话
-  Future<String> createNewSession({
-    required String employeeUuid,
-    String? title,
-  });
-
-  /// 切换会话
-  Future<void> switchSession(String employeeId);
 
   /// 清空当前会话
   Future<void> clearCurrentSession();
@@ -400,6 +389,7 @@ class MessageProcessor {
   void _setStatus(AgentStatus newStatus) {
     if (_status == newStatus) return;
     _status = newStatus;
+
     onStateChanged?.call(newStatus);
   }
 }

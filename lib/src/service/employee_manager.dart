@@ -33,12 +33,6 @@ class EmployeeStats {
 
 /// 员工管理器接口
 abstract class EmployeeManager {
-  /// 当前空间ID
-  String? get currentSpaceId;
-
-  /// 设置当前空间
-  void setSpace(String spaceId);
-
   /// 获取员工列表
   Future<List<AiEmployeeEntity>> getEmployees({
     String? keyword,
@@ -70,38 +64,33 @@ abstract class EmployeeManager {
 /// 员工管理器实现
 class EmployeeManagerImpl implements EmployeeManager {
   final EmployeeStore _store;
-  String? _currentSpaceId;
+  final String _deviceId;
   final _changeController = StreamController<EmployeeChangeEvent>.broadcast();
 
-  EmployeeManagerImpl({EmployeeStore? store})
-    : _store = store ?? EmployeeStore();
-
-  @override
-  String? get currentSpaceId => _currentSpaceId;
-
-  @override
-  void setSpace(String spaceId) {
-    _currentSpaceId = spaceId;
-  }
+  EmployeeManagerImpl({
+    EmployeeStore? store,
+    String deviceId = 'default',
+  })  : _store = store ?? EmployeeStore(),
+        _deviceId = deviceId;
 
   @override
   Future<List<AiEmployeeEntity>> getEmployees({
     String? keyword,
     String? status,
   }) async {
-    return _store.findAll(_currentSpaceId, keyword: keyword, status: status);
+    return _store.findAll(_deviceId, keyword: keyword, status: status);
   }
 
   @override
   Future<AiEmployeeEntity?> getEmployee(String uuid) async {
-    return _store.find(_currentSpaceId, uuid);
+    return _store.find(_deviceId, uuid);
   }
 
   @override
   Future<AiEmployeeEntity> createEmployee(AiEmployeeEntity employee) async {
     final now = DateTime.now();
     final newEmployee = employee.copyWith(
-      spaceId: _currentSpaceId,
+      spaceId: _deviceId,
       createTime: now,
       updateTime: now,
     );
@@ -132,13 +121,13 @@ class EmployeeManagerImpl implements EmployeeManager {
 
   @override
   Future<void> deleteEmployee(String uuid) async {
-    await _store.delete(_currentSpaceId, uuid);
+    await _store.delete(_deviceId, uuid);
     _notifyChange(EmployeeChangeType.deleted, uuid);
   }
 
   @override
   Future<EmployeeStats> getEmployeeStats() async {
-    final all = await _store.findAll(_currentSpaceId);
+    final all = await _store.findAll(_deviceId);
     final active = all.where((e) => e.status == 'active').toList();
     final pinned = all.where((e) => e.isPinned == 1).toList();
     return EmployeeStats(

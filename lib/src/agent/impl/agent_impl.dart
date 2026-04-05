@@ -248,36 +248,10 @@ class AgentImpl implements IAgent {
   // ===== IAgent: 会话管理 =====
 
   @override
-  Future<List<Map<String, dynamic>>> getSessionList() async {
-    return _chatAdapter.getSessionsByEmployee(employeeUuid);
-  }
-
-  @override
   Future<List<Map<String, dynamic>>> getSessionMessages(
     String employeeId,
   ) async {
     return _chatAdapter.getSessionMessages(employeeId);
-  }
-
-  @override
-  Future<String> createSession() async {
-    _touch();
-    final uuid = await _chatAdapter.createNewSession(
-      employeeUuid: employeeUuid,
-    );
-    return uuid;
-  }
-
-  @override
-  Future<void> switchSession(String employeeId) async {
-    _touch();
-    await _withLock(() async {
-      if (_chatAdapter.isStreaming) {
-        await _chatAdapter.stopStreaming();
-      }
-
-      await _chatAdapter.switchSession(employeeId);
-    });
   }
 
   @override

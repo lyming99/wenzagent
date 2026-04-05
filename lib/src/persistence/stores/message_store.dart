@@ -10,7 +10,7 @@ class MessageStore {
 
   /// 获取会话的消息列表
   Future<List<AiEmployeeMessageEntity>> getMessages(
-    String? spaceId,
+    String? deviceId,
     String employeeId, {
     int? limit,
     int? offset,
@@ -19,7 +19,7 @@ class MessageStore {
     final indexBox = _hiveManager.sessionMessagesBox;
 
     // 获取消息UUID列表
-    final indexKey = _hiveManager.buildSessionMessagesKey(spaceId, employeeId);
+    final indexKey = _hiveManager.buildSessionMessagesKey(deviceId, employeeId);
     List<dynamic> messageUuids = indexBox.get(indexKey) ?? [];
 
     // 应用偏移和限制
@@ -33,7 +33,7 @@ class MessageStore {
     // 获取消息实体
     final messages = <AiEmployeeMessageEntity>[];
     for (final uuid in messageUuids) {
-      final key = _hiveManager.buildMessageKey(spaceId, uuid as String);
+      final key = _hiveManager.buildMessageKey(deviceId, uuid as String);
       final msg = box.get(key);
       if (msg != null && msg.deleted != 1) {
         messages.add(msg);
@@ -44,9 +44,9 @@ class MessageStore {
   }
 
   /// 获取单条消息
-  Future<AiEmployeeMessageEntity?> find(String? spaceId, String uuid) async {
+  Future<AiEmployeeMessageEntity?> find(String? deviceId, String uuid) async {
     final box = _hiveManager.messageBox;
-    final key = _hiveManager.buildMessageKey(spaceId, uuid);
+    final key = _hiveManager.buildMessageKey(deviceId, uuid);
     return box.get(key);
   }
 
@@ -54,38 +54,38 @@ class MessageStore {
   Future<void> add(AiEmployeeMessageEntity entity) async {
     final box = _hiveManager.messageBox;
     final key = _hiveManager.buildMessageKey(entity.employeeId.split('-').first, entity.uuid);
-    // 从employeeId推断spaceId，实际使用时应该传入
+    // 从employeeId推断deviceId，实际使用时应该传入
     await box.put(key, entity);
 
     // 更新会话消息索引
     await _updateSessionMessagesIndex(entity);
   }
 
-  /// 使用明确spaceId添加消息
-  Future<void> addWithSpaceId(String? spaceId, AiEmployeeMessageEntity entity) async {
+  /// 使用明确deviceId添加消息
+  Future<void> addWithDeviceId(String? deviceId, AiEmployeeMessageEntity entity) async {
     final box = _hiveManager.messageBox;
-    final key = _hiveManager.buildMessageKey(spaceId, entity.uuid);
+    final key = _hiveManager.buildMessageKey(deviceId, entity.uuid);
     await box.put(key, entity);
 
     // 更新会话消息索引
-    await _updateSessionMessagesIndexWithSpaceId(spaceId, entity);
+    await _updateSessionMessagesIndexWithDeviceId(deviceId, entity);
   }
 
   /// 更新会话消息索引
   Future<void> _updateSessionMessagesIndex(AiEmployeeMessageEntity entity) async {
-    // 从employeeId推断spaceId（简化处理）
+    // 从employeeId推断deviceId（简化处理）
     final parts = entity.employeeId.split('-');
-    final spaceId = parts.isNotEmpty ? parts.first : null;
-    await _updateSessionMessagesIndexWithSpaceId(spaceId, entity);
+    final deviceId = parts.isNotEmpty ? parts.first : null;
+    await _updateSessionMessagesIndexWithDeviceId(deviceId, entity);
   }
 
-  /// 使用明确spaceId更新会话消息索引
-  Future<void> _updateSessionMessagesIndexWithSpaceId(
-    String? spaceId,
+  /// 使用明确deviceId更新会话消息索引
+  Future<void> _updateSessionMessagesIndexWithDeviceId(
+    String? deviceId,
     AiEmployeeMessageEntity entity,
   ) async {
     final indexBox = _hiveManager.sessionMessagesBox;
-    final indexKey = _hiveManager.buildSessionMessagesKey(spaceId, entity.employeeId);
+    final indexKey = _hiveManager.buildSessionMessagesKey(deviceId, entity.employeeId);
 
     List<dynamic> messageUuids = indexBox.get(indexKey) ?? [];
     if (!messageUuids.contains(entity.uuid)) {
@@ -101,41 +101,41 @@ class MessageStore {
     await box.put(key, entity);
   }
 
-  /// 使用明确spaceId更新消息
-  Future<void> updateWithSpaceId(String? spaceId, AiEmployeeMessageEntity entity) async {
+  /// 使用明确deviceId更新消息
+  Future<void> updateWithDeviceId(String? deviceId, AiEmployeeMessageEntity entity) async {
     final box = _hiveManager.messageBox;
-    final key = _hiveManager.buildMessageKey(spaceId, entity.uuid);
+    final key = _hiveManager.buildMessageKey(deviceId, entity.uuid);
     await box.put(key, entity);
   }
 
   /// 更新消息状态
   Future<void> updateStatus(
-    String? spaceId,
+    String? deviceId,
     String uuid,
     String status, {
     String? error,
   }) async {
-    final msg = await find(spaceId, uuid);
+    final msg = await find(deviceId, uuid);
     if (msg != null) {
       final updated = msg.copyWith(
         processingStatus: status,
         processingError: error,
         updateTime: DateTime.now(),
       );
-      await updateWithSpaceId(spaceId, updated);
+      await updateWithDeviceId(deviceId, updated);
     }
   }
 
   /// 删除会话的所有消息
-  Future<void> deleteBySession(String? spaceId, String employeeId) async {
+  Future<void> deleteBySession(String? deviceId, String employeeId) async {
     final indexBox = _hiveManager.sessionMessagesBox;
     final box = _hiveManager.messageBox;
 
-    final indexKey = _hiveManager.buildSessionMessagesKey(spaceId, employeeId);
+    final indexKey = _hiveManager.buildSessionMessagesKey(deviceId, employeeId);
     List<dynamic> messageUuids = indexBox.get(indexKey) ?? [];
 
     for (final uuid in messageUuids) {
-      final key = _hiveManager.buildMessageKey(spaceId, uuid as String);
+      final key = _hiveManager.buildMessageKey(deviceId, uuid as String);
       await box.delete(key);
     }
 
@@ -144,18 +144,18 @@ class MessageStore {
 
   /// 获取最后一条消息
   Future<AiEmployeeMessageEntity?> getLastMessage(
-    String? spaceId,
+    String? deviceId,
     String employeeId,
   ) async {
-    final messages = await getMessages(spaceId, employeeId, limit: 1);
+    final messages = await getMessages(deviceId, employeeId, limit: 1);
     if (messages.isEmpty) return null;
     return messages.first;
   }
 
   /// 获取消息数量
-  Future<int> count(String? spaceId, String employeeId) async {
+  Future<int> count(String? deviceId, String employeeId) async {
     final indexBox = _hiveManager.sessionMessagesBox;
-    final indexKey = _hiveManager.buildSessionMessagesKey(spaceId, employeeId);
+    final indexKey = _hiveManager.buildSessionMessagesKey(deviceId, employeeId);
     List<dynamic> messageUuids = indexBox.get(indexKey) ?? [];
     return messageUuids.length;
   }

@@ -43,17 +43,8 @@ class RpcConfig {
 
   // ===== Agent 会话管理 =====
 
-  /// 获取会话列表
-  static const String methodGetSessionList = 'agentGetSessionList';
-
   /// 获取会话消息
   static const String methodGetSessionMessages = 'agentGetSessionMessages';
-
-  /// 创建新会话
-  static const String methodCreateSession = 'agentCreateSession';
-
-  /// 切换会话
-  static const String methodSwitchSession = 'agentSwitchSession';
 
   /// 清空当前会话
   static const String methodClearSession = 'agentClearSession';

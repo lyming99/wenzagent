@@ -10,11 +10,11 @@ class SkillStore {
 
   /// 获取员工的技能列表
   Future<List<AiEmployeeSkillEntity>> findByEmployee(
-    String? spaceId,
+    String? deviceId,
     String employeeUuid,
   ) async {
     final box = _hiveManager.skillBox;
-    final prefix = spaceId != null ? ':$spaceId:' : '::';
+    final prefix = deviceId != null ? ':$deviceId:' : '::';
 
     var skills = box.values.where((s) {
       final key = _hiveManager.buildSkillKey(s.employeeUuid.split('-').first, s.uuid);
@@ -30,9 +30,9 @@ class SkillStore {
     return skills;
   }
 
-  /// 使用明确spaceId获取员工技能
-  Future<List<AiEmployeeSkillEntity>> findByEmployeeWithSpaceId(
-    String? spaceId,
+  /// 使用明确deviceId获取员工技能
+  Future<List<AiEmployeeSkillEntity>> findByEmployeeWithDeviceId(
+    String? deviceId,
     String employeeUuid,
   ) async {
     final box = _hiveManager.skillBox;
@@ -50,9 +50,9 @@ class SkillStore {
   }
 
   /// 查找单个技能
-  Future<AiEmployeeSkillEntity?> find(String? spaceId, String uuid) async {
+  Future<AiEmployeeSkillEntity?> find(String? deviceId, String uuid) async {
     final box = _hiveManager.skillBox;
-    final key = _hiveManager.buildSkillKey(spaceId, uuid);
+    final key = _hiveManager.buildSkillKey(deviceId, uuid);
     return box.get(key);
   }
 
@@ -63,17 +63,17 @@ class SkillStore {
     await box.put(key, entity);
   }
 
-  /// 使用明确spaceId保存技能
-  Future<void> saveWithSpaceId(String? spaceId, AiEmployeeSkillEntity entity) async {
+  /// 使用明确deviceId保存技能
+  Future<void> saveWithDeviceId(String? deviceId, AiEmployeeSkillEntity entity) async {
     final box = _hiveManager.skillBox;
-    final key = _hiveManager.buildSkillKey(spaceId, entity.uuid);
+    final key = _hiveManager.buildSkillKey(deviceId, entity.uuid);
     await box.put(key, entity);
   }
 
   /// 删除技能（软删除）
-  Future<void> delete(String? spaceId, String uuid) async {
+  Future<void> delete(String? deviceId, String uuid) async {
     final box = _hiveManager.skillBox;
-    final key = _hiveManager.buildSkillKey(spaceId, uuid);
+    final key = _hiveManager.buildSkillKey(deviceId, uuid);
     final entity = box.get(key);
     if (entity != null) {
       await box.put(key, entity.copyWith(deleted: 1));
@@ -81,23 +81,23 @@ class SkillStore {
   }
 
   /// 硬删除技能
-  Future<void> hardDelete(String? spaceId, String uuid) async {
+  Future<void> hardDelete(String? deviceId, String uuid) async {
     final box = _hiveManager.skillBox;
-    final key = _hiveManager.buildSkillKey(spaceId, uuid);
+    final key = _hiveManager.buildSkillKey(deviceId, uuid);
     await box.delete(key);
   }
 
   /// 删除员工的所有技能
-  Future<void> deleteByEmployee(String? spaceId, String employeeUuid) async {
-    final skills = await findByEmployeeWithSpaceId(spaceId, employeeUuid);
+  Future<void> deleteByEmployee(String? deviceId, String employeeUuid) async {
+    final skills = await findByEmployeeWithDeviceId(deviceId, employeeUuid);
     for (final skill in skills) {
-      await delete(spaceId, skill.uuid);
+      await delete(deviceId, skill.uuid);
     }
   }
 
   /// 获取技能数量
-  Future<int> count(String? spaceId, String employeeUuid) async {
-    final skills = await findByEmployeeWithSpaceId(spaceId, employeeUuid);
+  Future<int> count(String? deviceId, String employeeUuid) async {
+    final skills = await findByEmployeeWithDeviceId(deviceId, employeeUuid);
     return skills.length;
   }
 }

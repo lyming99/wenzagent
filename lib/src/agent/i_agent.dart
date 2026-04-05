@@ -67,19 +67,8 @@ abstract class IAgent {
 
   // ===== 会话管理 =====
 
-  /// 获取会话列表
-  Future<List<Map<String, dynamic>>> getSessionList();
-
   /// 获取会话消息列表
   Future<List<Map<String, dynamic>>> getSessionMessages(String employeeId);
-
-  /// 创建新会话
-  ///
-  /// 返回新会话的UUID
-  Future<String> createSession();
-
-  /// 切换会话
-  Future<void> switchSession(String employeeId);
 
   /// 清空当前会话消息
   Future<void> clearCurrentSession();

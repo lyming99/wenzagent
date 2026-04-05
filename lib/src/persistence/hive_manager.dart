@@ -100,38 +100,38 @@ class HiveManager {
   Box<T> getBox<T>(String name) => Hive.box<T>(name);
 
   /// 构建员工key
-  String buildEmployeeKey(String? spaceId, String uuid) {
-    return 'emp:$spaceId:$uuid';
+  String buildEmployeeKey(String? deviceId, String uuid) {
+    return 'emp:$deviceId:$uuid';
   }
 
   /// 构建会话key
-  String buildSessionKey(String? spaceId, String uuid) {
-    return 'sess:$spaceId:$uuid';
+  String buildSessionKey(String? deviceId, String uuid) {
+    return 'sess:$deviceId:$uuid';
   }
 
   /// 构建消息key
-  String buildMessageKey(String? spaceId, String uuid) {
-    return 'msg:$spaceId:$uuid';
+  String buildMessageKey(String? deviceId, String uuid) {
+    return 'msg:$deviceId:$uuid';
   }
 
   /// 构建技能key
-  String buildSkillKey(String? spaceId, String uuid) {
-    return 'skill:$spaceId:$uuid';
+  String buildSkillKey(String? deviceId, String uuid) {
+    return 'skill:$deviceId:$uuid';
   }
 
   /// 构建会话消息索引key
-  String buildSessionMessagesKey(String? spaceId, String employeeId) {
-    return 'sessmsgs:$spaceId:$employeeId';
+  String buildSessionMessagesKey(String? deviceId, String employeeId) {
+    return 'sessmsgs:$deviceId:$employeeId';
   }
 
   /// 构建员工会话索引key
-  String buildEmployeeSessionsKey(String? spaceId, String employeeUuid) {
-    return 'empsess:$spaceId:$employeeUuid';
+  String buildEmployeeSessionsKey(String? deviceId, String employeeUuid) {
+    return 'empsess:$deviceId:$employeeUuid';
   }
 
-  /// 清空指定空间的数据
-  Future<void> clearSpace(String? spaceId) async {
-    final prefix = spaceId != null ? ':$spaceId:' : '::';
+  /// 清空指定设备的数据
+  Future<void> clearDevice(String? deviceId) async {
+    final prefix = deviceId != null ? ':$deviceId:' : '::';
 
     // 清空员工数据
     final employeeKeys = employeeBox.keys
