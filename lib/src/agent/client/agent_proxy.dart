@@ -314,8 +314,7 @@ class AgentProxy {
     final result = await _rpc(AgentRpcConfig.methodGetState, {
       'employeeId': employeeId,
     });
-    if (result == null) return AgentStateSnapshot.idle();
-    return AgentStateSnapshot.fromMap(result as Map<String, dynamic>);
+    return AgentStateSnapshot.fromMap(result);
   }
 
   bool get isSending {
@@ -448,10 +447,7 @@ class AgentProxy {
   // ===== 私有方法 =====
 
   /// 创建待确认消息
-  PendingMessage _createPendingMessage(
-    MessageInput input,
-    String messageId,
-  ) {
+  PendingMessage _createPendingMessage(MessageInput input, String messageId) {
     return PendingMessage(
       id: messageId,
       role: input.role ?? 'user',
