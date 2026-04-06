@@ -6,15 +6,25 @@ import 'package:langchain_core/chat_models.dart';
 import '../agent_state.dart';
 import '../processor/cancellation_token.dart';
 import '../processor/message_processor.dart';
+import '../processor/persistence_queue.dart';
 import 'langchain_chat_adapter.dart';
 import 'session_memory_manager.dart';
 
 /// 持久化回调函数类型
-typedef PersistMessageFunc = Future<void> Function(Map<String, dynamic> message);
-typedef PersistSessionFunc = Future<void> Function(Map<String, dynamic> session);
-typedef LoadSessionFunc = Future<Map<String, dynamic>?> Function(String employeeId);
-typedef LoadMessagesFunc = Future<List<Map<String, dynamic>>> Function(String employeeId);
-typedef UpdateMessageStatusFunc = Future<void> Function(String messageId, AgentMessageStatus status, {String? error});
+typedef PersistMessageFunc =
+    Future<void> Function(Map<String, dynamic> message);
+typedef PersistSessionFunc =
+    Future<void> Function(Map<String, dynamic> session);
+typedef LoadSessionFunc =
+    Future<Map<String, dynamic>?> Function(String employeeId);
+typedef LoadMessagesFunc =
+    Future<List<Map<String, dynamic>>> Function(String employeeId);
+typedef UpdateMessageStatusFunc =
+    Future<void> Function(
+      String messageId,
+      AgentMessageStatus status, {
+      String? error,
+    });
 typedef DeleteMessagesFunc = Future<void> Function(String employeeId);
 
 /// 持久化聊天适配器
@@ -43,12 +53,13 @@ class PersistentChatAdapter extends LangChainChatAdapter {
   /// 已持久化的消息 ID 集合（避免重复持久化）
   final Set<String> _persistedMessageIds = {};
 
+  /// 持久化队列（用于异步处理持久化任务，避免阻塞）
+  final PersistenceQueue _persistenceQueue = PersistenceQueue();
+
   PersistentChatAdapter();
 
   @override
-  Future<void> initSession({
-    required String employeeId,
-  }) async {
+  Future<void> initSession({required String employeeId}) async {
     await super.initSession(employeeId: employeeId);
 
     // 如果提供了会话UUID且存在加载回调，尝试从数据库加载
@@ -68,7 +79,7 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     }
 
     // 从数据库加载消息历史到内存（如果有加载回调）
-    if (employeeId != null && loadMessages != null) {
+    if (loadMessages != null) {
       final session = memoryManager.getSession(employeeId);
       if (session != null) {
         try {
@@ -84,15 +95,18 @@ class PersistentChatAdapter extends LangChainChatAdapter {
                 // ✅ 创建 MessageWrapper，使用数据库中的稳定 UUID
                 // 注意：数据库中使用 'uuid' 字段，而不是 'id'
                 final msgId = (msgData['uuid'] ?? msgData['id']) as String?;
-                
+
                 // 兼容 createTime 和 createdAt 两种字段名
                 // 数据库实体 toMap() 使用 createTime，内存消息使用 createdAt
-                dynamic msgCreateTimeValue = msgData['createTime'] ?? msgData['createdAt'];
+                dynamic msgCreateTimeValue =
+                    msgData['createTime'] ?? msgData['createdAt'];
                 DateTime msgCreatedAt;
                 if (msgCreateTimeValue is String) {
                   msgCreatedAt = DateTime.parse(msgCreateTimeValue);
                 } else if (msgCreateTimeValue is int) {
-                  msgCreatedAt = DateTime.fromMillisecondsSinceEpoch(msgCreateTimeValue);
+                  msgCreatedAt = DateTime.fromMillisecondsSinceEpoch(
+                    msgCreateTimeValue,
+                  );
                 } else if (msgCreateTimeValue is DateTime) {
                   msgCreatedAt = msgCreateTimeValue;
                 } else {
@@ -113,7 +127,9 @@ class PersistentChatAdapter extends LangChainChatAdapter {
                 }
               }
             }
-            print('[PersistentChatAdapter] initSession: 已从数据库加载 ${messagesData.length} 条历史消息');
+            print(
+              '[PersistentChatAdapter] initSession: 已从数据库加载 ${messagesData.length} 条历史消息',
+            );
           }
         } catch (e) {
           print('[PersistentChatAdapter] initSession: 加载历史消息失败: $e');
@@ -122,7 +138,7 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     }
 
     // 持久化会话
-    await _notifyPersistSession();
+    _notifyPersistSession();
   }
 
   @override
@@ -142,20 +158,22 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     // 清空已持久化消息 ID 集合
     _persistedMessageIds.clear();
 
-    await _notifyPersistSession();
+    _notifyPersistSession();
   }
 
   @override
   Future<void> updateProvider(Map<String, dynamic> providerConfig) async {
     await super.updateProvider(providerConfig);
     // 模型配置变更后持久化会话
-    await _notifyPersistSession();
+    _notifyPersistSession();
   }
 
   @override
-  Future<void> updateProjectContext(Map<String, dynamic>? projectContext) async {
+  Future<void> updateProjectContext(
+    Map<String, dynamic>? projectContext,
+  ) async {
     await super.updateProjectContext(projectContext);
-    await _notifyPersistSession();
+    _notifyPersistSession();
   }
 
   @override
@@ -180,7 +198,9 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     Map<String, dynamic> messageData, {
     CancellationToken? cancellationToken,
   }) async* {
-    print('[PersistentChatAdapter] streamMessage called: ${messageData['content']?.toString().substring(0, (messageData['content']?.toString().length ?? 0).clamp(0, 50))}');
+    print(
+      '[PersistentChatAdapter] streamMessage called: ${messageData['content']?.toString().substring(0, (messageData['content']?.toString().length ?? 0).clamp(0, 50))}',
+    );
     print('[PersistentChatAdapter] currentSessionUuid: $currentSessionUuid');
     print('[PersistentChatAdapter] providerConfig: ${getProviderConfig()}');
 
@@ -195,21 +215,31 @@ class PersistentChatAdapter extends LangChainChatAdapter {
         messageData,
         cancellationToken: cancellationToken,
       )) {
-        print('[PersistentChatAdapter] response: ${response.isDone ? "DONE" : response.error != null ? "ERROR: ${response.error}" : "CHUNK: ${response.content?.substring(0, (response.content?.length ?? 0).clamp(0, 30))}"}');
+        print(
+          '[PersistentChatAdapter] response: ${response.isDone
+              ? "DONE"
+              : response.error != null
+              ? "ERROR: ${response.error}"
+              : "CHUNK: ${response.content?.substring(0, (response.content?.length ?? 0).clamp(0, 30))}"}',
+        );
         yield response;
 
         // ✅ 直接从 SessionHistory 获取消息数量
         final messagesNow = session?.messageCount ?? 0;
         if (messagesNow > messagesBefore) {
-          print('[PersistentChatAdapter] persisting new messages immediately, before: $messagesBefore, now: $messagesNow');
-          await _persistNewMessages(session, messagesBefore);
+          print(
+            '[PersistentChatAdapter] persisting new messages immediately, before: $messagesBefore, now: $messagesNow',
+          );
+          _persistNewMessages(session, messagesBefore);
         }
       }
 
       // 流完成后再次检查是否有新消息
       final messagesAfter = session?.messageCount ?? 0;
       if (messagesAfter > messagesBefore) {
-        print('[PersistentChatAdapter] stream completed, persisting any remaining messages');
+        print(
+          '[PersistentChatAdapter] stream completed, persisting any remaining messages',
+        );
         await _persistNewMessages(session, messagesBefore);
       }
     } catch (e) {
@@ -220,8 +250,10 @@ class PersistentChatAdapter extends LangChainChatAdapter {
       // 这处理了父类在异常情况下提前 return 的情况
       final messagesAfter = session?.messageCount ?? 0;
       if (messagesAfter > messagesBefore) {
-        print('[PersistentChatAdapter] finally block: persisting ${messagesAfter - messagesBefore} new messages');
-        await _persistNewMessages(session, messagesBefore);
+        print(
+          '[PersistentChatAdapter] finally block: persisting ${messagesAfter - messagesBefore} new messages',
+        );
+        _persistNewMessages(session, messagesBefore);
       }
     }
   }
@@ -240,65 +272,87 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     int messagesBefore,
   ) async {
     if (session == null) {
-      print('[PersistentChatAdapter] _persistNewMessages: session is null, skipping');
+      print(
+        '[PersistentChatAdapter] _persistNewMessages: session is null, skipping',
+      );
       return;
     }
 
     final allMessages = session.allMessages;
     final messagesNow = allMessages.length;
 
-    print('[PersistentChatAdapter] _persistNewMessages: before=$messagesBefore, after=$messagesNow');
+    print(
+      '[PersistentChatAdapter] _persistNewMessages: before=$messagesBefore, after=$messagesNow',
+    );
 
     if (messagesNow <= messagesBefore) {
-      print('[PersistentChatAdapter] _persistNewMessages: no new messages, skipping');
+      print(
+        '[PersistentChatAdapter] _persistNewMessages: no new messages, skipping',
+      );
       return;
     }
 
     // ✅ 只持久化新增的消息，直接使用 MessageWrapper
-    print('[PersistentChatAdapter] _persistNewMessages: persisting ${messagesNow - messagesBefore} new messages');
+    print(
+      '[PersistentChatAdapter] _persistNewMessages: persisting ${messagesNow - messagesBefore} new messages',
+    );
     for (var i = messagesBefore; i < messagesNow; i++) {
       final wrapper = allMessages[i];
       // ✅ 使用 MessageWrapper 的稳定 UUID
       final messageId = wrapper.uuid;
 
       if (!_persistedMessageIds.contains(messageId)) {
-        print('[PersistentChatAdapter] _persistNewMessages: persisting message $messageId');
+        print(
+          '[PersistentChatAdapter] _persistNewMessages: persisting message $messageId',
+        );
         // ✅ 直接持久化 MessageWrapper，使用 _messageWrapperToMap
         final messageMap = _messageWrapperToMap(wrapper);
-        await _persistMessage(messageMap);
+        // 不等待持久化完成，将任务加入队列
+        _persistMessage(messageMap);
         _persistedMessageIds.add(messageId);
       } else {
-        print('[PersistentChatAdapter] _persistNewMessages: message $messageId already persisted, skipping');
+        print(
+          '[PersistentChatAdapter] _persistNewMessages: message $messageId already persisted, skipping',
+        );
       }
     }
   }
 
   /// 持久化单条消息
-  Future<void> _persistMessage(Map<String, dynamic> message) async {
+  void _persistMessage(Map<String, dynamic> message) {
     if (persistMessage == null) return;
 
-    try {
-      // 添加 employeeId
-      final messageWithSession = {
-        ...message,
-        'employeeId': currentSessionUuid,
-      };
-      await persistMessage!(messageWithSession);
-    } catch (_) {
-      // 忽略持久化失败，不影响内存操作
-    }
+    // 添加 employeeId
+    final messageWithSession = {...message, 'employeeId': currentSessionUuid};
+
+    // 将持久化任务加入队列，不阻塞主流程
+    _persistenceQueue.addMessageTask(messageWithSession, (data) async {
+      try {
+        await persistMessage!(data);
+      } catch (e) {
+        // 队列会自动处理重试
+        print('[PersistentChatAdapter] _persistMessage: 持久化失败: $e');
+        rethrow;
+      }
+    });
   }
 
   /// 通知持久化会话
-  Future<void> _notifyPersistSession() async {
+  void _notifyPersistSession() {
     if (persistSession == null) return;
 
-    try {
-      final sessionData = _buildSessionData();
-      await persistSession!(sessionData);
-    } catch (_) {
-      // 忽略持久化失败，不影响内存操作
-    }
+    final sessionData = _buildSessionData();
+
+    // 将持久化任务加入队列，不阻塞主流程
+    _persistenceQueue.addSessionTask(sessionData, (data) async {
+      try {
+        await persistSession!(data);
+      } catch (e) {
+        // 队列会自动处理重试
+        print('[PersistentChatAdapter] _notifyPersistSession: 持久化失败: $e');
+        rethrow;
+      }
+    });
   }
 
   /// 构建会话数据用于持久化
@@ -369,13 +423,9 @@ class PersistentChatAdapter extends LangChainChatAdapter {
 
     // 处理工具消息
     if (type == 'functionResult' || role == 'tool') {
-      final toolCallId = map['toolCallId'] as String? ??
-          map['id'] as String? ??
-          '';
-      return ToolChatMessage(
-        toolCallId: toolCallId,
-        content: content,
-      );
+      final toolCallId =
+          map['toolCallId'] as String? ?? map['id'] as String? ?? '';
+      return ToolChatMessage(toolCallId: toolCallId, content: content);
     }
 
     // 解析 toolCalls
@@ -424,10 +474,7 @@ class PersistentChatAdapter extends LangChainChatAdapter {
 
     // 处理函数调用消息
     if (type == 'functionCall' && parsedToolCalls != null) {
-      return AIChatMessage(
-        content: content,
-        toolCalls: parsedToolCalls,
-      );
+      return AIChatMessage(content: content, toolCalls: parsedToolCalls);
     }
 
     // 根据角色创建消息
@@ -436,10 +483,7 @@ class PersistentChatAdapter extends LangChainChatAdapter {
         return ChatMessage.humanText(content);
       case 'assistant':
         if (parsedToolCalls != null && parsedToolCalls.isNotEmpty) {
-          return AIChatMessage(
-            content: content,
-            toolCalls: parsedToolCalls,
-          );
+          return AIChatMessage(content: content, toolCalls: parsedToolCalls);
         }
         return ChatMessage.ai(content);
       case 'system':
@@ -448,5 +492,13 @@ class PersistentChatAdapter extends LangChainChatAdapter {
         // 默认作为用户消息
         return ChatMessage.humanText(content);
     }
+  }
+
+  @override
+  Future<void> dispose() async {
+    // 释放持久化队列
+    await _persistenceQueue.dispose();
+    // 调用父类 dispose
+    await super.dispose();
   }
 }

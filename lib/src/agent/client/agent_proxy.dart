@@ -282,6 +282,18 @@ class AgentProxy {
     return _remoteCache.snapshot ?? AgentStateSnapshot.idle();
   }
 
+  /// 获取当前状态快照（异步版本，支持远程 RPC）
+  Future<AgentStateSnapshot> getStateSnapshotAsync() async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.getStateSnapshot();
+    }
+    final result = await _rpc(AgentRpcConfig.methodGetState, {
+      'employeeId': employeeId,
+    });
+    if (result == null) return AgentStateSnapshot.idle();
+    return AgentStateSnapshot.fromMap(result as Map<String, dynamic>);
+  }
+
   bool get isSending {
     if (isLocalMode && _localAgent != null) {
       return _localAgent.isSending;
@@ -345,15 +357,46 @@ class AgentProxy {
     switch (type) {
       case 'agentStatusChanged':
         final snapshot = AgentStateSnapshot.fromMap(data);
-        _remoteCache.snapshot = snapshot;
-        _remoteCache.status = snapshot.status;
-        _stateController.add(snapshot);
+        // 只在状态真正改变时才更新和广播
+        if (_remoteCache.status != snapshot.status) {
+          _remoteCache.snapshot = snapshot;
+          _remoteCache.status = snapshot.status;
+          _stateController.add(snapshot);
+        }
         break;
 
       case 'messageStatusChanged':
-        _stateController.add(
-          _remoteCache.snapshot ?? AgentStateSnapshot.idle(),
-        );
+        // 消息状态变化事件，需要根据消息状态更新 Agent 状态
+        final messageStatusStr = data['status'] as String?;
+        if (messageStatusStr != null) {
+          final messageStatus = AgentMessageStatus.fromString(messageStatusStr);
+
+          // 只有在消息完成、失败、中断或撤回时才更新状态为 idle
+          // 并且当前状态不是 idle 时才触发更新
+          if ((messageStatus == AgentMessageStatus.completed ||
+                  messageStatus == AgentMessageStatus.failed ||
+                  messageStatus == AgentMessageStatus.interrupted ||
+                  messageStatus == AgentMessageStatus.revoked) &&
+              _remoteCache.status != AgentStatus.idle) {
+            // 消息处理完成，状态应该变为 idle
+            final idleSnapshot = AgentStateSnapshot(
+              status: AgentStatus.idle,
+              currentProcessingMessageId: null,
+              queuedMessageIds: data['queuedMessageIds'] as List<String>? ?? [],
+              isStreaming: false,
+              queueLength: data['queueLength'] as int? ?? 0,
+            );
+            _remoteCache.snapshot = idleSnapshot;
+            _remoteCache.status = AgentStatus.idle;
+            _stateController.add(idleSnapshot);
+          } else {
+            // 消息正在排队或处理中，或者已经是 idle 状态
+            // 保持当前状态，但可能需要更新其他信息
+            if (_remoteCache.snapshot != null) {
+              _stateController.add(_remoteCache.snapshot!);
+            }
+          }
+        }
         break;
 
       default:

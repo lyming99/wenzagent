@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../agent/adapter/persistent_chat_adapter.dart';
+import '../../agent/agent_state.dart';
 import '../../agent/client/agent_proxy.dart';
 import '../../agent/i_agent.dart';
 import '../../agent/impl/agent_impl.dart';
@@ -357,6 +358,99 @@ class DeviceClientImpl implements DeviceClient {
         'employeeId': employeeId,
         'status': agent.status.name,
       };
+    });
+
+    // 消息撤回
+    _rpcServer!.register(AgentRpcConfig.methodRevokeMessage, (params) async {
+      final employeeId = params['employeeId'] as String;
+      final messageId = params['messageId'] as String;
+      final agent = _localAgents[employeeId];
+      if (agent == null) {
+        throw Exception('Agent not found: $employeeId');
+      }
+      await agent.revokeMessage(messageId);
+      return {};
+    });
+
+    // 权限管理方法
+    _rpcServer!.register(AgentRpcConfig.methodGetPendingPermission, (params) async {
+      final employeeId = params['employeeId'] as String;
+      final agent = _localAgents[employeeId];
+      if (agent == null) {
+        throw Exception('Agent not found: $employeeId');
+      }
+      final request = agent.getPendingPermissionRequest();
+      return {'request': request?.toMap()};
+    });
+
+    _rpcServer!.register(AgentRpcConfig.methodRespondPermission, (params) async {
+      final employeeId = params['employeeId'] as String;
+      final requestId = params['requestId'] as String;
+      final decisionStr = params['decision'] as String;
+      final agent = _localAgents[employeeId];
+      if (agent == null) {
+        throw Exception('Agent not found: $employeeId');
+      }
+      
+      final decision = PermissionDecision.values.firstWhere(
+        (d) => d.name == decisionStr,
+        orElse: () => PermissionDecision.deny,
+      );
+      
+      await agent.respondToPermission(requestId, decision);
+      return {};
+    });
+
+    // 上下文管理
+    _rpcServer!.register(AgentRpcConfig.methodClearContext, (params) async {
+      final employeeId = params['employeeId'] as String;
+      final agent = _localAgents[employeeId];
+      if (agent == null) {
+        throw Exception('Agent not found: $employeeId');
+      }
+      await agent.clearContext();
+      return {};
+    });
+
+    // 模型管理
+    _rpcServer!.register(AgentRpcConfig.methodGetProvider, (params) async {
+      final employeeId = params['employeeId'] as String;
+      final agent = _localAgents[employeeId];
+      if (agent == null) {
+        throw Exception('Agent not found: $employeeId');
+      }
+      return {'providerConfig': agent.getProviderConfig()};
+    });
+
+    // 项目管理
+    _rpcServer!.register(AgentRpcConfig.methodSetProject, (params) async {
+      final employeeId = params['employeeId'] as String;
+      final projectData = params['projectData'] as Map<String, dynamic>?;
+      final agent = _localAgents[employeeId];
+      if (agent == null) {
+        throw Exception('Agent not found: $employeeId');
+      }
+      await agent.setProject(projectData);
+      return {};
+    });
+
+    _rpcServer!.register(AgentRpcConfig.methodGetProjectUuid, (params) async {
+      final employeeId = params['employeeId'] as String;
+      final agent = _localAgents[employeeId];
+      if (agent == null) {
+        throw Exception('Agent not found: $employeeId');
+      }
+      return {'projectUuid': agent.getCurrentProjectUuid()};
+    });
+
+    // 工具管理
+    _rpcServer!.register(AgentRpcConfig.methodGetRegisteredTools, (params) async {
+      final employeeId = params['employeeId'] as String;
+      final agent = _localAgents[employeeId];
+      if (agent == null) {
+        throw Exception('Agent not found: $employeeId');
+      }
+      return {'tools': agent.getRegisteredTools()};
     });
 
     // 员工管理方法
