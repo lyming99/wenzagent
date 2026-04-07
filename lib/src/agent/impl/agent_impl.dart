@@ -1,5 +1,7 @@
 ﻿import 'dart:async';
 
+import 'package:uuid/uuid.dart';
+
 import '../agent_state.dart';
 import '../entity/entity.dart';
 import '../i_agent.dart';
@@ -237,20 +239,30 @@ class AgentImpl implements IAgent {
       // 转换为 Map 以便内部处理
       final messageData = input.toMap();
 
-      // 生成消息ID
-      final messageId =
-          messageData['id'] as String? ??
-          'msg_${DateTime.now().millisecondsSinceEpoch}_${Object().hashCode}';
-      messageData['id'] = messageId;
+      // 🔑 关键：使用客户端提供的消息ID，不得修改
+      // 如果客户端没有提供ID，则生成一个新的
+      final messageId = messageData['id'] as String?;
+
+      if (messageId == null || messageId.isEmpty) {
+        // 客户端没有提供ID，生成一个新的
+        final newMessageId = const Uuid().v4();
+        messageData['id'] = newMessageId;
+        print('[AgentImpl] 生成新消息ID: $newMessageId');
+      } else {
+        // 使用客户端提供的ID，确保不被修改
+        print('[AgentImpl] 使用客户端提供的消息ID: $messageId');
+      }
+
+      final finalMessageId = messageData['id'] as String;
       messageData['role'] = 'user';
       messageData['type'] = messageData['type'] as String? ?? 'text';
       messageData['createdAt'] = DateTime.now().toIso8601String();
 
-      print('[AgentImpl] submitting message to processor, messageId: $messageId');
+      print('[AgentImpl] 提交消息到处理器，消息ID: $finalMessageId');
       // 提交到处理器
-      await _processor?.submitMessage(messageId, messageData);
+      await _processor?.submitMessage(finalMessageId, messageData);
 
-      return messageId;
+      return finalMessageId;
     });
   }
 

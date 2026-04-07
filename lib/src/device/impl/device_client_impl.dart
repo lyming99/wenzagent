@@ -261,8 +261,17 @@ class DeviceClientImpl implements DeviceClient {
       if (agent == null) {
         throw Exception('Agent not found: ${request.employeeId}');
       }
+
+      // 🔑 日志：记录接收到的消息数据中的ID
+      print('[DeviceClientImpl] RPC sendMessage 接收到消息数据: ${request.messageData}');
+      print('[DeviceClientImpl] 消息ID: ${request.messageData['id']}');
+
       final input = MessageInput.fromMap(request.messageData);
+      print('[DeviceClientImpl] MessageInput.id: ${input.id}');
+
       final messageId = await agent.sendMessage(input);
+      print('[DeviceClientImpl] Agent返回的消息ID: $messageId');
+
       return {'messageId': messageId};
     });
 
