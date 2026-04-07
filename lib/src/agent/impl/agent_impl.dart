@@ -447,7 +447,18 @@ class AgentImpl implements IAgent {
   @override
   Future<void> revokeMessage(String messageId) async {
     _touch();
-    await _processor?.revokeMessage(messageId);
+    
+    // 如果正在处理的是要删除的消息，先打断
+    if (_processor?.currentProcessingMessageId == messageId) {
+      print('[AgentImpl] 正在处理的消息被删除，打断处理: $messageId');
+      await _processor?.interruptCurrentTask();
+    } else {
+      // 否则只从队列中撤回
+      await _processor?.revokeMessage(messageId);
+    }
+    
+    // 从内存中删除消息
+    _chatAdapter.removeMessageFromMemory(messageId);
   }
 
   @override
@@ -461,6 +472,12 @@ class AgentImpl implements IAgent {
   Future<void> clearCurrentSession() async {
     _touch();
     await _withLock(() async {
+      // 如果有正在处理的消息，先打断
+      if (_processor?.currentProcessingMessageId != null) {
+        print('[AgentImpl] 清空会话，打断正在处理的消息');
+        await _processor?.interruptCurrentTask();
+      }
+      
       await _chatAdapter.clearCurrentSession();
     });
   }

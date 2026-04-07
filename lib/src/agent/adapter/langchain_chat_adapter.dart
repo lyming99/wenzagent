@@ -213,6 +213,9 @@ class LangChainChatAdapter implements IChatAdapter {
             : null;
 
         print('[LangChainChatAdapter] calling LLM, messages count: ${messages.length}, hasTools: $hasTools');
+        if (hasTools && options != null) {
+          print('[LangChainChatAdapter] tools: ${_toolRegistry!.toolSpecs.map((t) => t.name).toList()}');
+        }
 
         // 调用 LLM 流式接口并累积完整响应
         ChatResult? accumulatedResult;
@@ -267,6 +270,8 @@ class LangChainChatAdapter implements IChatAdapter {
 
         final aiMessage = accumulatedResult.output;
         final toolCalls = aiMessage.toolCalls;
+
+        print('[LangChainChatAdapter] LLM response: content="${aiContentBuffer.toString()}", toolCalls=${toolCalls.length}');
 
         if (toolCalls.isEmpty || !hasTools) {
           // 没有工具调用 → 将 AI 文本加入历史，结束循环

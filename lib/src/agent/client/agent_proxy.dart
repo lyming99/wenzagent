@@ -88,9 +88,8 @@ class AgentProxy {
   /// 事件流（暴露原始事件，供CachedAgentProxy监听）
   Stream<Map<String, dynamic>> get onEvent {
     if (isLocalMode && _localAgent != null) {
-      // 本地模式：尝试从IAgent获取事件流
-      // 如果IAgent没有onEvent，返回空流
-      return _eventController.stream;
+      // 本地模式：直接返回 Agent 的事件流
+      return _localAgent.onEvent;
     }
     return _eventController.stream;
   }
