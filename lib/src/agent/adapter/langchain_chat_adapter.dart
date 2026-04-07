@@ -213,9 +213,6 @@ class LangChainChatAdapter implements IChatAdapter {
             : null;
 
         print('[LangChainChatAdapter] calling LLM, messages count: ${messages.length}, hasTools: $hasTools');
-        if (hasTools && options != null) {
-          print('[LangChainChatAdapter] tools: ${_toolRegistry!.toolSpecs.map((t) => t.name).toList()}');
-        }
 
         // 调用 LLM 流式接口并累积完整响应
         ChatResult? accumulatedResult;
@@ -336,6 +333,15 @@ class LangChainChatAdapter implements IChatAdapter {
               result: errorResult,
               isError: true,
             );
+            _toolEventCallback?.call({
+              'type': 'toolCallResult',
+              'data': {
+                'toolCallId': toolCallId,
+                'toolName': toolName,
+                'result': errorResult,
+                'isError': true,
+              },
+            });
             continue;
           }
 
@@ -359,6 +365,15 @@ class LangChainChatAdapter implements IChatAdapter {
                 result: denyResult,
                 isError: true,
               );
+              _toolEventCallback?.call({
+                'type': 'toolCallResult',
+                'data': {
+                  'toolCallId': toolCallId,
+                  'toolName': toolName,
+                  'result': denyResult,
+                  'isError': true,
+                },
+              });
               continue;
             }
           }

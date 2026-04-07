@@ -90,6 +90,9 @@ class CachedAgentProxy {
   Future<void> initialize() async {
     if (_isDisposed) return;
 
+    // 初始化事件监听（本地和远程模式都需要）
+    _initializeEventListeners();
+    
     // 本地模式：只加载本地缓存
     if (!_needCache) {
       await _loadLocalMessagesByUserCount();
@@ -116,9 +119,6 @@ class CachedAgentProxy {
 
       // 3. 查询远程会话状态和权限请求
       await _syncRemoteStateAndPermission();
-
-      // 4. 初始化事件监听
-      _initializeEventListeners();
 
       _updateCacheState(CacheState.idle);
     } catch (e) {
@@ -206,6 +206,9 @@ class CachedAgentProxy {
       }
     }
 
+    // 清理已被远程消息替代的本地临时工具调用消息
+    _cleanupLocalToolCallMessages(unreceivedMessages);
+
     // 排序
     _cachedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
@@ -213,6 +216,36 @@ class CachedAgentProxy {
     _notifyMessagesChanged();
 
     print('[CachedAgentProxy] 未接收消息合并完成，共 ${_cachedMessages.length} 条消息');
+  }
+
+  /// 清理本地临时工具调用消息
+  ///
+  /// 当远程同步的 assistant 消息已包含对应的 toolCalls 时，
+  /// 移除之前创建的本地临时 functionCall 消息，避免重复显示
+  void _cleanupLocalToolCallMessages(List<AgentMessage> remoteMessages) {
+    // 收集远程消息中所有 toolCalls 的 ID
+    final remoteToolCallIds = <String>{};
+    for (final msg in remoteMessages) {
+      if (msg.role == 'assistant' && msg.toolCalls != null) {
+        for (final tc in msg.toolCalls!) {
+          remoteToolCallIds.add(tc.id);
+        }
+      }
+    }
+
+    if (remoteToolCallIds.isEmpty) return;
+
+    // 移除本地临时消息中 toolCallId 已被远程消息覆盖的条目
+    final before = _cachedMessages.length;
+    _cachedMessages.removeWhere((m) =>
+      m.metadata?['localToolCall'] == true &&
+      m.toolCallId != null &&
+      remoteToolCallIds.contains(m.toolCallId));
+
+    final removed = before - _cachedMessages.length;
+    if (removed > 0) {
+      print('[CachedAgentProxy] 清理了 $removed 条本地临时工具调用消息（已被远程消息替代）');
+    }
   }
 
   /// 标记消息为已接收
@@ -236,11 +269,9 @@ class CachedAgentProxy {
   
   /// 初始化事件监听
   void _initializeEventListeners() {
-    if (!_needCache) return;
-    
     print('[CachedAgentProxy] 初始化事件监听...');
     
-    // 监听Agent事件
+    // 监听Agent事件（本地和远程模式都需要）
     _eventSubscription = _proxy.onEvent.listen((event) {
       _handleAgentEvent(event);
     });
@@ -329,12 +360,153 @@ class CachedAgentProxy {
   void _handleToolEvent(String eventType, Map<String, dynamic> data) {
     print('[CachedAgentProxy] 工具事件: $eventType');
     
-    // 工具事件可能会影响消息内容，触发消息同步
-    if (eventType == 'toolCallResult') {
+    if (eventType == 'toolCallStart') {
+      // 工具调用开始：创建工具调用消息
+      _createToolCallMessage(data);
+    } else if (eventType == 'toolCallResult') {
+      // 工具调用完成：更新工具消息
+      _updateToolCallMessage(data);
+      
+      // 延迟同步消息
       Future.delayed(const Duration(milliseconds: 300), () {
         _syncMessagesFromRemote();
       });
     }
+  }
+  
+  /// 创建工具调用消息（本地临时消息，用于实时显示工具调用状态）
+  void _createToolCallMessage(Map<String, dynamic> data) {
+    final toolCallId = data['toolCallId'] as String?;
+    final toolName = data['toolName'] as String?;
+    final arguments = data['arguments'] as Map<String, dynamic>?;
+    
+    if (toolCallId == null || toolName == null) return;
+    
+    // 去重检查：避免重复创建相同 toolCallId 的临时消息
+    final exists = _cachedMessages.any(
+      (m) => m.metadata?['localToolCall'] == true && m.toolCallId == toolCallId,
+    );
+    if (exists) {
+      print('[CachedAgentProxy] 工具调用临时消息已存在，跳过: $toolName ($toolCallId)');
+      return;
+    }
+    
+    print('[CachedAgentProxy] 创建工具调用消息: $toolName ($toolCallId)');
+    
+    // 创建工具调用消息：role 为 assistant（functionCall 是 assistant 发出的），
+    // ID 使用前缀避免与远程同步的消息 ID 冲突
+    final toolMessage = AgentMessage(
+      id: 'local_toolcall_$toolCallId',
+      role: 'assistant',
+      type: 'functionCall',
+      toolCallId: toolCallId,
+      toolName: toolName,
+      toolArguments: arguments,
+      toolCalls: [ToolCall(id: toolCallId, name: toolName, arguments: arguments ?? {})],
+      status: 'processing',
+      createdAt: DateTime.now(),
+      metadata: {'localToolCall': true},
+    );
+    
+    // 添加到缓存
+    _cachedMessages.add(toolMessage);
+    _notifyMessagesChanged();
+    
+    // 保存到数据库
+    _saveToolCallMessageToDb(toolMessage);
+  }
+  
+  /// 更新工具调用消息
+  void _updateToolCallMessage(Map<String, dynamic> data) {
+    final toolCallId = data['toolCallId'] as String?;
+    final result = data['result'] as String?;
+    final isError = data['isError'] as bool? ?? false;
+    
+    if (toolCallId == null) return;
+    
+    print('[CachedAgentProxy] 更新工具调用消息: $toolCallId');
+    
+    // 在缓存中查找并更新：优先匹配本地临时消息（通过 metadata 标记 + toolCallId）
+    final index = _cachedMessages.indexWhere((m) =>
+      m.metadata?['localToolCall'] == true && m.toolCallId == toolCallId);
+    if (index != -1) {
+      final message = _cachedMessages[index];
+      
+      // 根据错误类型确定状态
+      String newStatus;
+      if (!isError) {
+        newStatus = 'completed';
+      } else if (result != null && result.contains('权限被拒绝')) {
+        // 权限被拒绝，标记为中断状态
+        newStatus = 'interrupted';
+        print('[CachedAgentProxy] 工具调用被权限打断: $toolCallId');
+      } else {
+        // 其他错误，标记为失败
+        newStatus = 'failed';
+      }
+      
+      final updatedMessage = message.copyWith(
+        toolResult: result,
+        status: newStatus,
+        metadata: {
+          ...?message.metadata,
+          'isError': isError,
+          'updateTime': DateTime.now().toIso8601String(),
+        },
+      );
+      _cachedMessages[index] = updatedMessage;
+      _notifyMessagesChanged();
+      
+      // 更新数据库
+      _updateToolCallMessageInDb(updatedMessage);
+    }
+  }
+  
+  /// 保存工具调用消息到数据库
+  ///
+  /// 本地模式不持久化临时消息，因为：
+  /// - 原始 assistant 消息已包含 toolCalls 数据并持久化
+  /// - tool result 消息也会被持久化
+  /// - 临时消息持久化会导致前端 _loadMessages 重复创建 functionCall
+  Future<void> _saveToolCallMessageToDb(AgentMessage message) async {
+    // 本地模式：DB 不需要临时工具调用消息
+    if (!_needCache) return;
+    try {
+      final entity = _agentMessageToEntity(message);
+      await _messageStore.addMessage(entity, deviceId: _deviceId);
+    } catch (e) {
+      print('[CachedAgentProxy] 保存工具调用消息失败: $e');
+    }
+  }
+  
+  /// 更新数据库中的工具调用消息
+  Future<void> _updateToolCallMessageInDb(AgentMessage message) async {
+    try {
+      final entity = _agentMessageToEntity(message);
+      await _messageStore.updateMessage(entity);
+    } catch (e) {
+      print('[CachedAgentProxy] 更新工具调用消息失败: $e');
+    }
+  }
+  
+  /// 将 AgentMessage 转换为 AiEmployeeMessageEntity
+  AiEmployeeMessageEntity _agentMessageToEntity(AgentMessage message) {
+    return AiEmployeeMessageEntity(
+      uuid: message.id,
+      employeeId: _employeeId,
+      role: message.role,
+      type: message.type,
+      content: message.content,
+      toolCallId: message.toolCallId,
+      toolName: message.toolName,
+      toolArguments: message.toolArguments != null 
+          ? jsonEncode(message.toolArguments) 
+          : null,
+      toolResult: message.toolResult,
+      processingStatus: message.status ?? 'none',
+      createTime: message.createdAt,
+      updateTime: DateTime.now(),
+    );
   }
   
   /// 处理权限请求事件
@@ -792,7 +964,7 @@ class CachedAgentProxy {
   
   /// 通知消息变更
   void _notifyMessagesChanged() {
-    if (!_needCache || _isDisposed) return;
+    if (_isDisposed) return;
     
     _messagesController.add(List.unmodifiable(_cachedMessages));
   }
@@ -1105,10 +1277,6 @@ class CachedAgentProxy {
   /// 当消息缓存更新时，会通过此流通知监听者
   /// 包括：发送消息、同步远程消息、撤回消息等操作
   Stream<List<AgentMessage>> get onMessagesChanged {
-    if (!_needCache) {
-      // 本地模式返回空流
-      return Stream.empty();
-    }
     return _messagesController.stream;
   }
   
