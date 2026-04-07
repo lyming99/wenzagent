@@ -105,14 +105,16 @@ class AgentImpl implements IAgent {
   // ===== IAgent: 生命周期 =====
 
   @override
-  Future<void> initialize({String? employeeId}) async {
+  Future<void> initialize({String? employeeId, bool enableBuiltinTools = true}) async {
     // 初始化适配器
     await _chatAdapter.initSession(
       employeeId: employeeId ?? this.employeeId,
     );
 
-    // 注册内置工具
-    _toolRegistry.registerTools(BuiltinTools.all());
+    // 注册内置工具（可选）
+    if (enableBuiltinTools) {
+      _toolRegistry.registerTools(BuiltinTools.all());
+    }
 
     // 设置工具注册器和权限管理器到适配器
     _chatAdapter.setToolRegistry(_toolRegistry);
@@ -460,6 +462,14 @@ class AgentImpl implements IAgent {
     _touch();
     await _withLock(() async {
       await _chatAdapter.clearCurrentSession();
+    });
+  }
+
+  @override
+  Future<void> removeMessageFromMemory(String messageId) async {
+    _touch();
+    await _withLock(() async {
+      _chatAdapter.removeMessageFromMemory(messageId);
     });
   }
 

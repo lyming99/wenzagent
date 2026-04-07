@@ -209,6 +209,17 @@ class AgentProxy {
     await _rpcUtil!.revokeMessage(request);
   }
 
+  /// 从内存中删除消息
+  ///
+  /// 仅适用于本地模式，从 Agent 的内存中删除消息
+  Future<void> removeMessageFromMemory(String messageId) async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.removeMessageFromMemory(messageId);
+    }
+    // 远程模式不支持此操作
+    print('[AgentProxy] removeMessageFromMemory: 远程模式不支持此操作');
+  }
+
   /// 获取当前权限请求（如果有，同步版本仅适用于本地模式）
   AgentPermissionRequest? getPendingPermissionRequest() {
     if (isLocalMode && _localAgent != null) {

@@ -128,6 +128,9 @@ abstract class IChatAdapter {
   /// 清空当前会话
   Future<void> clearCurrentSession();
 
+  /// 从内存中删除指定消息
+  bool removeMessageFromMemory(String messageId);
+
   /// 设置上下文
   void setContext(Map<String, dynamic> contextData);
 

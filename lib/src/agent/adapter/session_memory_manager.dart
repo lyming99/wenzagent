@@ -124,6 +124,24 @@ class SessionHistory {
     messagesMap.remove(deviceId);
   }
 
+  /// 删除指定消息
+  ///
+  /// 从所有设备中删除指定 UUID 的消息
+  /// 返回是否成功删除
+  bool removeMessage(String messageId) {
+    bool removed = false;
+    for (final deviceId in messagesMap.keys) {
+      final messages = messagesMap[deviceId]!;
+      final index = messages.indexWhere((m) => m.uuid == messageId);
+      if (index >= 0) {
+        messages.removeAt(index);
+        removed = true;
+        print('[SessionHistory] 已删除消息: $messageId (设备: $deviceId)');
+      }
+    }
+    return removed;
+  }
+
   /// 获取所有设备ID列表
   List<String> get deviceIds => messagesMap.keys.toList()..sort();
 

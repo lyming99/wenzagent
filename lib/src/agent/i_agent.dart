@@ -130,6 +130,11 @@ abstract class IAgent {
   /// 清空当前会话消息
   Future<void> clearCurrentSession();
 
+  /// 从内存中删除指定消息
+  ///
+  /// 仅从内存中删除消息，不影响数据库
+  Future<void> removeMessageFromMemory(String messageId);
+
   // ===== 上下文管理 =====
 
   /// 设置上下文

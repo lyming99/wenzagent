@@ -28,6 +28,9 @@ typedef UpdateMessageStatusFunc =
     });
 typedef DeleteMessagesFunc = Future<void> Function(String employeeId);
 
+/// 删除单条消息回调
+typedef DeleteMessageFunc = Future<void> Function(String messageId);
+
 /// 持久化聊天适配器
 ///
 /// 继承 [LangChainChatAdapter]，在内存操作的基础上添加持久化回调。
@@ -50,6 +53,9 @@ class PersistentChatAdapter extends LangChainChatAdapter {
 
   /// 删除消息回调
   DeleteMessagesFunc? deleteMessagesCallback;
+
+  /// 删除单条消息回调
+  DeleteMessageFunc? deleteMessageCallback;
 
   /// 已持久化的消息 ID 集合（避免重复持久化）
   final Set<String> _persistedMessageIds = {};
@@ -409,11 +415,12 @@ class PersistentChatAdapter extends LangChainChatAdapter {
 
     // AI 消息附加 toolCalls 信息
     if (message is AIChatMessage && message.toolCalls.isNotEmpty) {
-      map['toolCalls'] = message.toolCalls
+      // ✅ 序列化为 JSON 字符串，避免类型转换错误
+      map['toolCalls'] = jsonEncode(message.toolCalls
           .map(
             (tc) => {'id': tc.id, 'name': tc.name, 'arguments': tc.arguments},
           )
-          .toList();
+          .toList());
     }
 
     // Tool 消息附加 toolCallId

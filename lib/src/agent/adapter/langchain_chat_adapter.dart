@@ -456,6 +456,25 @@ class LangChainChatAdapter implements IChatAdapter {
     _context = null;
   }
 
+  /// 从内存中删除指定消息
+  ///
+  /// 注意：此方法仅删除内存中的消息，不会删除数据库中的消息
+  /// 返回是否成功删除
+  bool removeMessageFromMemory(String messageId) {
+    if (currentEmployeeUuid == null) {
+      print('[LangChainChatAdapter] removeMessageFromMemory: currentEmployeeUuid is null');
+      return false;
+    }
+    
+    final session = memoryManager.getSession(currentEmployeeUuid!);
+    if (session == null) {
+      print('[LangChainChatAdapter] removeMessageFromMemory: session not found');
+      return false;
+    }
+    
+    return session.removeMessage(messageId);
+  }
+
   @override
   Future<void> updateProvider(Map<String, dynamic> providerConfig) async {
     print('[LangChainChatAdapter] updateProvider called with: $providerConfig');

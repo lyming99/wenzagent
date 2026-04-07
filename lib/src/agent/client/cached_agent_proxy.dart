@@ -959,6 +959,46 @@ class CachedAgentProxy {
       _cachedMessages.removeWhere((m) => m.id == messageId);
       _notifyMessagesChanged();
     }
+    
+    // 从数据库中删除消息
+    try {
+      await _messageStore.hardDeleteMessage(messageId, deviceId: _deviceId);
+      print('[CachedAgentProxy] 已从数据库删除消息: $messageId');
+      
+      // 本地模式：还需要删除助手回复消息（它们的时间戳紧随用户消息之后）
+      if (!_needCache) {
+        // 获取所有消息
+        final allMessages = await _proxy.getSessionMessages();
+        
+        // 找到用户消息
+        final userMsgIndex = allMessages.indexWhere((m) => m.id == messageId);
+        if (userMsgIndex >= 0) {
+          // 删除用户消息之后的所有助手消息（直到遇到下一条用户消息）
+          for (int i = userMsgIndex + 1; i < allMessages.length; i++) {
+            final msg = allMessages[i];
+            if (msg.role == 'assistant') {
+              try {
+                await _messageStore.hardDeleteMessage(msg.id, deviceId: _deviceId);
+                print('[CachedAgentProxy] 已从数据库删除助手消息: ${msg.id}');
+                
+                // 从 Agent 内存中删除助手消息
+                await _proxy.removeMessageFromMemory(msg.id);
+              } catch (e) {
+                print('[CachedAgentProxy] 删除助手消息失败: $e');
+              }
+            } else {
+              // 遇到下一条用户消息，停止删除
+              break;
+            }
+          }
+        }
+        
+        // 从 Agent 内存中删除用户消息
+        await _proxy.removeMessageFromMemory(messageId);
+      }
+    } catch (e) {
+      print('[CachedAgentProxy] 从数据库删除消息失败: $e');
+    }
   }
   
   /// 获取当前权限请求
