@@ -61,6 +61,9 @@ class CachedAgentProxy {
   /// 同步锁
   Completer<void>? _syncCompleter;
 
+  /// 权限请求缓存（远程模式使用）
+  final Map<String, AgentPermissionRequest> _pendingPermissionRequests = {};
+
   /// 事件订阅
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
   StreamSubscription<AgentStateSnapshot>? _stateSubscription;
@@ -111,7 +114,10 @@ class CachedAgentProxy {
         await _syncMessagesFromRemote();
       }
 
-      // 3. 初始化事件监听
+      // 3. 查询远程会话状态和权限请求
+      await _syncRemoteStateAndPermission();
+
+      // 4. 初始化事件监听
       _initializeEventListeners();
 
       _updateCacheState(CacheState.idle);
@@ -271,6 +277,9 @@ class CachedAgentProxy {
           _handleToolEvent(type, data);
         }
         break;
+      case 'toolPermissionRequest':
+        _handlePermissionRequest(data);
+        break;
       case 'messageReplied':
         _handleMessageReplied(data);
         break;
@@ -325,6 +334,20 @@ class CachedAgentProxy {
       Future.delayed(const Duration(milliseconds: 300), () {
         _syncMessagesFromRemote();
       });
+    }
+  }
+  
+  /// 处理权限请求事件
+  void _handlePermissionRequest(Map<String, dynamic> data) {
+    try {
+      final request = AgentPermissionRequest.fromMap(data);
+      _pendingPermissionRequests[request.requestId] = request;
+      print('[CachedAgentProxy] 收到权限请求: ${request.requestId}, 函数: ${request.functionName}');
+      
+      // 通知客户端重新加载消息
+      _notifyMessagesChanged();
+    } catch (e) {
+      print('[CachedAgentProxy] 处理权限请求失败: $e');
     }
   }
   
@@ -407,6 +430,29 @@ class CachedAgentProxy {
     if (state.status == AgentStatus.idle) {
       // Agent空闲时，同步消息
       _syncMessagesFromRemote();
+    } else if (state.status == AgentStatus.waitingPermission) {
+      // Agent等待权限时，查询权限请求
+      _queryPendingPermission();
+    }
+  }
+  
+  /// 查询待处理的权限请求
+  Future<void> _queryPendingPermission() async {
+    if (_isDisposed || !_needCache) return;
+
+    try {
+      print('[CachedAgentProxy] 查询待处理的权限请求...');
+      
+      final permissionRequest = await _proxy.getPendingPermissionRequestAsync();
+      if (permissionRequest != null) {
+        _pendingPermissionRequests[permissionRequest.requestId] = permissionRequest;
+        print('[CachedAgentProxy] 已缓存权限请求: ${permissionRequest.requestId}');
+        
+        // 通知客户端重新加载消息
+        _notifyMessagesChanged();
+      }
+    } catch (e) {
+      print('[CachedAgentProxy] 查询权限请求失败: $e');
     }
   }
   
@@ -479,6 +525,42 @@ class CachedAgentProxy {
       print('[CachedAgentProxy] 消息同步完成，共 ${_cachedMessages.length} 条消息');
     } catch (e) {
       print('[CachedAgentProxy] 同步远程消息失败: $e');
+    }
+  }
+  
+  /// 同步远程会话状态和权限请求
+  ///
+  /// 在初始化时查询远程 Agent 状态，如果正在等待权限，则查询并缓存权限请求
+  Future<void> _syncRemoteStateAndPermission() async {
+    if (_isDisposed || !_needCache) return;
+
+    try {
+      print('[CachedAgentProxy] 开始同步远程会话状态和权限请求...');
+
+      // 1. 查询远程 Agent 状态
+      final stateSnapshot = await _proxy.getStateSnapshotAsync();
+      print('[CachedAgentProxy] 远程 Agent 状态: ${stateSnapshot.status}');
+
+      // 2. 如果正在等待权限，查询权限请求
+      if (stateSnapshot.status == AgentStatus.waitingPermission) {
+        print('[CachedAgentProxy] 检测到远程 Agent 正在等待权限，查询权限请求...');
+        
+        final permissionRequest = await _proxy.getPendingPermissionRequestAsync();
+        if (permissionRequest != null) {
+          _pendingPermissionRequests[permissionRequest.requestId] = permissionRequest;
+          print('[CachedAgentProxy] 已缓存权限请求: ${permissionRequest.requestId}, 函数: ${permissionRequest.functionName}');
+          
+          // 通知客户端重新加载消息
+          _notifyMessagesChanged();
+        } else {
+          print('[CachedAgentProxy] ⚠️ 远程状态为等待权限，但没有找到权限请求');
+        }
+      }
+
+      print('[CachedAgentProxy] 远程会话状态同步完成');
+    } catch (e) {
+      print('[CachedAgentProxy] 同步远程会话状态失败: $e');
+      // 失败不影响初始化，继续执行
     }
   }
   
@@ -880,8 +962,14 @@ class CachedAgentProxy {
   }
   
   /// 获取当前权限请求
-  AgentPermissionRequest? getPendingPermissionRequest() =>
-      _proxy.getPendingPermissionRequest();
+  AgentPermissionRequest? getPendingPermissionRequest() {
+    // 远程模式：从缓存中获取
+    if (_needCache && _pendingPermissionRequests.isNotEmpty) {
+      return _pendingPermissionRequests.values.first;
+    }
+    // 本地模式：透传
+    return _proxy.getPendingPermissionRequest();
+  }
   
   /// 获取当前权限请求（异步版本）
   Future<AgentPermissionRequest?> getPendingPermissionRequestAsync() =>
@@ -895,6 +983,7 @@ class CachedAgentProxy {
     // 第二步：清空本地缓存（远程模式）
     if (_needCache) {
       _cachedMessages.clear();
+      _pendingPermissionRequests.clear();
       // 使用正确的 deviceId 删除消息
       await _messageStore.deleteMessages(_employeeId, deviceId: _deviceId);
       _notifyMessagesChanged();
@@ -935,8 +1024,13 @@ class CachedAgentProxy {
   List<Map<String, dynamic>> getRegisteredTools() => _proxy.getRegisteredTools();
   
   /// 响应权限请求
-  Future<void> respondToPermission(String requestId, PermissionDecision decision) =>
-      _proxy.respondToPermission(requestId, decision);
+  Future<void> respondToPermission(String requestId, PermissionDecision decision) async {
+    await _proxy.respondToPermission(requestId, decision);
+    
+    // 清除缓存的权限请求
+    _pendingPermissionRequests.remove(requestId);
+    print('[CachedAgentProxy] 已响应权限请求并清除缓存: $requestId');
+  }
   
   /// 获取状态快照
   AgentStateSnapshot getStateSnapshot() => _proxy.getStateSnapshot();
@@ -1012,6 +1106,9 @@ class CachedAgentProxy {
     // 取消事件订阅
     await _eventSubscription?.cancel();
     await _stateSubscription?.cancel();
+    
+    // 清除权限请求缓存
+    _pendingPermissionRequests.clear();
     
     if (_needCache) {
       await _cacheStateController.close();
