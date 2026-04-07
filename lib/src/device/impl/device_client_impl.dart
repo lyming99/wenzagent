@@ -9,6 +9,7 @@ import '../../agent/entity/entity.dart';
 import '../../agent/i_agent.dart';
 import '../../agent/impl/agent_impl.dart';
 import '../../agent/rpc/agent_rpc_config.dart';
+import '../../entity/host_rpc_request.dart';
 import '../../entity/lan_device_info.dart';
 import '../../entity/lan_message.dart';
 import '../../host/host_rpc_methods.dart';
@@ -248,22 +249,21 @@ class DeviceClientImpl implements DeviceClient {
   void _registerRpcMethods() {
     // Agent相关方法
     _rpcServer!.register(AgentRpcConfig.methodSendMessage, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final messageData = params['messageData'] as Map<String, dynamic>;
-      final agent = _localAgents[employeeId];
+      final request = SendMessageRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
-      final input = MessageInput.fromMap(messageData);
+      final input = MessageInput.fromMap(request.messageData);
       final messageId = await agent.sendMessage(input);
       return {'messageId': messageId};
     });
 
     _rpcServer!.register(AgentRpcConfig.methodInterrupt, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final agent = _localAgents[employeeId];
+      final request = InterruptRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
       await agent.interrupt();
       return {};
@@ -272,73 +272,71 @@ class DeviceClientImpl implements DeviceClient {
     _rpcServer!.register(AgentRpcConfig.methodGetSessionMessages, (
       params,
     ) async {
-      final employeeId = params['employeeId'] as String?;
-      final agent = employeeId != null ? _localAgents[employeeId] : null;
+      final request = GetSessionMessagesRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
       final messages = await agent.getSessionMessages();
       return {'messages': messages.map((m) => m.toMap()).toList()};
     });
 
     _rpcServer!.register(AgentRpcConfig.methodGetState, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final agent = _localAgents[employeeId];
+      final request = GetStateRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
       return agent.getStateSnapshot().toMap();
     });
 
     _rpcServer!.register(AgentRpcConfig.methodSetContext, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final contextData = params['contextData'] as Map<String, dynamic>;
-      final agent = _localAgents[employeeId];
+      final request = SetContextRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
-      await agent.setContext(contextData);
+      await agent.setContext(request.contextData);
       return {};
     });
 
     _rpcServer!.register(AgentRpcConfig.methodGetContext, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final agent = _localAgents[employeeId];
+      final request = GetContextRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
       return {'context': agent.getCurrentContext()};
     });
 
     _rpcServer!.register(AgentRpcConfig.methodSetProvider, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final providerConfigMap = params['providerConfig'] as Map<String, dynamic>;
-      final agent = _localAgents[employeeId];
+      final request = SetProviderRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
-      final providerConfig = ProviderConfig.fromMap(providerConfigMap);
+      final providerConfig = ProviderConfig.fromMap(request.providerConfig);
       await agent.setProvider(providerConfig);
       return {};
     });
 
     _rpcServer!.register(AgentRpcConfig.methodClearSession, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final agent = _localAgents[employeeId];
+      final request = ClearSessionRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
       await agent.clearCurrentSession();
       return {};
     });
 
     _rpcServer!.register(AgentRpcConfig.methodPing, (params) async {
-      final employeeId = params['employeeId'] as String?;
-      if (employeeId != null) {
-        final agent = _localAgents[employeeId];
+      final request = PingRequest.fromMap(params);
+      if (request.employeeId != null) {
+        final agent = _localAgents[request.employeeId];
         return {
           'alive': agent != null && agent.isAlive,
-          'employeeId': employeeId,
+          'employeeId': request.employeeId,
         };
       }
       return {
@@ -349,66 +347,63 @@ class DeviceClientImpl implements DeviceClient {
     });
 
     _rpcServer!.register(AgentRpcConfig.methodGetOrCreateAgent, (params) async {
-      final employeeId = params['employeeId'] as String;
-      var agent = _localAgents[employeeId];
+      final request = GetOrCreateAgentRequest.fromMap(params);
+      var agent = _localAgents[request.employeeId];
       if (agent == null) {
         throw Exception(
-          'Agent not found and auto-creation not supported: $employeeId',
+          'Agent not found and auto-creation not supported: ${request.employeeId}',
         );
       }
       return {
-        'employeeId': employeeId,
+        'employeeId': request.employeeId,
         'status': agent.status.name,
       };
     });
 
     // 消息撤回
     _rpcServer!.register(AgentRpcConfig.methodRevokeMessage, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final messageId = params['messageId'] as String;
-      final agent = _localAgents[employeeId];
+      final request = RevokeMessageRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
-      await agent.revokeMessage(messageId);
+      await agent.revokeMessage(request.messageId);
       return {};
     });
 
     // 权限管理方法
     _rpcServer!.register(AgentRpcConfig.methodGetPendingPermission, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final agent = _localAgents[employeeId];
+      final request = GetPendingPermissionRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
-      final request = agent.getPendingPermissionRequest();
-      return {'request': request?.toMap()};
+      final permissionRequest = agent.getPendingPermissionRequest();
+      return {'request': permissionRequest?.toMap()};
     });
 
     _rpcServer!.register(AgentRpcConfig.methodRespondPermission, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final requestId = params['requestId'] as String;
-      final decisionStr = params['decision'] as String;
-      final agent = _localAgents[employeeId];
+      final request = RespondPermissionRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
       
       final decision = PermissionDecision.values.firstWhere(
-        (d) => d.name == decisionStr,
+        (d) => d.name == request.decision,
         orElse: () => PermissionDecision.deny,
       );
       
-      await agent.respondToPermission(requestId, decision);
+      await agent.respondToPermission(request.requestId, decision);
       return {};
     });
 
     // 上下文管理
     _rpcServer!.register(AgentRpcConfig.methodClearContext, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final agent = _localAgents[employeeId];
+      final request = ClearContextRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
       await agent.clearContext();
       return {};
@@ -416,86 +411,87 @@ class DeviceClientImpl implements DeviceClient {
 
     // 模型管理
     _rpcServer!.register(AgentRpcConfig.methodGetProvider, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final agent = _localAgents[employeeId];
+      final request = GetProviderRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
       return {'providerConfig': agent.getProviderConfig()};
     });
 
     // 项目管理
     _rpcServer!.register(AgentRpcConfig.methodSetProject, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final projectDataMap = params['projectData'] as Map<String, dynamic>?;
-      final agent = _localAgents[employeeId];
+      final request = SetProjectRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
-      final projectData = projectDataMap != null 
-          ? ProjectData.fromMap(projectDataMap) 
+      final projectData = request.projectData != null 
+          ? ProjectData.fromMap(request.projectData!) 
           : null;
       await agent.setProject(projectData);
       return {};
     });
 
     _rpcServer!.register(AgentRpcConfig.methodGetProjectUuid, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final agent = _localAgents[employeeId];
+      final request = GetProjectUuidRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
       return {'projectUuid': agent.getCurrentProjectUuid()};
     });
 
     // 工具管理
     _rpcServer!.register(AgentRpcConfig.methodGetRegisteredTools, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final agent = _localAgents[employeeId];
+      final request = GetRegisteredToolsRequest.fromMap(params);
+      final agent = _localAgents[request.employeeId];
       if (agent == null) {
-        throw Exception('Agent not found: $employeeId');
+        throw Exception('Agent not found: ${request.employeeId}');
       }
       return {'tools': agent.getRegisteredTools()};
     });
 
     // 员工管理方法
     _rpcServer!.register(HostRpcConfig.methodGetEmployees, (params) async {
+      final request = GetEmployeesRequest.fromMap(params);
       final employees = await _employeeManager.getEmployees(
-        keyword: params['keyword'] as String?,
-        status: params['status'] as String?,
+        keyword: request.keyword,
+        status: request.status,
       );
       return {'employees': employees.map((e) => e.toMap()).toList()};
     });
 
     _rpcServer!.register(HostRpcConfig.methodGetEmployee, (params) async {
-      final uuid = params['uuid'] as String;
-      final employee = await _employeeManager.getEmployee(uuid);
+      final request = GetEmployeeRequest.fromMap(params);
+      final employee = await _employeeManager.getEmployee(request.uuid);
       if (employee == null) {
-        throw Exception('Employee not found: $uuid');
+        throw Exception('Employee not found: ${request.uuid}');
       }
       return {'employee': employee.toMap()};
     });
 
     // 会话管理方法
     _rpcServer!.register(HostRpcConfig.methodGetSessions, (params) async {
+      final request = GetSessionsRequest.fromMap(params);
       final sessions = await _sessionManager.getAllSessions(
-        includeArchived: params['includeArchived'] as bool? ?? false,
+        includeArchived: request.includeArchived,
       );
       return {'sessions': sessions.map((s) => s.toMap()).toList()};
     });
 
     // 技能管理方法
     _rpcServer!.register(HostRpcConfig.methodGetSkills, (params) async {
-      final employeeId = params['employeeId'] as String;
-      final skills = await _skillManager.getSkills(employeeId);
+      final request = GetSkillsRequest.fromMap(params);
+      final skills = await _skillManager.getSkills(request.employeeId);
       return {'skills': skills.map((s) => s.toMap()).toList()};
     });
 
     // 数据同步方法
     _rpcServer!.register(HostRpcConfig.methodSyncEmployees, (params) async {
-      final employeesData = params['employees'] as List;
-      final employees = employeesData
-          .map((e) => AiEmployeeEntity.fromMap(e as Map<String, dynamic>))
+      final request = SyncEmployeesRequest.fromMap(params);
+      final employees = request.employees
+          .map((e) => AiEmployeeEntity.fromMap(e))
           .toList();
       for (final employee in employees) {
         final existing = await _employeeManager.getEmployee(employee.uuid);
@@ -509,11 +505,9 @@ class DeviceClientImpl implements DeviceClient {
     });
 
     _rpcServer!.register(HostRpcConfig.methodSyncSessions, (params) async {
-      final sessionsData = params['sessions'] as List;
-      final sessions = sessionsData
-          .map(
-            (s) => AiEmployeeSessionEntity.fromMap(s as Map<String, dynamic>),
-          )
+      final request = SyncSessionsRequest.fromMap(params);
+      final sessions = request.sessions
+          .map((s) => AiEmployeeSessionEntity.fromMap(s))
           .toList();
       for (final session in sessions) {
         final existing = await _sessionManager.getSession(session.employeeId);
@@ -526,11 +520,9 @@ class DeviceClientImpl implements DeviceClient {
     });
 
     _rpcServer!.register(HostRpcConfig.methodSyncMessages, (params) async {
-      final messagesData = params['messages'] as List;
-      final messages = messagesData
-          .map(
-            (m) => AiEmployeeMessageEntity.fromMap(m as Map<String, dynamic>),
-          )
+      final request = SyncMessagesRequest.fromMap(params);
+      final messages = request.messages
+          .map((m) => AiEmployeeMessageEntity.fromMap(m))
           .toList();
       await _messageStoreService.addMessages(messages);
       return {'count': messages.length};

@@ -240,3 +240,127 @@ class GetStateRequest {
     );
   }
 }
+
+/// 获取上下文请求
+class GetContextRequest {
+  final String employeeId;
+
+  const GetContextRequest({required this.employeeId});
+
+  Map<String, dynamic> toMap() {
+    return {'employeeId': employeeId};
+  }
+
+  factory GetContextRequest.fromMap(Map<String, dynamic> map) {
+    return GetContextRequest(
+      employeeId: map['employeeId'] as String,
+    );
+  }
+}
+
+/// 清空上下文请求
+class ClearContextRequest {
+  final String employeeId;
+
+  const ClearContextRequest({required this.employeeId});
+
+  Map<String, dynamic> toMap() {
+    return {'employeeId': employeeId};
+  }
+
+  factory ClearContextRequest.fromMap(Map<String, dynamic> map) {
+    return ClearContextRequest(
+      employeeId: map['employeeId'] as String,
+    );
+  }
+}
+
+/// 获取提供者请求
+class GetProviderRequest {
+  final String employeeId;
+
+  const GetProviderRequest({required this.employeeId});
+
+  Map<String, dynamic> toMap() {
+    return {'employeeId': employeeId};
+  }
+
+  factory GetProviderRequest.fromMap(Map<String, dynamic> map) {
+    return GetProviderRequest(
+      employeeId: map['employeeId'] as String,
+    );
+  }
+}
+
+/// 获取项目UUID请求
+class GetProjectUuidRequest {
+  final String employeeId;
+
+  const GetProjectUuidRequest({required this.employeeId});
+
+  Map<String, dynamic> toMap() {
+    return {'employeeId': employeeId};
+  }
+
+  factory GetProjectUuidRequest.fromMap(Map<String, dynamic> map) {
+    return GetProjectUuidRequest(
+      employeeId: map['employeeId'] as String,
+    );
+  }
+}
+
+/// 获取已注册工具请求
+class GetRegisteredToolsRequest {
+  final String employeeId;
+
+  const GetRegisteredToolsRequest({required this.employeeId});
+
+  Map<String, dynamic> toMap() {
+    return {'employeeId': employeeId};
+  }
+
+  factory GetRegisteredToolsRequest.fromMap(Map<String, dynamic> map) {
+    return GetRegisteredToolsRequest(
+      employeeId: map['employeeId'] as String,
+    );
+  }
+}
+
+/// Ping请求
+class PingRequest {
+  final String? employeeId;
+
+  const PingRequest({this.employeeId});
+
+  Map<String, dynamic> toMap() {
+    final map = <String, dynamic>{};
+    if (employeeId != null) {
+      map['employeeId'] = employeeId!;
+    }
+    return map;
+  }
+
+  factory PingRequest.fromMap(Map<String, dynamic> map) {
+    return PingRequest(
+      employeeId: map['employeeId'] as String?,
+    );
+  }
+}
+
+/// 获取或创建Agent请求
+class GetOrCreateAgentRequest {
+  final String employeeId;
+
+  const GetOrCreateAgentRequest({required this.employeeId});
+
+  Map<String, dynamic> toMap() {
+    return {'employeeId': employeeId};
+  }
+
+  factory GetOrCreateAgentRequest.fromMap(Map<String, dynamic> map) {
+    return GetOrCreateAgentRequest(
+      employeeId: map['employeeId'] as String,
+    );
+  }
+}
+

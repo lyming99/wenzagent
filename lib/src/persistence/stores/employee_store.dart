@@ -74,13 +74,6 @@ class EmployeeStore {
     }
   }
 
-  /// 硬删除员工
-  Future<void> hardDelete(String? spaceId, String uuid) async {
-    final box = _hiveManager.employeeBox;
-    final key = _hiveManager.buildEmployeeKey(spaceId, uuid);
-    await box.delete(key);
-  }
-
   /// 获取员工数量
   Future<int> count(String? spaceId, {String? status}) async {
     final employees = await findAll(spaceId, status: status);
