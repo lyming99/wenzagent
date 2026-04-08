@@ -63,7 +63,21 @@ class PersistentChatAdapter extends LangChainChatAdapter {
   /// 持久化队列（用于异步处理持久化任务，避免阻塞）
   final PersistenceQueue _persistenceQueue = PersistenceQueue();
 
-  PersistentChatAdapter();
+  PersistentChatAdapter() {
+    // 持久化最终失败时，通知上层（仅消息类型任务）
+    _persistenceQueue.onTaskFailed = (task, error) {
+      if (task.type == PersistenceTaskType.message && task.messageData != null) {
+        final messageId = task.messageData!['id'] as String?;
+        if (messageId != null && updateMessageStatusCallback != null) {
+          updateMessageStatusCallback!(
+            messageId,
+            AgentMessageStatus.failed,
+            error: '消息持久化失败: $error',
+          );
+        }
+      }
+    };
+  }
 
   @override
   Future<void> initSession({required String employeeId}) async {

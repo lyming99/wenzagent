@@ -327,13 +327,14 @@ class CachedAgentProxy {
   void _handleMessageStatusChanged(Map<String, dynamic> data) {
     final messageId = data['messageId'] as String?;
     final status = data['status'] as String?;
+    final error = data['error'] as String?;
     
     if (messageId == null || status == null) return;
     
-    print('[CachedAgentProxy] 消息状态变更: $messageId -> $status');
+    print('[CachedAgentProxy] 消息状态变更: $messageId -> $status${error != null ? ", error: $error" : ""}');
     
-    // 更新本地缓存中的消息状态
-    _updateMessageStatus(messageId, status);
+    // 更新本地缓存中的消息状态（包含错误信息）
+    _updateMessageStatus(messageId, status, error: error);
     
     // 如果是完成或失败状态，触发消息列表查询
     if (status == 'completed' || status == 'failed' || status == 'interrupted') {
@@ -898,7 +899,7 @@ class CachedAgentProxy {
   }
   
   /// 更新消息状态
-  void _updateMessageStatus(String messageId, String status) {
+  void _updateMessageStatus(String messageId, String status, {String? error}) {
     final index = _cachedMessages.indexWhere((m) => m.id == messageId);
     if (index != -1) {
       final message = _cachedMessages[index];
@@ -907,6 +908,7 @@ class CachedAgentProxy {
         metadata: {
           ...?message.metadata,
           'updateTime': DateTime.now().toIso8601String(),
+          ...?error != null ? {'error': error} : null,
         },
       );
       _cachedMessages[index] = updatedMessage;

@@ -5,7 +5,10 @@ import '../agent_tool.dart';
 /// 文件搜索工具
 ///
 /// 在目录中按文件名模式搜索文件。
+/// 最多返回 200 个匹配结果，超出时返回截断提示。
 class FileSearchTool extends AgentTool {
+  /// 最大返回结果数量
+  static const int _maxResults = 200;
   @override
   String get name => 'file_search';
 
@@ -65,6 +68,7 @@ class FileSearchTool extends AgentTool {
       final regex = RegExp(regexPattern, caseSensitive: !Platform.isWindows);
 
       final matches = <String>[];
+      var truncated = false;
       await for (final entity in dir.list(
         recursive: recursive,
         followLinks: false,
@@ -72,7 +76,10 @@ class FileSearchTool extends AgentTool {
         final baseName = entity.path.split(Platform.pathSeparator).last;
         if (regex.hasMatch(baseName)) {
           matches.add(entity.path);
-          if (matches.length >= 200) break; // 限制结果数量
+          if (matches.length >= _maxResults) {
+            truncated = true;
+            break;
+          }
         }
       }
 
@@ -81,9 +88,19 @@ class FileSearchTool extends AgentTool {
       }
 
       matches.sort();
-      return ToolResult.success(
-        '找到 ${matches.length} 个匹配文件:\n${matches.join('\n')}',
-      );
+      final result = StringBuffer();
+      result.writeln('找到 ${matches.length} 个匹配文件:');
+      result.write(matches.join('\n'));
+
+      if (truncated) {
+        result.writeln();
+        result.writeln(
+          '[结果已截断] 已达到 $_maxResults 条上限，可能还有更多匹配。'
+          '建议: 使用更具体的 pattern 缩小搜索范围。',
+        );
+      }
+
+      return ToolResult.success(result.toString().trimRight());
     } catch (e) {
       return ToolResult.error('搜索文件失败: $e');
     }

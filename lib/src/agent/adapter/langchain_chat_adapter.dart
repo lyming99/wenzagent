@@ -177,6 +177,7 @@ class LangChainChatAdapter implements IChatAdapter {
       }
 
       // Tool calling 循环
+      bool completedNormally = false;
       for (var iteration = 0; iteration < _maxToolCallIterations; iteration++) {
         // 检查取消
         if (cancellationToken?.isCancelled == true) {
@@ -280,6 +281,7 @@ class LangChainChatAdapter implements IChatAdapter {
               ChatMessage.ai(aiContent),
             );
           }
+          completedNormally = true;
           break;
         }
 
@@ -421,9 +423,22 @@ class LangChainChatAdapter implements IChatAdapter {
               'durationMs': stopwatch.elapsedMilliseconds,
             },
           });
+
+          // 工具调用出错时，yield 提示给用户看到
+          if (result.isError) {
+            final userHint = '\n⚠️ 工具 $toolName 执行失败: ${result.content.split('\n').first}';
+            yield StreamResponse.chunk(userHint);
+          }
         }
 
         // 所有工具执行完毕，继续循环让 LLM 处理结果
+      }
+
+      // 达到最大迭代次数限制
+      if (!completedNormally) {
+        final errorMsg = '已达到最大工具调用轮次（$_maxToolCallIterations 次），请尝试简化您的需求或拆分为多个问题';
+        yield StreamResponse.error(errorMsg);
+        return;
       }
 
       // 发送完成信号

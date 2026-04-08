@@ -5,35 +5,44 @@ import '../agent_tool.dart';
 /// 文件列表工具
 ///
 /// 列出指定目录下的文件和子目录。
+/// 非递归模式最多返回 500 条，递归模式最多返回 200 条。
 class FileListTool extends AgentTool {
+  /// 非递归模式下最大返回条数
+  static const int _maxEntriesNonRecursive = 500;
+
+  /// 递归模式下最大返回条数
+  static const int _maxEntriesRecursive = 200;
+
   @override
   String get name => 'file_list';
 
   @override
   String get description =>
       'List files and directories in the specified directory path. '
-      'Returns a list of entries with their type (file/directory), name, and size.';
+      'Returns a list of entries with their type (file/directory), name, and size. '
+      'Non-recursive mode: max 500 entries. Recursive mode: max 200 entries. '
+      'Use the file_search tool with specific patterns to narrow results if needed.';
 
   @override
   Map<String, dynamic> get inputJsonSchema => {
-    'type': 'object',
-    'properties': {
-      'path': {
-        'type': 'string',
-        'description': 'The directory path to list contents of',
-      },
-      'recursive': {
-        'type': 'boolean',
-        'description': 'If true, list contents recursively. Default: false',
-      },
-      'includeHidden': {
-        'type': 'boolean',
-        'description':
-            'If true, include hidden files (starting with dot). Default: false',
-      },
-    },
-    'required': ['path'],
-  };
+        'type': 'object',
+        'properties': {
+          'path': {
+            'type': 'string',
+            'description': 'The directory path to list contents of',
+          },
+          'recursive': {
+            'type': 'boolean',
+            'description': 'If true, list contents recursively. Default: false',
+          },
+          'includeHidden': {
+            'type': 'boolean',
+            'description':
+                'If true, include hidden files (starting with dot). Default: false',
+          },
+        },
+        'required': ['path'],
+      };
 
   @override
   bool get requiresPermission => false;
@@ -52,13 +61,22 @@ class FileListTool extends AgentTool {
 
     final recursive = arguments['recursive'] as bool? ?? false;
     final includeHidden = arguments['includeHidden'] as bool? ?? false;
+    final maxEntries =
+        recursive ? _maxEntriesRecursive : _maxEntriesNonRecursive;
 
     try {
       final entries = <String>[];
+      var truncated = false;
+
       await for (final entity in dir.list(
         recursive: recursive,
         followLinks: false,
       )) {
+        if (entries.length >= maxEntries) {
+          truncated = true;
+          break;
+        }
+
         final name = entity.path.replaceFirst(
           '${dir.path}${Platform.pathSeparator}',
           '',
@@ -85,7 +103,21 @@ class FileListTool extends AgentTool {
       }
 
       entries.sort();
-      return ToolResult.success(entries.join('\n'));
+
+      final result = StringBuffer();
+      result.writeln(entries.join('\n'));
+
+      if (truncated) {
+        result.writeln();
+        result.writeln(
+          '[结果已截断] 列出了 $maxEntries 条，但目录中还有更多内容。'
+          '建议: 1) 使用 file_search 按文件名模式缩小范围; '
+          '2) 列出子目录而非递归列出; '
+          '3) 指定更具体的路径。',
+        );
+      }
+
+      return ToolResult.success(result.toString().trimRight());
     } catch (e) {
       return ToolResult.error('列出目录内容失败: $e');
     }

@@ -97,6 +97,9 @@ class PersistenceQueue {
   int _completedTasks = 0;
   int _failedTasks = 0;
 
+  /// 任务最终失败回调（重试耗尽后触发）
+  void Function(PersistenceTask task, Object error)? onTaskFailed;
+
   /// 添加消息持久化任务
   ///
   /// [messageData] 消息数据
@@ -214,6 +217,8 @@ class PersistenceQueue {
         print(
           '[PersistenceQueue] Task failed permanently: ${task.type} (${task.taskId})',
         );
+        // 通知上层任务最终失败
+        onTaskFailed?.call(task, e);
       }
     } finally {
       _currentTask = null;

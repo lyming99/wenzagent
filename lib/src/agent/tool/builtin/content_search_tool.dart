@@ -5,7 +5,13 @@ import '../agent_tool.dart';
 /// 内容搜索工具
 ///
 /// 在文件内容中搜索匹配的文本或正则模式（类似 grep）。
+/// 输出字符总大小限制 30KB，超出时截断并返回提示。
 class ContentSearchTool extends AgentTool {
+  /// 默认最大匹配行数
+  static const int _defaultMaxResults = 100;
+
+  /// 最大输出字符数（30KB）
+  static const int _maxOutputChars = 30 * 1024;
   @override
   String get name => 'content_search';
 
@@ -65,7 +71,7 @@ class ContentSearchTool extends AgentTool {
       return ToolResult.error('目录不存在: $directory');
     }
 
-    final maxResults = arguments['maxResults'] as int? ?? 100;
+    final maxResults = arguments['maxResults'] as int? ?? _defaultMaxResults;
     final caseSensitive = arguments['caseSensitive'] as bool? ?? true;
     final filePattern = arguments['filePattern'] as String?;
 
@@ -81,13 +87,15 @@ class ContentSearchTool extends AgentTool {
 
       final results = <String>[];
       var fileCount = 0;
+      var outputChars = 0;
+      var truncatedBySize = false;
 
       await for (final entity in dir.list(
         recursive: true,
         followLinks: false,
       )) {
         if (entity is! File) continue;
-        if (results.length >= maxResults) break;
+        if (results.length >= maxResults || outputChars >= _maxOutputChars) break;
 
         final baseName = entity.path.split(Platform.pathSeparator).last;
 
@@ -101,13 +109,18 @@ class ContentSearchTool extends AgentTool {
           final lines = await entity.readAsLines();
           var hasMatch = false;
           for (var i = 0; i < lines.length; i++) {
-            if (results.length >= maxResults) break;
+            if (results.length >= maxResults || outputChars >= _maxOutputChars) {
+              truncatedBySize = true;
+              break;
+            }
             if (regex.hasMatch(lines[i])) {
               if (!hasMatch) {
                 hasMatch = true;
                 fileCount++;
               }
-              results.add('${entity.path}:${i + 1}: ${lines[i]}');
+              final line = '${entity.path}:${i + 1}: ${lines[i]}';
+              results.add(line);
+              outputChars += line.length + 1; // +1 for newline
             }
           }
         } catch (_) {
@@ -119,9 +132,25 @@ class ContentSearchTool extends AgentTool {
         return ToolResult.success('未找到匹配 "$pattern" 的内容');
       }
 
-      return ToolResult.success(
-        '在 $fileCount 个文件中找到 ${results.length} 个匹配:\n${results.join('\n')}',
-      );
+      final result = StringBuffer();
+      result.writeln('在 $fileCount 个文件中找到 ${results.length} 个匹配:');
+      result.write(results.join('\n'));
+
+      if (results.length >= maxResults) {
+        result.writeln();
+        result.writeln(
+          '[结果已截断] 已达到 $maxResults 行上限。'
+          '建议: 使用更精确的 pattern 或 filePattern 缩小搜索范围。',
+        );
+      } else if (truncatedBySize) {
+        result.writeln();
+        result.writeln(
+          '[结果已截断] 输出超过 ${_maxOutputChars ~/ 1024}KB 限制。'
+          '建议: 使用更精确的 pattern 或 filePattern 缩小搜索范围。',
+        );
+      }
+
+      return ToolResult.success(result.toString().trimRight());
     } catch (e) {
       return ToolResult.error('搜索内容失败: $e');
     }
