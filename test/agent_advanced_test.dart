@@ -482,6 +482,138 @@ void main() {
 
       print('✅ 通过\n');
     });
+
+    test('📨 技能调用消息更新到客户端', () async {
+      print('\n--- 测试：技能调用消息更新到客户端 ---');
+
+      final toolMessages = <AgentMessage>[];
+      final completer = Completer<void>();
+
+      // 监听消息变化
+      final subscription = cachedProxy.onMessagesChanged.listen((messages) {
+        // 查找工具调用消息
+        final toolMsgs = messages.where((m) => m.role == 'tool').toList();
+        if (toolMsgs.isNotEmpty) {
+          toolMessages.clear();
+          toolMessages.addAll(toolMsgs);
+          print('收到工具调用消息: ${toolMsgs.length} 个');
+          for (final msg in toolMsgs) {
+            print('  - ${msg.toolName}: status=${msg.status}, result=${msg.toolResult}');
+          }
+        }
+      });
+
+      // 监听状态变化
+      cachedProxy.onStateChanged.listen((state) {
+        if (state.status == AgentStatus.idle && !completer.isCompleted) {
+          completer.complete();
+        }
+      });
+
+      // 发送需要工具调用的消息
+      final messageId = await cachedProxy.sendMessage(MessageInput(
+        content: 'Call the test_simple tool with name parameter set to "ToolMessageTest" and tell me the result.',
+      ));
+
+      print('发送消息ID: $messageId');
+
+      // 等待处理完成
+      await completer.future.timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw TimeoutException('等待工具调用超时'),
+      );
+
+      await subscription.cancel();
+
+      // 验证创建了工具调用消息
+      expect(toolMessages.isNotEmpty, isTrue, reason: '应该创建工具调用消息');
+
+      final toolMessage = toolMessages.first;
+      expect(toolMessage.role, equals('tool'));
+      expect(toolMessage.type, equals('functionCall'));
+      expect(toolMessage.toolName, equals('test_simple'));
+      expect(toolMessage.toolArguments?['name'], equals('ToolMessageTest'));
+
+      // 验证消息状态从 processing -> completed
+      expect(toolMessage.status, equals('completed'), reason: '工具调用应该完成');
+      expect(toolMessage.toolResult, contains('Hello, ToolMessageTest'));
+
+      print('✅ 通过\n');
+    });
+
+    test('🚫 权限申请打断后工具状态更新', () async {
+      print('\n--- 测试：权限申请打断后工具状态更新 ---');
+
+      final toolMessages = <AgentMessage>[];
+      final completer = Completer<void>();
+
+      // 监听消息变化
+      final subscription = cachedProxy.onMessagesChanged.listen((messages) {
+        // 查找工具调用消息
+        final toolMsgs = messages.where((m) => m.role == 'tool').toList();
+        if (toolMsgs.isNotEmpty) {
+          toolMessages.clear();
+          toolMessages.addAll(toolMsgs);
+          print('收到工具调用消息: ${toolMsgs.length} 个');
+          for (final msg in toolMsgs) {
+            print('  - ${msg.toolName}: status=${msg.status}, result=${msg.toolResult}');
+          }
+        }
+      });
+
+      // 监听权限申请事件并拒绝
+      final eventSubscription = localProxy.onEvent.listen((event) {
+        if (event['type'] == 'toolPermissionRequest') {
+          final request = AgentPermissionRequest.fromMap(
+            event['data'] as Map<String, dynamic>,
+          );
+          print('收到权限申请: ${request.functionName}');
+          
+          // 拒绝权限
+          cachedProxy.respondToPermission(
+            request.requestId,
+            PermissionDecision.deny,
+          );
+          print('已拒绝权限');
+        }
+      });
+
+      // 监听状态变化
+      cachedProxy.onStateChanged.listen((state) {
+        if (state.status == AgentStatus.idle && !completer.isCompleted) {
+          completer.complete();
+        }
+      });
+
+      // 发送需要权限的工具调用消息
+      final messageId = await cachedProxy.sendMessage(MessageInput(
+        content: 'Call the test_permission tool with action parameter set to "blocked_action" and tell me the result.',
+      ));
+
+      print('发送消息ID: $messageId');
+
+      // 等待处理完成
+      await completer.future.timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw TimeoutException('等待权限处理超时'),
+      );
+
+      await subscription.cancel();
+      await eventSubscription.cancel();
+
+      // 验证创建了工具调用消息
+      expect(toolMessages.isNotEmpty, isTrue, reason: '应该创建工具调用消息');
+
+      final toolMessage = toolMessages.first;
+      expect(toolMessage.role, equals('tool'));
+      expect(toolMessage.toolName, equals('test_permission'));
+
+      // 验证消息状态为 interrupted（权限被拒绝）
+      expect(toolMessage.status, equals('interrupted'), reason: '权限被拒绝应该标记为 interrupted');
+      expect(toolMessage.toolResult, contains('权限被拒绝'));
+
+      print('✅ 通过\n');
+    });
   });
 
   print('\n=== 所有高级测试完成 ===\n');
