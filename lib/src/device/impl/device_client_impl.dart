@@ -1092,9 +1092,16 @@ class DeviceClientImpl implements DeviceClient {
             status: status,
             metadata: Map<String, dynamic>.from(data)..['deviceId'] = deviceId,
           );
+          // 本地消息也检查会话是否打开，未打开时标记未读（与远程模式一致）
+          final autoRead = _notificationHub.shouldAutoMarkAsReadCallback?.call(
+                employeeId: employeeId,
+                fromDeviceId: deviceId,
+              ) ?? false;
           _notificationHub.onLocalMessage(
             message: msg,
             employeeId: employeeId,
+            markUnread: !autoRead,
+            autoRead: autoRead,
           );
           _updateLatestMessageCache(employeeId, deviceId, msg);
         }).catchError((_) {});
@@ -1947,9 +1954,11 @@ class DeviceClientImpl implements DeviceClient {
             final isLocal = fromDeviceId == deviceId;
             if (!isLocal) {
               // 远程 Agent 消息：通过 onRemoteMessage 通知（自动标记未读）
+              // completed 状态代表 AI 回复完成，role 固定为 assistant
+              // （data['role'] 是原始追踪的用户消息 role，不能使用）
               final remoteMsg = AgentMessage(
                 id: messageId,
-                role: data['role'] as String? ?? 'assistant',
+                role: 'assistant',
                 type: data['type'] as String? ?? 'text',
                 content: data['content'] as String?,
                 createdAt: DateTime.now(),

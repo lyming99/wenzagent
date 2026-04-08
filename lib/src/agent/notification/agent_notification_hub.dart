@@ -187,10 +187,12 @@ class AgentNotificationHub {
   /// 接收本地 Agent 返回消息（可选，本地消息通常不需要未读标记）
   ///
   /// [markUnread] 是否标记未读，默认 false（本地 Agent 回复用户已在线查看）
+  /// [autoRead] 是否自动已读（当前会话窗口打开时），默认 false
   void onLocalMessage({
     required AgentMessage message,
     required String employeeId,
     bool markUnread = false,
+    bool autoRead = false,
   }) {
     if (_isDisposed) return;
 
@@ -207,6 +209,7 @@ class AgentNotificationHub {
       toDeviceId: message.metadata?['deviceId'] ?? '',
       employeeId: employeeId,
       isRemote: false,
+      autoRead: autoRead,
     ));
   }
 
