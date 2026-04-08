@@ -492,22 +492,22 @@ class CachedAgentProxy {
   
   /// 将 AgentMessage 转换为 AiEmployeeMessageEntity
   AiEmployeeMessageEntity _agentMessageToEntity(AgentMessage message) {
-    return AiEmployeeMessageEntity(
-      uuid: message.id,
-      employeeId: _employeeId,
-      role: message.role,
-      type: message.type,
-      content: message.content,
-      toolCallId: message.toolCallId,
-      toolName: message.toolName,
-      toolArguments: message.toolArguments != null 
-          ? jsonEncode(message.toolArguments) 
-          : null,
-      toolResult: message.toolResult,
-      processingStatus: message.status ?? 'none',
-      createTime: message.createdAt,
-      updateTime: DateTime.now(),
-    );
+    final map = <String, dynamic>{
+      'uuid': message.id,
+      'employeeId': _employeeId,
+      'role': message.role,
+      'type': message.type,
+      'content': message.content,
+      'toolCallId': message.toolCallId,
+      'toolName': message.toolName,
+      'toolArguments': message.toolArguments,
+      'toolResult': message.toolResult,
+      'toolCalls': message.toolCalls?.map((tc) => tc.toMap()).toList(),
+      'processingStatus': message.status ?? 'none',
+      'createTime': message.createdAt.millisecondsSinceEpoch,
+      'metadata': message.metadata,
+    };
+    return AiEmployeeMessageEntity.fromMessageMap(map);
   }
   
   /// 处理权限请求事件
@@ -997,25 +997,22 @@ class CachedAgentProxy {
   }
   
   AiEmployeeMessageEntity _messageToEntity(AgentMessage message) {
-    return AiEmployeeMessageEntity(
-      uuid: message.id,
-      employeeId: _employeeId,
-      role: message.role,
-      type: message.type,
-      content: message.content,
-      toolCallId: message.toolCallId,
-      toolName: message.toolName,
-      toolArguments: message.toolArguments != null 
-          ? jsonEncode(message.toolArguments) 
-          : null,
-      toolResult: message.toolResult,
-      toolCalls: message.toolCalls != null 
-          ? jsonEncode(message.toolCalls!.map((tc) => tc.toMap()).toList())
-          : null,
-      processingStatus: message.status ?? 'none',
-      createTime: message.createdAt,
-      updateTime: _getMessageUpdateTime(message),
-    );
+    final map = <String, dynamic>{
+      'uuid': message.id,
+      'employeeId': _employeeId,
+      'role': message.role,
+      'type': message.type,
+      'content': message.content,
+      'toolCallId': message.toolCallId,
+      'toolName': message.toolName,
+      'toolArguments': message.toolArguments,
+      'toolResult': message.toolResult,
+      'toolCalls': message.toolCalls?.map((tc) => tc.toMap()).toList(),
+      'processingStatus': message.status ?? 'none',
+      'createTime': message.createdAt.millisecondsSinceEpoch,
+      'updateTime': _getMessageUpdateTime(message).millisecondsSinceEpoch,
+    };
+    return AiEmployeeMessageEntity.fromMessageMap(map);
   }
   
   // ===== 代理方法（智能透传） =====

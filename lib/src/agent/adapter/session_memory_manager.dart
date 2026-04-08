@@ -86,10 +86,10 @@ class SessionHistory {
   }
 
   /// 添加消息到指定设备
-  /// 添加消息到指定设备
   ///
   /// [messageId] 可选的消息ID，如果不提供则自动生成
-  void addMessage(String deviceId, ChatMessage message, {String? messageId}) {
+  /// [metadata] 可选的元数据，用于携带额外信息（如 toolName）
+  void addMessage(String deviceId, ChatMessage message, {String? messageId, Map<String, dynamic>? metadata}) {
     if (messageId != null) {
       // 使用提供的消息ID
       messagesMap.putIfAbsent(deviceId, () => []).add(
@@ -97,13 +97,24 @@ class SessionHistory {
           uuid: messageId,
           message: message,
           createdAt: DateTime.now(),
+          metadata: metadata,
         ),
       );
     } else {
       // 自动生成新的UUID
-      messagesMap.putIfAbsent(deviceId, () => []).add(
-        MessageWrapper.create(message),
-      );
+      final wrapper = MessageWrapper.create(message);
+      if (metadata != null) {
+        messagesMap.putIfAbsent(deviceId, () => []).add(
+          MessageWrapper(
+            uuid: wrapper.uuid,
+            message: wrapper.message,
+            createdAt: wrapper.createdAt,
+            metadata: metadata,
+          ),
+        );
+      } else {
+        messagesMap.putIfAbsent(deviceId, () => []).add(wrapper);
+      }
     }
   }
 
@@ -244,10 +255,10 @@ class SessionMemoryManager {
   ///
   /// [employeeId] 员工ID（作为会话ID）
   /// [deviceId] 设备ID，用于区分不同设备上的消息
-  void addMessage(String employeeId, String deviceId, ChatMessage message, {String? messageId}) {
+  void addMessage(String employeeId, String deviceId, ChatMessage message, {String? messageId, Map<String, dynamic>? metadata}) {
     final session = _sessions[employeeId];
     if (session != null) {
-      session.addMessage(deviceId, message, messageId: messageId);
+      session.addMessage(deviceId, message, messageId: messageId, metadata: metadata);
     }
   }
 

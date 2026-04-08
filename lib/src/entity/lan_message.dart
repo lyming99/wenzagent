@@ -1,3 +1,5 @@
+import 'lan_device_info.dart';
+
 /// LAN 消息类型枚举
 enum LanMessageType {
   /// 文本消息
@@ -94,6 +96,26 @@ enum LanMessageType {
 
   /// AI 查询会话消息广播
   aiQuerySessionMessagesBroadcast,
+
+  // ===== 设备管理消息类型 =====
+
+  /// 设备上线
+  deviceOnline,
+
+  /// 设备下线
+  deviceOffline,
+
+  /// 设备信息变更
+  deviceInfoChanged,
+
+  /// 设备间消息
+  deviceMessage,
+
+  /// 请求设备信息广播
+  deviceInfoRequest,
+
+  /// 设备信息响应
+  deviceInfoResponse,
 }
 
 /// LAN 消息实体
@@ -230,4 +252,34 @@ class LanMessage {
   String toString() {
     return 'LanMessage(id: $id, type: $type, fromId: $fromId, toDeviceId: $toDeviceId)';
   }
+}
+
+/// 设备事件类型
+enum DeviceEventType {
+  /// 设备上线
+  online,
+
+  /// 设备下线
+  offline,
+
+  /// 设备信息变更
+  infoChanged,
+}
+
+/// 设备事件
+class DeviceEvent {
+  /// 事件类型
+  final DeviceEventType type;
+
+  /// 设备信息
+  final LanDeviceInfo device;
+
+  /// 事件时间
+  final DateTime timestamp;
+
+  DeviceEvent({
+    required this.type,
+    required this.device,
+    DateTime? timestamp,
+  }) : timestamp = timestamp ?? DateTime.now();
 }

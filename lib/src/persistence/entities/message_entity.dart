@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// AI员工消息实体（Hive版本）
 class AiEmployeeMessageEntity {
   /// 消息UUID
@@ -54,6 +56,12 @@ class AiEmployeeMessageEntity {
   /// 更新时间
   DateTime updateTime;
 
+  /// 完整消息数据的 JSON 字符串（用于无损持久化，避免字段映射丢失）
+  ///
+  /// 存储时直接将原始消息 Map jsonEncode，读取时 jsonDecode 还原。
+  /// 优先级高于各独立字段。
+  String? jsonData;
+
   AiEmployeeMessageEntity({
     required this.uuid,
     required this.employeeId,
@@ -73,9 +81,72 @@ class AiEmployeeMessageEntity {
     this.deleted = 0,
     required this.createTime,
     required this.updateTime,
+    this.jsonData,
   });
 
-  /// 从Map创建
+  /// 从原始消息 Map 直接创建实体（统一 JSON 格式存储）
+  ///
+  /// 将整个 [messageMap] 序列化为 JSON 字符串存入 [jsonData]，
+  /// 同时从 map 中提取关键字段填充独立属性，保证兼容性。
+  factory AiEmployeeMessageEntity.fromMessageMap(Map<String, dynamic> messageMap) {
+    final now = DateTime.now();
+    final uuid = (messageMap['uuid'] ?? messageMap['id'] ?? '') as String;
+    final employeeId = (messageMap['employeeId'] ?? '') as String;
+
+    // 将整个 map 序列化为 JSON 字符串
+    final jsonData = jsonEncode(messageMap);
+
+    // 兼容 createTime / createdAt 两种时间字段
+    DateTime createTime;
+    final rawTime = messageMap['createTime'] ?? messageMap['createdAt'];
+    if (rawTime is DateTime) {
+      createTime = rawTime;
+    } else if (rawTime is int) {
+      createTime = DateTime.fromMillisecondsSinceEpoch(rawTime);
+    } else if (rawTime is String) {
+      createTime = DateTime.tryParse(rawTime) ?? now;
+    } else {
+      createTime = now;
+    }
+
+    // toolCalls 可能是 List 或 String，统一转为 String
+    String? toolCallsStr;
+    final rawToolCalls = messageMap['toolCalls'];
+    if (rawToolCalls != null) {
+      toolCallsStr = rawToolCalls is String ? rawToolCalls : jsonEncode(rawToolCalls);
+    }
+
+    // toolArguments 可能是 Map 或 String，统一转为 String
+    String? toolArgumentsStr;
+    final rawToolArgs = messageMap['toolArguments'];
+    if (rawToolArgs != null) {
+      toolArgumentsStr = rawToolArgs is String ? rawToolArgs : jsonEncode(rawToolArgs);
+    }
+
+    return AiEmployeeMessageEntity(
+      uuid: uuid,
+      employeeId: employeeId,
+      role: (messageMap['role'] as String?) ?? 'user',
+      type: (messageMap['type'] as String?) ?? 'text',
+      content: messageMap['content'] as String?,
+      toolCallId: messageMap['toolCallId'] as String?,
+      toolName: messageMap['toolName'] as String?,
+      toolArguments: toolArgumentsStr,
+      toolResult: messageMap['toolResult'] as String?,
+      toolCalls: toolCallsStr,
+      processingStatus: (messageMap['processingStatus'] as String?) ?? 'none',
+      processingError: messageMap['processingError'] as String?,
+      inputTokens: messageMap['inputTokens'] as int?,
+      outputTokens: messageMap['outputTokens'] as int?,
+      isRead: (messageMap['isRead'] as int?) ?? 0,
+      deleted: (messageMap['deleted'] as int?) ?? 0,
+      createTime: createTime,
+      updateTime: now,
+      jsonData: jsonData,
+    );
+  }
+
+  /// 从Map创建（兼容旧数据，无 jsonData）
   factory AiEmployeeMessageEntity.fromMap(Map<String, dynamic> map) {
     return AiEmployeeMessageEntity(
       uuid: map['uuid'] as String,
@@ -100,7 +171,20 @@ class AiEmployeeMessageEntity {
       updateTime: map['updateTime'] is DateTime
           ? map['updateTime'] as DateTime
           : DateTime.fromMillisecondsSinceEpoch(map['updateTime'] as int? ?? 0),
+      jsonData: map['jsonData'] as String?,
     );
+  }
+
+  /// 还原为原始消息 Map（优先使用 jsonData 无损还原）
+  Map<String, dynamic> toMessageMap() {
+    if (jsonData != null && jsonData!.isNotEmpty) {
+      try {
+        return jsonDecode(jsonData!) as Map<String, dynamic>;
+      } catch (_) {
+        // JSON 解析失败时回退到 toMap()
+      }
+    }
+    return toMap();
   }
 
   /// 转换为Map
@@ -124,6 +208,7 @@ class AiEmployeeMessageEntity {
       'deleted': deleted,
       'createTime': createTime.millisecondsSinceEpoch,
       'updateTime': updateTime.millisecondsSinceEpoch,
+      'jsonData': jsonData,
     };
   }
 
@@ -147,6 +232,7 @@ class AiEmployeeMessageEntity {
     int? deleted,
     DateTime? createTime,
     DateTime? updateTime,
+    String? jsonData,
   }) {
     return AiEmployeeMessageEntity(
       uuid: uuid ?? this.uuid,
@@ -167,6 +253,7 @@ class AiEmployeeMessageEntity {
       deleted: deleted ?? this.deleted,
       createTime: createTime ?? this.createTime,
       updateTime: updateTime ?? this.updateTime,
+      jsonData: jsonData ?? this.jsonData,
     );
   }
 

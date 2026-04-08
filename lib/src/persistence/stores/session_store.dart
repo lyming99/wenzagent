@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../hive_manager.dart';
 import '../entities/session_entity.dart';
 
@@ -12,14 +14,25 @@ class SessionStore {
 
   /// 构建Session key（使用employeeId作为主键）
   String _buildKey(String employeeId) {
-    return 'sess:$employeeId';
+    return 'wenz_sess:$employeeId';
+  }
+
+  /// 解码JSON字符串为实体
+  AiEmployeeSessionEntity? _decodeEntity(dynamic jsonString) {
+    if (jsonString == null) return null;
+    if (jsonString is String && jsonString.isNotEmpty) {
+      return AiEmployeeSessionEntity.fromMap(
+        jsonDecode(jsonString) as Map<String, dynamic>,
+      );
+    }
+    return null;
   }
 
   /// 获取Session（主键查找）
   Future<AiEmployeeSessionEntity?> find(String employeeId) async {
     final box = _hiveManager.sessionBox;
     final key = _buildKey(employeeId);
-    return box.get(key);
+    return _decodeEntity(box.get(key));
   }
 
   /// 获取或创建Session
@@ -43,7 +56,7 @@ class SessionStore {
   Future<void> save(AiEmployeeSessionEntity session) async {
     final box = _hiveManager.sessionBox;
     final key = _buildKey(session.employeeId);
-    await box.put(key, session);
+    await box.put(key, jsonEncode(session.toMap()));
   }
 
   /// 获取所有Session（会话列表）
@@ -52,11 +65,14 @@ class SessionStore {
     bool includeDeleted = false,
   }) async {
     final box = _hiveManager.sessionBox;
-    var sessions = box.values.where((s) {
-      if (!includeDeleted && s.deleted == 1) return false;
-      if (!includeArchived && s.isArchived == 1) return false;
-      return true;
-    }).toList();
+    var sessions = <AiEmployeeSessionEntity>[];
+    for (final key in box.keys) {
+      final entity = _decodeEntity(box.get(key));
+      if (entity == null) continue;
+      if (!includeDeleted && entity.deleted == 1) continue;
+      if (!includeArchived && entity.isArchived == 1) continue;
+      sessions.add(entity);
+    }
 
     // 按置顶和更新时间排序
     sessions.sort((a, b) {
@@ -88,24 +104,5 @@ class SessionStore {
   Future<int> count() async {
     final sessions = await findAll();
     return sessions.length;
-  }
-
-  // ===== 兼容旧API的方法（过渡期使用）=====
-
-  /// 通过旧key格式查找会话（用于数据迁移）
-  Future<AiEmployeeSessionEntity?> findByLegacyKey(
-    String? spaceId,
-    String uuid,
-  ) async {
-    final box = _hiveManager.sessionBox;
-    final legacyKey = 'sess:$spaceId:$uuid';
-    return box.get(legacyKey);
-  }
-
-  /// 删除旧格式的会话（用于数据迁移后清理）
-  Future<void> deleteLegacyKey(String? spaceId, String uuid) async {
-    final box = _hiveManager.sessionBox;
-    final legacyKey = 'sess:$spaceId:$uuid';
-    await box.delete(legacyKey);
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../hive_manager.dart';
 import '../entities/device_config_entity.dart';
 
@@ -10,16 +12,27 @@ class DeviceConfigStore {
   DeviceConfigStore({HiveManager? hiveManager})
       : _hiveManager = hiveManager ?? HiveManager.instance;
 
-  /// 构建设备配置key（使用deviceId作为主键）
+  /// 构建设备配置key（使用 wenz_ 前缀）
   String _buildKey(String deviceId) {
-    return 'devconf:$deviceId';
+    return 'wenz_devconf:$deviceId';
+  }
+
+  /// 解码JSON字符串为实体
+  DeviceConfigEntity? _decodeEntity(dynamic jsonString) {
+    if (jsonString == null) return null;
+    if (jsonString is String && jsonString.isNotEmpty) {
+      return DeviceConfigEntity.fromMap(
+        jsonDecode(jsonString) as Map<String, dynamic>,
+      );
+    }
+    return null;
   }
 
   /// 获取设备配置（主键查找）
   Future<DeviceConfigEntity?> find(String deviceId) async {
     final box = _hiveManager.deviceConfigBox;
     final key = _buildKey(deviceId);
-    return box.get(key);
+    return _decodeEntity(box.get(key));
   }
 
   /// 获取或创建设备配置
@@ -42,7 +55,7 @@ class DeviceConfigStore {
   Future<void> save(DeviceConfigEntity config) async {
     final box = _hiveManager.deviceConfigBox;
     final key = _buildKey(config.deviceId);
-    await box.put(key, config);
+    await box.put(key, jsonEncode(config.toMap()));
   }
 
   /// 更新设备信息配置
@@ -124,7 +137,12 @@ class DeviceConfigStore {
   /// 获取所有设备配置
   Future<List<DeviceConfigEntity>> findAll() async {
     final box = _hiveManager.deviceConfigBox;
-    return box.values.toList();
+    var configs = <DeviceConfigEntity>[];
+    for (final key in box.keys) {
+      final entity = _decodeEntity(box.get(key));
+      if (entity != null) configs.add(entity);
+    }
+    return configs;
   }
 
   /// 获取设备配置数量

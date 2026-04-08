@@ -1,12 +1,23 @@
+import 'dart:convert';
+
 import '../hive_manager.dart';
 import '../entities/message_entity.dart';
 
 /// 消息数据存储
+///
+/// 使用 Hive putString/getString 读写 JSON 字符串，
+/// 所有 key 带 wenz_ 前缀避免与旧二进制数据冲突。
 class MessageStore {
   final HiveManager _hiveManager;
 
   MessageStore({HiveManager? hiveManager})
-    : _hiveManager = hiveManager ?? HiveManager.instance;
+      : _hiveManager = hiveManager ?? HiveManager.instance;
+
+  /// 从 JSON 字符串解码为 AiEmployeeMessageEntity
+  AiEmployeeMessageEntity _decodeEntity(String jsonString) {
+    final map = jsonDecode(jsonString) as Map<String, dynamic>;
+    return AiEmployeeMessageEntity.fromMessageMap(map);
+  }
 
   /// 获取会话的消息列表
   Future<List<AiEmployeeMessageEntity>> getMessages(
@@ -30,18 +41,24 @@ class MessageStore {
       messageUuids = messageUuids.take(limit).toList();
     }
 
-    // 获取消息实体
+    // 获取消息实体（从 JSON 字符串解码）
     final messages = <AiEmployeeMessageEntity>[];
     for (final uuid in messageUuids) {
       final key = _hiveManager.buildMessageKey(deviceId, uuid as String);
-      final msg = box.get(key);
-      if (msg != null && msg.deleted != 1) {
-        messages.add(msg);
+      final jsonString = box.get(key);
+      if (jsonString is String && jsonString.isNotEmpty) {
+        try {
+          final entity = _decodeEntity(jsonString);
+          if (entity.deleted != 1) {
+            messages.add(entity);
+          }
+        } catch (e) {
+          // JSON 解析失败，跳过此条消息
+        }
       }
     }
 
     // 按 createTime 排序，时间相同时按 uuid 排序保证稳定性
-    // 这与 wenzflow 中的排序逻辑保持一致
     messages.sort((a, b) {
       final timeCompare = a.createTime.compareTo(b.createTime);
       if (timeCompare != 0) return timeCompare;
@@ -55,7 +72,13 @@ class MessageStore {
   Future<AiEmployeeMessageEntity?> find(String? deviceId, String uuid) async {
     final box = _hiveManager.messageBox;
     final key = _hiveManager.buildMessageKey(deviceId, uuid);
-    return box.get(key);
+    final jsonString = box.get(key);
+    if (jsonString is String && jsonString.isNotEmpty) {
+      try {
+        return _decodeEntity(jsonString);
+      } catch (_) {}
+    }
+    return null;
   }
 
   /// 添加消息
@@ -66,7 +89,7 @@ class MessageStore {
       entity.uuid,
     );
     // 从employeeId推断deviceId，实际使用时应该传入
-    await box.put(key, entity);
+    await box.put(key, jsonEncode(entity.toMessageMap()));
 
     // 更新会话消息索引
     await _updateSessionMessagesIndex(entity);
@@ -79,7 +102,7 @@ class MessageStore {
   ) async {
     final box = _hiveManager.messageBox;
     final key = _hiveManager.buildMessageKey(deviceId, entity.uuid);
-    await box.put(key, entity);
+    await box.put(key, jsonEncode(entity.toMessageMap()));
 
     // 更新会话消息索引
     await _updateSessionMessagesIndexWithDeviceId(deviceId, entity);
@@ -120,7 +143,7 @@ class MessageStore {
       entity.employeeId.split('-').first,
       entity.uuid,
     );
-    await box.put(key, entity);
+    await box.put(key, jsonEncode(entity.toMessageMap()));
   }
 
   /// 使用明确deviceId更新消息
@@ -130,7 +153,7 @@ class MessageStore {
   ) async {
     final box = _hiveManager.messageBox;
     final key = _hiveManager.buildMessageKey(deviceId, entity.uuid);
-    await box.put(key, entity);
+    await box.put(key, jsonEncode(entity.toMessageMap()));
   }
 
   /// 更新消息状态
@@ -174,9 +197,6 @@ class MessageStore {
     
     // 从消息存储中删除
     await box.delete(key);
-    
-    // 注意：简化处理，仅从消息box中删除
-    // 会话索引中的uuid会在下次getMessages时自动过滤已删除的消息
   }
 
   /// 获取最后一条消息

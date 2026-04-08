@@ -74,6 +74,12 @@ abstract class DeviceClient {
   /// Agent 事件流
   Stream<Map<String, dynamic>> get onAgentEvent;
 
+  /// 设备事件流（上线、下线、信息变更）
+  Stream<DeviceEvent> get onDeviceEvent;
+
+  /// 缓存的设备列表
+  List<LanDeviceInfo> get cachedDevices;
+
   // ===== Service 属性 =====
 
   /// 获取员工管理器
@@ -159,6 +165,22 @@ abstract class DeviceClient {
 
   /// 获取在线设备列表（带员工信息）
   Future<List<DeviceWithEmployeesInfo>> getOnlineDevicesWithEmployees();
+
+  /// 刷新设备缓存列表
+  ///
+  /// 连接成功后自动调用，也可手动触发刷新
+  Future<void> refreshDeviceList();
+
+  /// 向指定设备发送消息
+  ///
+  /// [toDeviceId] 目标设备 ID
+  /// [message] 消息内容
+  Future<void> sendToDevice(String toDeviceId, LanMessage message);
+
+  /// 请求设备信息广播
+  ///
+  /// 向局域网请求所有设备回复自己的详细信息
+  Future<void> requestDeviceInfoBroadcast();
 
   // ===== 设备配置 =====
 

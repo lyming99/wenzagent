@@ -169,7 +169,8 @@ class AgentFactoryImpl implements AgentFactory {
 
     // 持久化消息回调
     adapter.persistMessage = (message) async {
-      final entity = _mapToMessageEntity(message);
+      // 使用 fromMessageMap 将整个 Map 序列化为 JSON 字符串存入 Hive
+      final entity = AiEmployeeMessageEntity.fromMessageMap(message);
       await _messageStore.addMessage(entity);
     };
 
@@ -190,7 +191,8 @@ class AgentFactoryImpl implements AgentFactory {
     // 加载消息回调
     adapter.loadMessages = (employeeId) async {
       final messages = await _messageStore.getMessages(employeeId);
-      return messages.map((m) => m.toMap()).toList();
+      // 优先从 jsonData 无损还原完整消息数据
+      return messages.map((m) => m.toMessageMap()).toList();
     };
 
     // 更新消息状态回调
@@ -201,29 +203,6 @@ class AgentFactoryImpl implements AgentFactory {
         error: error,
       );
     };
-  }
-
-  AiEmployeeMessageEntity _mapToMessageEntity(Map<String, dynamic> message) {
-    return AiEmployeeMessageEntity(
-      uuid: message['id'] as String? ?? '',
-      employeeId: message['employeeId'] as String? ?? '',
-      role: message['role'] as String? ?? 'user',
-      type: message['type'] as String? ?? 'text',
-      content: message['content'] as String?,
-      toolCallId: message['toolCallId'] as String?,
-      toolName: message['toolName'] as String?,
-      toolArguments: message['toolArguments'] as String?,
-      toolResult: message['toolResult'] as String?,
-      toolCalls: message['toolCalls'] != null
-          ? jsonEncode(message['toolCalls'])
-          : null,
-      processingStatus: message['processingStatus'] as String? ?? 'none',
-      processingError: message['processingError'] as String?,
-      createTime: message['createTime'] is DateTime
-          ? message['createTime'] as DateTime
-          : DateTime.now(),
-      updateTime: DateTime.now(),
-    );
   }
 
   @override

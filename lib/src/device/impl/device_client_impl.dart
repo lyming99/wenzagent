@@ -96,6 +96,12 @@ class DeviceClientImpl implements DeviceClient {
   /// LAN 消息控制器
   final _lanMessageController = StreamController<LanMessage>.broadcast();
 
+  /// 设备事件控制器
+  final _deviceEventController = StreamController<DeviceEvent>.broadcast();
+
+  /// 设备缓存 (deviceId -> LanDeviceInfo)
+  final Map<String, LanDeviceInfo> _deviceCache = {};
+
   /// 消息订阅
   StreamSubscription<LanMessage>? _messageSubscription;
 
@@ -176,6 +182,12 @@ class DeviceClientImpl implements DeviceClient {
   Stream<Map<String, dynamic>> get onAgentEvent => _eventController.stream;
 
   @override
+  Stream<DeviceEvent> get onDeviceEvent => _deviceEventController.stream;
+
+  @override
+  List<LanDeviceInfo> get cachedDevices => _deviceCache.values.toList();
+
+  @override
   Stream<LanMessage> get onLanMessage => _lanMessageController.stream;
 
   // ===== 连接管理 =====
@@ -225,6 +237,9 @@ class DeviceClientImpl implements DeviceClient {
       _sendDeviceRegistration();
 
       _updateState(DeviceConnectionState.connected);
+
+      // 7. 刷新设备缓存
+      _refreshDeviceList();
     } catch (e) {
       _updateState(DeviceConnectionState.disconnected);
       rethrow;
@@ -660,6 +675,8 @@ class DeviceClientImpl implements DeviceClient {
     await _stateController.close();
     await _eventController.close();
     await _lanMessageController.close();
+    await _deviceEventController.close();
+    _deviceCache.clear();
   }
 
   // ===== AgentProxy 管理 =====
@@ -857,7 +874,8 @@ class DeviceClientImpl implements DeviceClient {
     };
 
     adapter.persistMessage = (message) async {
-      final entity = _mapToMessageEntity(message);
+      // 使用 fromMessageMap 将整个 Map 序列化为 JSON 字符串存入 Hive
+      final entity = AiEmployeeMessageEntity.fromMessageMap(message);
       await _messageStoreService.addMessage(entity);
     };
 
@@ -891,7 +909,8 @@ class DeviceClientImpl implements DeviceClient {
         messageDeviceId,
         employeeId,
       );
-      return messages.map((m) => m.toMap()).toList();
+      // 优先从 jsonData 无损还原完整消息数据
+      return messages.map((m) => m.toMessageMap()).toList();
     };
 
     adapter.updateMessageStatusCallback = (messageId, status, {error}) async {
@@ -907,28 +926,6 @@ class DeviceClientImpl implements DeviceClient {
     };
   }
 
-  AiEmployeeMessageEntity _mapToMessageEntity(Map<String, dynamic> message) {
-    return AiEmployeeMessageEntity(
-      uuid: message['id'] ?? '',
-      employeeId: message['employeeId'] ?? '',
-      role: message['role'] ?? 'user',
-      type: message['type'] ?? 'text',
-      content: message['content'],
-      toolCallId: message['toolCallId'],
-      toolName: message['toolName'],
-      toolArguments: message['toolArguments'],
-      toolResult: message['toolResult'],
-      toolCalls: message['toolCalls'] != null
-          ? jsonEncode(message['toolCalls'])
-          : null,
-      processingStatus: message['processingStatus'] ?? 'none',
-      processingError: message['processingError'],
-      createTime: message['createTime'] is DateTime
-          ? message['createTime']
-          : DateTime.now(),
-      updateTime: DateTime.now(),
-    );
-  }
 
   /// 订阅 Agent 事件
   void _subscribeAgentEvents(String employeeId, IAgent agent) {
@@ -1071,9 +1068,24 @@ class DeviceClientImpl implements DeviceClient {
 
       if (devices == null) return [];
 
-      return devices
+      final httpDevices = devices
           .map((d) => LanDeviceInfo.fromMap(d as Map<String, dynamic>))
           .toList();
+
+      // 合并缓存中的设备广播数据，丰富设备信息
+      // HTTP API 只返回基础连接字段，缓存中可能有广播响应带来的详细信息
+      return httpDevices.map((device) {
+        final cached = _deviceCache[device.id];
+        if (cached != null) {
+          return cached.copyWith(
+            ip: device.ip,
+            connectedAt: device.connectedAt,
+            isHost: device.isHost,
+            status: device.status ?? 'online',
+          );
+        }
+        return device;
+      }).toList();
     } catch (e) {
       print('获取在线设备列表失败: $e');
       return [];
@@ -1376,6 +1388,25 @@ class DeviceClientImpl implements DeviceClient {
   void _sendDeviceRegistration() {
     if (_lanClient == null || !_lanClient!.isConnected) return;
 
+    // 收集平台信息
+    String? os, osVersion, platform;
+    if (Platform.isAndroid) {
+      os = 'android';
+      platform = 'mobile';
+    } else if (Platform.isIOS) {
+      os = 'ios';
+      platform = 'mobile';
+    } else if (Platform.isWindows) {
+      os = 'windows';
+      platform = 'desktop';
+    } else if (Platform.isMacOS) {
+      os = 'macos';
+      platform = 'desktop';
+    } else if (Platform.isLinux) {
+      os = 'linux';
+      platform = 'desktop';
+    }
+
     final msg = LanMessage(
       type: LanMessageType.clientInfo,
       fromId: deviceId,
@@ -1384,6 +1415,8 @@ class DeviceClientImpl implements DeviceClient {
         'deviceId': deviceId,
         'deviceName': deviceName,
         'topic': topic,
+        'os': os,
+        'platform': platform,
       }),
       fileName: deviceId,
       topic: topic ?? '',
@@ -1418,6 +1451,16 @@ class DeviceClientImpl implements DeviceClient {
         _handleAgentEvent(msg);
       case LanMessageType.system:
         _handleSystemMessage(msg);
+      case LanMessageType.deviceOnline:
+      case LanMessageType.deviceOffline:
+      case LanMessageType.deviceInfoChanged:
+      case LanMessageType.deviceInfoResponse:
+        _handleDeviceEventMessage(msg);
+      case LanMessageType.deviceMessage:
+        break;
+      case LanMessageType.deviceInfoRequest:
+        _handleDeviceInfoRequest(msg);
+        break;
       default:
         break;
     }
@@ -1496,7 +1539,148 @@ class DeviceClientImpl implements DeviceClient {
     if (content.contains('重连成功')) {
       _updateState(DeviceConnectionState.connected);
       _sendDeviceRegistration();
+      _refreshDeviceList();
     }
+  }
+
+  /// 处理设备事件消息
+  void _handleDeviceEventMessage(LanMessage msg) {
+    try {
+      final content = jsonDecode(msg.content ?? '{}') as Map<String, dynamic>;
+      final device = LanDeviceInfo.fromMap(content);
+
+      DeviceEventType eventType;
+      switch (msg.type) {
+        case LanMessageType.deviceOnline:
+          eventType = DeviceEventType.online;
+          _deviceCache[device.id] = device.copyWith(status: 'online');
+          break;
+        case LanMessageType.deviceOffline:
+          eventType = DeviceEventType.offline;
+          _deviceCache.remove(device.id);
+          break;
+        case LanMessageType.deviceInfoChanged:
+        case LanMessageType.deviceInfoResponse:
+          eventType = msg.type == LanMessageType.deviceInfoChanged
+              ? DeviceEventType.infoChanged
+              : DeviceEventType.infoChanged;
+          // 更新缓存中的设备信息
+          final existing = _deviceCache[device.id];
+          _deviceCache[device.id] = device.copyWith(
+            status: existing?.status ?? 'online',
+          );
+          break;
+        default:
+          return;
+      }
+
+      _deviceEventController.add(DeviceEvent(
+        type: eventType,
+        device: device.copyWith(
+          status: eventType == DeviceEventType.offline
+              ? 'offline'
+              : (device.status ?? 'online'),
+        ),
+        timestamp: msg.timestamp,
+      ));
+    } catch (_) {}
+  }
+
+  /// 处理设备信息请求，回复本设备的详细信息
+  void _handleDeviceInfoRequest(LanMessage msg) {
+    if (_lanClient == null || !_lanClient!.isConnected) return;
+
+    // 从 Platform 获取设备类型和操作系统
+    String? os, deviceType;
+    if (Platform.isAndroid) {
+      os = 'android';
+      deviceType = 'mobile';
+    } else if (Platform.isIOS) {
+      os = 'ios';
+      deviceType = 'mobile';
+    } else if (Platform.isWindows) {
+      os = 'windows';
+      deviceType = 'desktop';
+    } else if (Platform.isMacOS) {
+      os = 'macos';
+      deviceType = 'desktop';
+    } else if (Platform.isLinux) {
+      os = 'linux';
+      deviceType = 'desktop';
+    }
+
+    final responseInfo = LanDeviceInfo(
+      id: deviceId,
+      name: deviceName,
+      type: deviceType,
+      os: os,
+      platform: deviceType,
+      status: 'online',
+    );
+
+    final response = LanMessage(
+      type: LanMessageType.deviceInfoResponse,
+      fromId: deviceId,
+      fromName: deviceName,
+      toDeviceId: msg.fromId,
+      content: jsonEncode(responseInfo.toMap()),
+      topic: topic,
+    );
+
+    _lanClient!.sendLanMessage(response);
+  }
+
+  /// 刷新设备缓存列表
+  Future<void> _refreshDeviceList() async {
+    try {
+      final devices = await getOnlineDevices();
+      _deviceCache.clear();
+      for (final device in devices) {
+        _deviceCache[device.id] = device.copyWith(status: 'online');
+      }
+    } catch (e) {
+      // 静默处理
+    }
+  }
+
+  @override
+  Future<void> refreshDeviceList() async {
+    await _refreshDeviceList();
+  }
+
+  @override
+  Future<void> sendToDevice(String toDeviceId, LanMessage message) async {
+    if (_lanClient == null || !_lanClient!.isConnected) {
+      throw StateError('未连接到服务器');
+    }
+    final msg = LanMessage(
+      type: LanMessageType.deviceMessage,
+      fromId: deviceId,
+      fromName: deviceName,
+      toDeviceId: toDeviceId,
+      content: message.content,
+      fileName: message.fileName,
+      topic: message.topic ?? topic,
+    );
+    _lanClient!.sendLanMessage(msg);
+  }
+
+  @override
+  Future<void> requestDeviceInfoBroadcast() async {
+    if (_lanClient == null || !_lanClient!.isConnected) {
+      throw StateError('未连接到服务器');
+    }
+    final msg = LanMessage(
+      type: LanMessageType.deviceInfoRequest,
+      fromId: deviceId,
+      fromName: deviceName,
+      content: jsonEncode({
+        'deviceId': deviceId,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      }),
+      topic: topic,
+    );
+    _lanClient!.sendLanMessage(msg);
   }
 
   Future<Map<String, dynamic>> _invokeRemote(

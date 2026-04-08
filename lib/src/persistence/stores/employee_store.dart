@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../hive_manager.dart';
 import '../entities/employee_entity.dart';
 
@@ -8,6 +10,17 @@ class EmployeeStore {
   EmployeeStore({HiveManager? hiveManager})
       : _hiveManager = hiveManager ?? HiveManager.instance;
 
+  /// 解码JSON字符串为实体
+  AiEmployeeEntity? _decodeEntity(dynamic jsonString) {
+    if (jsonString == null) return null;
+    if (jsonString is String && jsonString.isNotEmpty) {
+      return AiEmployeeEntity.fromMap(
+        jsonDecode(jsonString) as Map<String, dynamic>,
+      );
+    }
+    return null;
+  }
+
   /// 查找所有员工
   Future<List<AiEmployeeEntity>> findAll(
     String? spaceId, {
@@ -17,20 +30,23 @@ class EmployeeStore {
     final box = _hiveManager.employeeBox;
     final prefix = spaceId != null ? ':$spaceId:' : '::';
 
-    var employees = box.values.where((e) {
-      final key = _hiveManager.buildEmployeeKey(e.spaceId, e.uuid);
-      if (!key.contains(prefix)) return false;
-      if (e.deleted == 1) return false;
-      if (status != null && e.status != status) return false;
+    var employees = <AiEmployeeEntity>[];
+    for (final key in box.keys) {
+      final entity = _decodeEntity(box.get(key));
+      if (entity == null) continue;
+      final buildKey = _hiveManager.buildEmployeeKey(entity.spaceId, entity.uuid);
+      if (!buildKey.contains(prefix)) continue;
+      if (entity.deleted == 1) continue;
+      if (status != null && entity.status != status) continue;
       if (keyword != null &&
           keyword.isNotEmpty &&
-          !e.name.toLowerCase().contains(keyword.toLowerCase()) &&
-          !(e.description?.toLowerCase().contains(keyword.toLowerCase()) ??
+          !entity.name.toLowerCase().contains(keyword.toLowerCase()) &&
+          !(entity.description?.toLowerCase().contains(keyword.toLowerCase()) ??
               false)) {
-        return false;
+        continue;
       }
-      return true;
-    }).toList();
+      employees.add(entity);
+    }
 
     // 按置顶和排序序号排序
     employees.sort((a, b) {
@@ -47,28 +63,32 @@ class EmployeeStore {
   Future<AiEmployeeEntity?> find(String? spaceId, String uuid) async {
     final box = _hiveManager.employeeBox;
     final key = _hiveManager.buildEmployeeKey(spaceId, uuid);
-    return box.get(key);
+    return _decodeEntity(box.get(key));
   }
 
   /// 保存员工
   Future<void> save(AiEmployeeEntity entity) async {
     final box = _hiveManager.employeeBox;
     final key = _hiveManager.buildEmployeeKey(entity.spaceId, entity.uuid);
-    await box.put(key, entity);
+    await box.put(key, jsonEncode(entity.toMap()));
   }
 
   /// 删除员工（软删除）
   Future<void> delete(String? spaceId, String uuid) async {
     final box = _hiveManager.employeeBox;
     final key = _hiveManager.buildEmployeeKey(spaceId, uuid);
-    final entity = box.get(key);
+    final entity = _decodeEntity(box.get(key));
     if (entity != null) {
       // 软删除时设置 deleted=1 和 deletedTime
       await box.put(
         key,
-        entity.copyWith(
-          deleted: 1,
-          deletedTime: DateTime.now(),
+        jsonEncode(
+          entity
+              .copyWith(
+                deleted: 1,
+                deletedTime: DateTime.now(),
+              )
+              .toMap(),
         ),
       );
     }

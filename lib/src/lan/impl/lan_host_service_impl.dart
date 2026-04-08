@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../entity/lan_client.dart';
+import '../../entity/lan_device_info.dart';
 import '../../entity/lan_message.dart';
 import 'lan_file_cache_service.dart';
 import '../lan_host_service.dart';
@@ -144,10 +145,16 @@ class LanHostServiceImpl implements LanHostService {
       _clientChannels[idx].sink.close();
     } catch (_) {}
 
-    final clientName = _clients[idx].name;
+    final client = _clients[idx];
+    final clientName = client.name;
     _clients.removeAt(idx);
     _clientChannels.removeAt(idx);
     _addSystemMessage('客户端 ${clientName ?? clientId} 已断开');
+
+    // 广播设备下线
+    if (client.deviceId != null && client.deviceId!.isNotEmpty) {
+      _broadcastDeviceOffline(LanDeviceInfo.fromLanClient(client));
+    }
   }
 
   @override
@@ -199,15 +206,22 @@ class LanHostServiceImpl implements LanHostService {
           } catch (_) {}
         },
         onDone: () {
-          final clientName = _clients
-              .firstWhere(
-                (c) => c.id == clientId,
-                orElse: () => LanClient(id: clientId),
-              )
-              .name;
+          final disconnectedClient = _clients.firstWhere(
+            (c) => c.id == clientId,
+            orElse: () => LanClient(id: clientId),
+          );
+          final clientName = disconnectedClient.name;
+          final device = disconnectedClient.deviceId != null &&
+                  disconnectedClient.deviceId!.isNotEmpty
+              ? LanDeviceInfo.fromLanClient(disconnectedClient)
+              : null;
           _clients.removeWhere((c) => c.id == clientId);
           _clientChannels.remove(channel);
           _addSystemMessage('客户端 ${clientName ?? clientId} 已断开');
+          // 广播设备下线
+          if (device != null) {
+            _broadcastDeviceOffline(device);
+          }
         },
         onError: (error) {
           _clients.removeWhere((c) => c.id == clientId);
@@ -298,14 +312,8 @@ class LanHostServiceImpl implements LanHostService {
       }
 
       final devices = filteredClients.map((client) {
-        return {
-          'id': client.deviceId,
-          'name': client.name,
-          'ip': client.ip,
-          'topic': client.topic,
-          'connectedAt': client.connectedAt?.toIso8601String(),
-          'isHost': false,
-        };
+        final info = LanDeviceInfo.fromLanClient(client);
+        return info.toMap();
       }).toList();
 
       return shelf.Response.ok(
@@ -331,6 +339,7 @@ class LanHostServiceImpl implements LanHostService {
 
       final idx = _clients.indexWhere((c) => c.id == clientId);
       if (idx != -1) {
+        final oldDeviceId = _clients[idx].deviceId;
         final newDeviceId = msg.fileName;
 
         // 断线重连时清理同一 deviceId 的旧连接
@@ -347,6 +356,14 @@ class LanHostServiceImpl implements LanHostService {
           deviceId: msg.fileName,
           topic: msg.topic,
         );
+
+        // 新设备注册时广播上线通知
+        final isNewDevice = (oldDeviceId == null || oldDeviceId.isEmpty) &&
+            newDeviceId != null &&
+            newDeviceId.isNotEmpty;
+        if (isNewDevice) {
+          _broadcastDeviceOnline(_clients[idx]);
+        }
       }
       _messageController.add(msg);
       return;
@@ -383,7 +400,13 @@ class LanHostServiceImpl implements LanHostService {
         type == LanMessageType.rpcError ||
         type == LanMessageType.agentStatusChanged ||
         type == LanMessageType.agentMessageStatusChanged ||
-        type == LanMessageType.agentPermissionChanged;
+        type == LanMessageType.agentPermissionChanged ||
+        type == LanMessageType.deviceOnline ||
+        type == LanMessageType.deviceOffline ||
+        type == LanMessageType.deviceInfoChanged ||
+        type == LanMessageType.deviceMessage ||
+        type == LanMessageType.deviceInfoRequest ||
+        type == LanMessageType.deviceInfoResponse;
   }
 
   /// 定向转发消息
@@ -471,6 +494,41 @@ class LanHostServiceImpl implements LanHostService {
         } catch (_) {}
       });
     }
+  }
+
+  /// 广播设备上线事件
+  void _broadcastDeviceOnline(LanClient client) {
+    final device = LanDeviceInfo.fromLanClient(client);
+    final msg = LanMessage(
+      id: _uuid.v4(),
+      type: LanMessageType.deviceOnline,
+      fromId: _myId,
+      fromName: 'Host',
+      content: jsonEncode(device.toMap()),
+      topic: client.topic,
+      timestamp: DateTime.now(),
+    );
+    broadcast(msg);
+  }
+
+  /// 广播设备下线事件
+  void _broadcastDeviceOffline(LanDeviceInfo device) {
+    final msg = LanMessage(
+      id: _uuid.v4(),
+      type: LanMessageType.deviceOffline,
+      fromId: _myId,
+      fromName: 'Host',
+      content: jsonEncode(device.toMap()),
+      timestamp: DateTime.now(),
+    );
+    // 下线事件广播给所有客户端（需要通知同 topic 的设备）
+    final data = jsonEncode(msg.toJson());
+    for (int i = 0; i < _clientChannels.length; i++) {
+      try {
+        _clientChannels[i].sink.add(data);
+      } catch (_) {}
+    }
+    _messageController.add(msg);
   }
 
   void _addSystemMessage(String text) {

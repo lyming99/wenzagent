@@ -135,17 +135,25 @@ class PersistentChatAdapter extends LangChainChatAdapter {
                 }
 
                 if (msgId != null) {
-                  // 使用 MessageWrapper 创建方法，传入稳定的 UUID
-                  // 获取 processingStatus 作为 status
+                  // 构建 metadata：保留 toolName（工具结果消息需要）和 processingStatus
+                  Map<String, dynamic>? wrapperMetadata;
+                  final toolName = msgData['toolName'] as String?;
+                  if (toolName != null) {
+                    wrapperMetadata = {'toolName': toolName};
+                  }
                   final processingStatus = msgData['processingStatus'] as String?;
-                  
+                  if (processingStatus != null) {
+                    wrapperMetadata = {
+                      ...?wrapperMetadata,
+                      'status': processingStatus,
+                    };
+                  }
+
                   final wrapper = MessageWrapper(
                     uuid: msgId,
                     message: chatMessage,
                     createdAt: msgCreatedAt,
-                    metadata: processingStatus != null 
-                        ? {'status': processingStatus} 
-                        : null,
+                    metadata: wrapperMetadata,
                   );
                   session.addMessageWrapper(msgDeviceId, wrapper);
 
@@ -225,61 +233,33 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     Map<String, dynamic> messageData, {
     CancellationToken? cancellationToken,
   }) async* {
-    print(
-      '[PersistentChatAdapter] streamMessage called: ${messageData['content']?.toString().substring(0, (messageData['content']?.toString().length ?? 0).clamp(0, 50))}',
-    );
-    print('[PersistentChatAdapter] currentSessionUuid: $currentSessionUuid');
-    print('[PersistentChatAdapter] providerConfig: ${getProviderConfig()}');
-
-    // ✅ 直接从 SessionHistory 获取消息数量，避免触发 ID 重新生成
     final session = memoryManager.getSession(currentSessionUuid!);
     final messagesBefore = session?.messageCount ?? 0;
-    print('[PersistentChatAdapter] messages before: $messagesBefore');
 
     try {
-      // 调用父类的流式消息方法
       await for (final response in super.streamMessage(
         messageData,
         cancellationToken: cancellationToken,
       )) {
-        print(
-          '[PersistentChatAdapter] response: ${response.isDone
-              ? "DONE"
-              : response.error != null
-              ? "ERROR: ${response.error}"
-              : "CHUNK: ${response.content?.substring(0, (response.content?.length ?? 0).clamp(0, 30))}"}',
-        );
         yield response;
 
-        // ✅ 直接从 SessionHistory 获取消息数量
         final messagesNow = session?.messageCount ?? 0;
         if (messagesNow > messagesBefore) {
-          print(
-            '[PersistentChatAdapter] persisting new messages immediately, before: $messagesBefore, now: $messagesNow',
-          );
           _persistNewMessages(session, messagesBefore);
         }
       }
 
-      // 流完成后再次检查是否有新消息
+      // 流完成后确保所有新消息都已持久化
       final messagesAfter = session?.messageCount ?? 0;
       if (messagesAfter > messagesBefore) {
-        print(
-          '[PersistentChatAdapter] stream completed, persisting any remaining messages',
-        );
         await _persistNewMessages(session, messagesBefore);
       }
     } catch (e) {
-      print('[PersistentChatAdapter] error in streamMessage: $e');
+      print('[PersistentChatAdapter] streamMessage error: $e');
       rethrow;
     } finally {
-      // 确保无论流如何结束，都持久化新增的消息
-      // 这处理了父类在异常情况下提前 return 的情况
       final messagesAfter = session?.messageCount ?? 0;
       if (messagesAfter > messagesBefore) {
-        print(
-          '[PersistentChatAdapter] finally block: persisting ${messagesAfter - messagesBefore} new messages',
-        );
         _persistNewMessages(session, messagesBefore);
       }
     }
@@ -308,40 +288,25 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     final allMessages = session.allMessages;
     final messagesNow = allMessages.length;
 
-    print(
-      '[PersistentChatAdapter] _persistNewMessages: before=$messagesBefore, after=$messagesNow',
-    );
-
     if (messagesNow <= messagesBefore) {
-      print(
-        '[PersistentChatAdapter] _persistNewMessages: no new messages, skipping',
-      );
       return;
     }
 
-    // ✅ 只持久化新增的消息，直接使用 MessageWrapper
-    print(
-      '[PersistentChatAdapter] _persistNewMessages: persisting ${messagesNow - messagesBefore} new messages',
-    );
     for (var i = messagesBefore; i < messagesNow; i++) {
       final wrapper = allMessages[i];
-      // ✅ 使用 MessageWrapper 的稳定 UUID
       final messageId = wrapper.uuid;
 
-      if (!_persistedMessageIds.contains(messageId)) {
-        print(
-          '[PersistentChatAdapter] _persistNewMessages: persisting message $messageId',
-        );
-        // ✅ 直接持久化 MessageWrapper，使用 _messageWrapperToMap
-        final messageMap = _messageWrapperToMap(wrapper);
-        // 不等待持久化完成，将任务加入队列
-        _persistMessage(messageMap);
-        _persistedMessageIds.add(messageId);
-      } else {
-        print(
-          '[PersistentChatAdapter] _persistNewMessages: message $messageId already persisted, skipping',
-        );
+      if (_persistedMessageIds.contains(messageId)) {
+        // 已持久化，跳过（静默处理，避免日志刷屏）
+        continue;
       }
+
+      final messageMap = _messageWrapperToMap(wrapper);
+      _persistMessage(messageMap);
+      _persistedMessageIds.add(messageId);
+      print(
+        '[PersistentChatAdapter] _persistNewMessages: persisted $messageId',
+      );
     }
   }
 
@@ -437,9 +402,15 @@ class PersistentChatAdapter extends LangChainChatAdapter {
           .toList());
     }
 
-    // Tool 消息附加 toolCallId
+    // Tool 消息附加 toolCallId、toolName 和 type
     if (message is ToolChatMessage) {
       map['toolCallId'] = message.toolCallId;
+      map['type'] = 'functionResult';
+      // 从 metadata 中获取 toolName（工具执行时通过 metadata 传入）
+      final toolName = wrapper.metadata?['toolName'] as String?;
+      if (toolName != null) {
+        map['toolName'] = toolName;
+      }
     }
 
     return map;

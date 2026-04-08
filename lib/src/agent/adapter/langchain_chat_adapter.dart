@@ -328,6 +328,7 @@ class LangChainChatAdapter implements IChatAdapter {
               currentEmployeeUuid!,
               deviceId ?? 'default',
               ToolChatMessage(toolCallId: toolCallId, content: errorResult),
+              metadata: {'toolName': toolName},
             );
             yield StreamResponse.toolCallResult(
               toolCallId: toolCallId,
@@ -360,6 +361,7 @@ class LangChainChatAdapter implements IChatAdapter {
                 currentEmployeeUuid!,
                 deviceId ?? 'default',
                 ToolChatMessage(toolCallId: toolCallId, content: denyResult),
+                metadata: {'toolName': toolName},
               );
               yield StreamResponse.toolCallResult(
                 toolCallId: toolCallId,
@@ -403,6 +405,7 @@ class LangChainChatAdapter implements IChatAdapter {
             currentEmployeeUuid!,
             deviceId ?? 'default',
             ToolChatMessage(toolCallId: toolCallId, content: result.content),
+            metadata: {'toolName': toolName},
           );
 
           // 广播工具调用结果事件
@@ -671,9 +674,15 @@ class LangChainChatAdapter implements IChatAdapter {
           .toList();
     }
 
-    // Tool 消息附加 toolCallId
+    // Tool 消息附加 toolCallId、toolName 和 type
     if (message is ToolChatMessage) {
       map['toolCallId'] = message.toolCallId;
+      map['type'] = 'functionResult';
+      // 从 metadata 中获取 toolName（工具执行时通过 metadata 传入）
+      final toolName = wrapper.metadata?['toolName'] as String?;
+      if (toolName != null) {
+        map['toolName'] = toolName;
+      }
     }
 
     // 从 wrapper.metadata 读取 status

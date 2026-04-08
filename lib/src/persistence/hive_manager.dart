@@ -1,8 +1,5 @@
 import 'package:hive/hive.dart';
 
-import 'adapters/adapters.dart';
-import 'entities/entities.dart';
-
 /// Hive管理器
 ///
 /// 负责Hive初始化、Box管理和数据清理
@@ -36,106 +33,100 @@ class HiveManager {
       Hive.init(storagePath);
     }
 
-    // 注册TypeAdapter
-    _registerAdapters();
-
     // 打开Box
     await _openBoxes();
 
     _initialized = true;
   }
 
-  /// 注册TypeAdapter
-  void _registerAdapters() {
-    if (!Hive.isAdapterRegistered(100)) {
-      Hive.registerAdapter(AiEmployeeAdapter());
-    }
-    if (!Hive.isAdapterRegistered(101)) {
-      Hive.registerAdapter(AiEmployeeSessionAdapter());
-    }
-    if (!Hive.isAdapterRegistered(102)) {
-      Hive.registerAdapter(AiEmployeeMessageAdapter());
-    }
-    if (!Hive.isAdapterRegistered(103)) {
-      Hive.registerAdapter(AiEmployeeSkillAdapter());
-    }
-    if (!Hive.isAdapterRegistered(104)) {
-      Hive.registerAdapter(DeviceConfigAdapter());
-    }
-  }
-
-  /// 打开所有Box
+  /// 打开所有Box（容错：遇到旧二进制数据自动删除重建）
   Future<void> _openBoxes() async {
     await Future.wait([
-      Hive.openBox<AiEmployeeEntity>(employeeBoxName),
-      Hive.openBox<AiEmployeeSessionEntity>(sessionBoxName),
-      Hive.openBox<AiEmployeeMessageEntity>(messageBoxName),
-      Hive.openBox<AiEmployeeSkillEntity>(skillBoxName),
-      Hive.openBox<List<dynamic>>(sessionMessagesBoxName),
-      Hive.openBox<List<dynamic>>(employeeSessionsBoxName),
-      Hive.openBox<DeviceConfigEntity>(deviceConfigBoxName),
+      _openBoxSafe(employeeBoxName),
+      _openBoxSafe(sessionBoxName),
+      _openBoxSafe(messageBoxName),
+      _openBoxSafe(skillBoxName),
+      _openBoxSafe(sessionMessagesBoxName),
+      _openBoxSafe(employeeSessionsBoxName),
+      _openBoxSafe(deviceConfigBoxName),
     ]);
   }
 
+  /// 安全打开单个 Box，遇到旧二进制数据时删除旧文件重建
+  Future<Box> _openBoxSafe(String name) async {
+    try {
+      return await Hive.openBox(name);
+    } catch (e) {
+      print('[HiveManager] 打开 $name 失败: $e, 删除旧数据重建...');
+      try {
+        if (Hive.isBoxOpen(name)) {
+          await Hive.box(name).close();
+        }
+      } catch (_) {}
+      try {
+        await Hive.deleteBoxFromDisk(name);
+      } catch (_) {}
+      return await Hive.openBox(name);
+    }
+  }
+
   /// 获取员工Box
-  Box<AiEmployeeEntity> get employeeBox =>
-      Hive.box<AiEmployeeEntity>(employeeBoxName);
+  Box get employeeBox => Hive.box(employeeBoxName);
 
   /// 获取会话Box
-  Box<AiEmployeeSessionEntity> get sessionBox =>
-      Hive.box<AiEmployeeSessionEntity>(sessionBoxName);
+  Box get sessionBox => Hive.box(sessionBoxName);
 
-  /// 获取消息Box
-  Box<AiEmployeeMessageEntity> get messageBox =>
-      Hive.box<AiEmployeeMessageEntity>(messageBoxName);
+  /// 获取消息Box（untyped，使用 jsonEncode/jsonDecode 读写 JSON 字符串）
+  Box get messageBox => Hive.box(messageBoxName);
 
   /// 获取技能Box
-  Box<AiEmployeeSkillEntity> get skillBox =>
-      Hive.box<AiEmployeeSkillEntity>(skillBoxName);
+  Box get skillBox => Hive.box(skillBoxName);
 
   /// 获取会话消息索引Box
-  Box<List<dynamic>> get sessionMessagesBox =>
-      Hive.box<List<dynamic>>(sessionMessagesBoxName);
+  Box get sessionMessagesBox => Hive.box(sessionMessagesBoxName);
 
   /// 获取员工会话索引Box
-  Box<List<dynamic>> get employeeSessionsBox =>
-      Hive.box<List<dynamic>>(employeeSessionsBoxName);
+  Box get employeeSessionsBox => Hive.box(employeeSessionsBoxName);
 
   /// 获取设备配置Box
-  Box<DeviceConfigEntity> get deviceConfigBox =>
-      Hive.box<DeviceConfigEntity>(deviceConfigBoxName);
+  Box get deviceConfigBox => Hive.box(deviceConfigBoxName);
 
   /// 获取指定Box
-  Box<T> getBox<T>(String name) => Hive.box<T>(name);
+  Box getBox(String name) => Hive.box(name);
 
-  /// 构建员工key
+  /// 构建员工key（wenz_ 前缀避免与旧二进制数据冲突）
   String buildEmployeeKey(String? deviceId, String uuid) {
-    return 'emp:$deviceId:$uuid';
+    return 'wenz_emp:$deviceId:$uuid';
   }
 
-  /// 构建会话key
+  /// 构建会话key（wenz_ 前缀避免与旧二进制数据冲突）
   String buildSessionKey(String? deviceId, String uuid) {
-    return 'sess:$deviceId:$uuid';
+    return 'wenz_sess:$deviceId:$uuid';
   }
 
-  /// 构建消息key
+  /// 构建消息key（wenz_ 前缀避免与旧二进制数据冲突）
   String buildMessageKey(String? deviceId, String uuid) {
-    return 'msg:$deviceId:$uuid';
+    return 'wenz_msg:$deviceId:$uuid';
   }
 
-  /// 构建技能key
+  /// 构建技能key（wenz_ 前缀避免与旧二进制数据冲突）
   String buildSkillKey(String? deviceId, String uuid) {
-    return 'skill:$deviceId:$uuid';
+    return 'wenz_skill:$deviceId:$uuid';
   }
 
-  /// 构建会话消息索引key
+  /// 构建会话消息索引key（wenz_ 前缀避免与旧二进制数据冲突）
   String buildSessionMessagesKey(String? deviceId, String employeeId) {
-    return 'sessmsgs:$deviceId:$employeeId';
+    return 'wenz_sessmsgs:$deviceId:$employeeId';
   }
 
-  /// 构建员工会话索引key
+  /// 构建员工会话索引key（wenz_ 前缀避免与旧二进制数据冲突）
   String buildEmployeeSessionsKey(String? deviceId, String employeeId) {
-    return 'empsess:$deviceId:$employeeId';
+    return 'wenz_empsess:$deviceId:$employeeId';
+  }
+
+  /// 构建设备配置key（wenz_ 前缀避免与旧二进制数据冲突）
+  String buildDeviceConfigKey(String deviceId) {
+    return 'wenz_devconf:$deviceId';
   }
 
   /// 清空指定设备的数据
