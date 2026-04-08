@@ -1,12 +1,31 @@
 ﻿import 'dart:async';
 
 import '../agent/client/cached_agent_proxy.dart';
+import '../agent/entity/agent_message.dart';
 import '../agent/notification/agent_notification_hub.dart';
 import '../entity/lan_device_info.dart';
 import '../entity/lan_message.dart';
 import '../persistence/entities/device_config_entity.dart';
 import '../persistence/entities/message_entity.dart';
 import '../service/service.dart';
+
+/// 当前打开的会话状态
+class OpenSessionState {
+  final String employeeId;
+  final String? fromDeviceId;
+
+  const OpenSessionState({required this.employeeId, this.fromDeviceId});
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is OpenSessionState &&
+          employeeId == other.employeeId &&
+          fromDeviceId == other.fromDeviceId;
+
+  @override
+  int get hashCode => Object.hash(employeeId, fromDeviceId);
+}
 
 /// 设备连接状态
 enum DeviceConnectionState {
@@ -242,6 +261,31 @@ abstract class DeviceClient {
   /// 获取LAN消息流
   Stream<LanMessage> get onLanMessage;
 
+  // ===== 当前打开的会话状态 =====
+
+  /// 当前打开的会话状态
+  OpenSessionState? get currentOpenSession;
+
+  /// 设置当前打开的会话
+  ///
+  /// 同时将该会话的所有未读消息标记为已读（包括同步更新数据库）。
+  Future<void> setCurrentOpenSession({
+    required String employeeId,
+    String? fromDeviceId,
+  });
+
+  /// 清除当前打开的会话状态
+  void clearCurrentOpenSession();
+
+  /// 判断指定会话是否为当前打开的会话
+  bool isSessionOpen({required String employeeId, String? fromDeviceId});
+
+  /// 判断指定消息是否应该自动标记为已读
+  ///
+  /// 当消息对应的会话（employeeId + fromDeviceId）与当前打开的会话匹配时，
+  /// 返回 true，表示消息到达时应自动标记为已读。
+  bool shouldAutoMarkAsRead({required String employeeId, String? fromDeviceId});
+
   // ===== 消息通知中心 =====
 
   /// Agent 消息通知中心
@@ -270,6 +314,12 @@ abstract class DeviceClient {
   /// [employeeId] 员工UUID
   Future<void> syncReadStatusFromAgent({required String employeeId});
 
+  /// 从数据库恢复未读计数（App 重启后调用）
+  ///
+  /// 遍历所有会话，查询数据库中 isRead==0 的助手消息数量，
+  /// 恢复到 notificationHub 的未读计数中。
+  Future<void> restoreUnreadStatus();
+
   /// 获取指定员工在指定设备上的最新消息
   ///
   /// 用于会话列表实时更新消息预览，避免全量刷新。
@@ -280,6 +330,17 @@ abstract class DeviceClient {
     required String employeeId,
     required String deviceId,
     int limit = 2,
+  });
+
+  /// 获取指定会话的内存缓存最新消息
+  ///
+  /// 返回缓存中该会话（employeeId+deviceId）的最新消息，
+  /// 如果缓存未命中返回 null。
+  /// 适用于会话列表实时刷新场景，UI 应优先监听
+  /// [AgentLatestMessageUpdatedEvent] 事件获取实时更新。
+  AgentMessage? getCachedLatestMessage({
+    required String employeeId,
+    required String deviceId,
   });
 
   // ===== 文件传输 =====

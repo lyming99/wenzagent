@@ -175,16 +175,45 @@ class AiEmployeeMessageEntity {
     );
   }
 
-  /// 还原为原始消息 Map（优先使用 jsonData 无损还原）
+  /// 还原为原始消息 Map
+  ///
+  /// 以 jsonData 为基础还原，然后用实体独立字段覆盖，
+  /// 确保 copyWith 更新的字段（如 isRead）能正确反映到输出中。
   Map<String, dynamic> toMessageMap() {
+    Map<String, dynamic> baseMap;
     if (jsonData != null && jsonData!.isNotEmpty) {
       try {
-        return jsonDecode(jsonData!) as Map<String, dynamic>;
+        baseMap = Map<String, dynamic>.from(
+            jsonDecode(jsonData!) as Map<String, dynamic>);
       } catch (_) {
-        // JSON 解析失败时回退到 toMap()
+        baseMap = {};
       }
+    } else {
+      baseMap = {};
     }
-    return toMap();
+
+    // 用实体独立字段覆盖，确保 copyWith 的更新生效
+    baseMap['uuid'] = uuid;
+    baseMap['employeeId'] = employeeId;
+    baseMap['role'] = role;
+    baseMap['type'] = type;
+    baseMap['content'] = content;
+    baseMap['toolCallId'] = toolCallId;
+    baseMap['toolName'] = toolName;
+    baseMap['toolArguments'] = toolArguments;
+    baseMap['toolResult'] = toolResult;
+    baseMap['toolCalls'] = toolCalls;
+    baseMap['processingStatus'] = processingStatus;
+    baseMap['processingError'] = processingError;
+    baseMap['inputTokens'] = inputTokens;
+    baseMap['outputTokens'] = outputTokens;
+    baseMap['isRead'] = isRead;
+    baseMap['deleted'] = deleted;
+    baseMap['createTime'] = createTime.millisecondsSinceEpoch;
+    baseMap['updateTime'] = updateTime.millisecondsSinceEpoch;
+    baseMap.remove('jsonData');
+
+    return baseMap;
   }
 
   /// 转换为Map

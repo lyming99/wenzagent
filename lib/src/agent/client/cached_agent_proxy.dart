@@ -47,6 +47,12 @@ class CachedAgentProxy {
   /// 当用户通过 CachedAgentProxy.markMessagesAsRead() 标记已读时，
   /// 回调通知 DeviceClient 执行本地标记 + 跨设备广播
   final void Function(String employeeId, String? fromDeviceId)? onMarkAsRead;
+
+  /// 判断消息是否应直接保存为已读（由 DeviceClient 注入）
+  ///
+  /// 当当前会话窗口打开时，新消息应直接保存为 isRead=1，
+  /// 避免重启 app 后从 DB 恢复未读数量。
+  final bool Function()? shouldSaveAsReadCallback;
   
   /// 是否需要缓存（仅远程模式需要）
   late final bool _needCache;
@@ -83,6 +89,7 @@ class CachedAgentProxy {
     required String deviceId,
     required String employeeId,
     this.onMarkAsRead,
+    this.shouldSaveAsReadCallback,
   }) : _proxy = proxy,
        _messageStore = messageStore,
        _deviceId = deviceId,
@@ -194,7 +201,9 @@ class CachedAgentProxy {
       if (existingIndex == -1) {
         // 新消息，添加到缓存
         _cachedMessages.add(message);
-        final entity = _messageToEntity(message);
+        final forceRead = message.role == 'assistant' &&
+            (shouldSaveAsReadCallback?.call() ?? false);
+        final entity = _messageToEntity(message, forceRead: forceRead);
         await _messageStore.addMessage(entity, deviceId: _deviceId);
         print('[CachedAgentProxy] 添加新消息: ${message.id}');
       } else {
@@ -722,8 +731,10 @@ class CachedAgentProxy {
       print('[CachedAgentProxy] 已清空本地缓存');
 
       // 3. 将远程消息存入缓存
+      final shouldSaveAsRead = shouldSaveAsReadCallback?.call() ?? false;
       for (final message in remoteMessages) {
-        final entity = _messageToEntity(message);
+        final forceRead = message.role == 'assistant' && shouldSaveAsRead;
+        final entity = _messageToEntity(message, forceRead: forceRead);
         await _messageStore.addMessage(entity, deviceId: _deviceId);
         _cachedMessages.add(message);
       }
@@ -847,10 +858,12 @@ class CachedAgentProxy {
       );
 
       // 添加到缓存（去重）
+      final shouldSaveAsRead = shouldSaveAsReadCallback?.call() ?? false;
       for (final message in messages) {
         if (!_cachedMessages.any((m) => m.id == message.id)) {
           _cachedMessages.add(message);
-          final entity = _messageToEntity(message);
+          final forceRead = message.role == 'assistant' && shouldSaveAsRead;
+          final entity = _messageToEntity(message, forceRead: forceRead);
           await _messageStore.addMessage(entity, deviceId: _deviceId);
         }
       }
@@ -964,7 +977,9 @@ class CachedAgentProxy {
   /// 保存消息到数据库
   Future<void> _saveMessageToDatabase(AgentMessage message) async {
     try {
-      final entity = _messageToEntity(message);
+      final forceRead = message.role == 'assistant' &&
+          (shouldSaveAsReadCallback?.call() ?? false);
+      final entity = _messageToEntity(message, forceRead: forceRead);
       await _messageStore.addMessage(entity, deviceId: _deviceId);
     } catch (e) {
       print('保存消息到数据库失败: $e');
@@ -1040,7 +1055,7 @@ class CachedAgentProxy {
     );
   }
   
-  AiEmployeeMessageEntity _messageToEntity(AgentMessage message) {
+  AiEmployeeMessageEntity _messageToEntity(AgentMessage message, {bool? forceRead}) {
     final map = <String, dynamic>{
       'uuid': message.id,
       'employeeId': _employeeId,
@@ -1055,6 +1070,7 @@ class CachedAgentProxy {
       'processingStatus': message.status ?? 'none',
       'createTime': message.createdAt.millisecondsSinceEpoch,
       'updateTime': _getMessageUpdateTime(message).millisecondsSinceEpoch,
+      'isRead': (forceRead == true) ? 1 : null,
     };
     return AiEmployeeMessageEntity.fromMessageMap(map);
   }

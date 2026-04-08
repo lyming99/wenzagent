@@ -25,12 +25,16 @@ class AgentMessageArrivedEvent extends AgentNotificationEvent {
   /// 是否为远程消息（vs 本地 Agent 回复）
   final bool isRemote;
 
+  /// 是否自动已读（当前会话窗口打开时的消息）
+  final bool autoRead;
+
   AgentMessageArrivedEvent({
     required this.message,
     required this.fromDeviceId,
     required this.toDeviceId,
     required this.employeeId,
     required this.isRemote,
+    this.autoRead = false,
   });
 }
 
@@ -64,6 +68,49 @@ class AgentUnreadCountChangedEvent extends AgentNotificationEvent {
     required this.employeeId,
     this.fromDeviceId,
     required this.unreadCount,
+  });
+}
+
+/// 会话最新消息缓存更新（用于会话列表实时刷新）
+///
+/// 当 DeviceClient 检测到新消息并更新内存缓存后触发，
+/// 携带该会话的最新消息和未读数量，UI 可直接用于刷新会话列表预览，
+/// 无需额外调用 getLatestMessages() 查询数据库。
+class AgentLatestMessageUpdatedEvent extends AgentNotificationEvent {
+  /// 最新的消息
+  final AgentMessage latestMessage;
+
+  /// 员工 ID
+  final String employeeId;
+
+  /// 来源设备 ID
+  final String fromDeviceId;
+
+  /// 当前该会话的未读数量
+  final int unreadCount;
+
+  AgentLatestMessageUpdatedEvent({
+    required this.latestMessage,
+    required this.employeeId,
+    required this.fromDeviceId,
+    required this.unreadCount,
+  });
+}
+
+/// 会话最新消息缓存清除（用于清空消息后通知 UI）
+///
+/// 当用户清空某个员工的所有消息时触发，
+/// UI 应清除该会话的最新消息预览。
+class AgentLatestMessageClearedEvent extends AgentNotificationEvent {
+  /// 员工 ID
+  final String employeeId;
+
+  /// 来源设备 ID
+  final String fromDeviceId;
+
+  AgentLatestMessageClearedEvent({
+    required this.employeeId,
+    required this.fromDeviceId,
   });
 }
 

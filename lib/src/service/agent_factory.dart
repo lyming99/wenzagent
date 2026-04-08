@@ -62,6 +62,11 @@ class AgentFactoryImpl implements AgentFactory {
   final MessageStoreService _messageStore;
   final SkillManager _skillManager;
 
+  /// 判断消息是否应直接写入已读状态的回调
+  ///
+  /// 由 DeviceClientImpl 注入，用于在消息持久化时判断当前会话是否打开。
+  bool Function(String employeeId)? shouldMarkMessageAsRead;
+
   final _lifecycleController =
       StreamController<AgentLifecycleEvent>.broadcast();
 
@@ -170,7 +175,11 @@ class AgentFactoryImpl implements AgentFactory {
     // 持久化消息回调
     adapter.persistMessage = (message) async {
       // 使用 fromMessageMap 将整个 Map 序列化为 JSON 字符串存入 Hive
-      final entity = AiEmployeeMessageEntity.fromMessageMap(message);
+      var entity = AiEmployeeMessageEntity.fromMessageMap(message);
+      // 如果当前正在查看该会话，直接写入已读状态（避免重启后因 DB 未更新而误显示未读）
+      if (entity.role == 'assistant' && shouldMarkMessageAsRead?.call(employeeId) == true) {
+        entity = entity.copyWith(isRead: 1);
+      }
       await _messageStore.addMessage(entity);
     };
 

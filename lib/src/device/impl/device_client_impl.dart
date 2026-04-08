@@ -122,6 +122,15 @@ class DeviceClientImpl implements DeviceClient {
   /// Agent 消息通知中心
   late final AgentNotificationHub _notificationHub;
 
+  /// 当前打开的会话状态
+  OpenSessionState? _currentOpenSession;
+
+  /// 最新消息内存缓存（key = '$employeeId:$deviceId'）
+  ///
+  /// 用于会话列表实时刷新，避免每次都查询数据库。
+  /// 当监听到新消息时，与缓存中的最新消息比较，取较新的更新。
+  final Map<String, AgentMessage> _latestMessageCache = {};
+
   // ===== 服务层成员 =====
 
   /// 员工管理器
@@ -167,6 +176,10 @@ class DeviceClientImpl implements DeviceClient {
 
     // 初始化通知中心
     _notificationHub = AgentNotificationHub();
+    _notificationHub.shouldAutoMarkAsReadCallback = shouldAutoMarkAsRead;
+
+    // 从 DB 恢复未读计数（fire-and-forget，不阻塞构造函数）
+    restoreUnreadStatus();
   }
 
   // ===== 只读属性 =====
@@ -779,9 +792,11 @@ class DeviceClientImpl implements DeviceClient {
         onMarkAsRead: (empId, fromDevId) {
           _notificationHub.markAllAsRead(employeeId: empId, fromDeviceId: fromDevId);
           _broadcastReadStatus(employeeId: empId, fromDeviceId: fromDevId);
+          _markMessagesAsReadInDb(empId, fromDevId);
         },
+        shouldSaveAsReadCallback: () => isSessionOpen(employeeId: employeeId),
       );
-      
+
       await cachedProxy.initialize();
       proxy.attach();
       _localProxies[employeeId] = cachedProxy;
@@ -812,13 +827,15 @@ class DeviceClientImpl implements DeviceClient {
       deviceId: targetDeviceId,
       employeeId: employeeId,
       onMarkAsRead: (empId, fromDevId) {
-        _notificationHub.markAllAsRead(employeeId: empId, fromDeviceId: fromDevId);
-        _broadcastReadStatus(employeeId: empId, fromDeviceId: fromDevId);
-      },
-    );
+          _notificationHub.markAllAsRead(employeeId: empId, fromDeviceId: fromDevId);
+          _broadcastReadStatus(employeeId: empId, fromDeviceId: fromDevId);
+          _markMessagesAsReadInDb(empId, fromDevId);
+        },
+      shouldSaveAsReadCallback: () => isSessionOpen(employeeId: employeeId),
+      );
     
-    await cachedProxy.initialize();
-    _remoteProxies[key] = cachedProxy;
+      await cachedProxy.initialize();
+      _remoteProxies[key] = cachedProxy;
     return cachedProxy;
   }
 
@@ -926,7 +943,11 @@ class DeviceClientImpl implements DeviceClient {
 
     adapter.persistMessage = (message) async {
       // 使用 fromMessageMap 将整个 Map 序列化为 JSON 字符串存入 Hive
-      final entity = AiEmployeeMessageEntity.fromMessageMap(message);
+      var entity = AiEmployeeMessageEntity.fromMessageMap(message);
+      // 如果当前正在查看该会话，直接写入已读状态（避免重启后因 DB 未更新而误显示未读）
+      if (entity.role == 'assistant' && _currentOpenSession?.employeeId == employeeId) {
+        entity = entity.copyWith(isRead: 1);
+      }
       await _messageStoreService.addMessage(entity);
     };
 
@@ -974,9 +995,66 @@ class DeviceClientImpl implements DeviceClient {
 
     adapter.deleteMessagesCallback = (employeeId) async {
       await _messageStoreService.deleteMessages(employeeId);
+      // 清空消息时同步清除该会话的未读状态
+      _notificationHub.markAllAsRead(employeeId: employeeId);
+      // 清除该员工相关的最新消息缓存并通知 UI
+      _clearLatestMessageCache(employeeId);
     };
   }
 
+
+  /// 更新最新消息缓存并通知 UI
+  ///
+  /// 比较 [message] 与当前缓存中该会话（[employeeId]+[fromDeviceId]）的最新消息，
+  /// 如果 [message] 更新则更新缓存，并通过 notificationHub 发出
+  /// [AgentLatestMessageUpdatedEvent] 通知 UI 刷新最新消息和未读数量。
+  void _updateLatestMessageCache(
+    String employeeId,
+    String fromDeviceId,
+    AgentMessage message,
+  ) {
+    final key = '$employeeId:$fromDeviceId';
+    final cached = _latestMessageCache[key];
+
+    // 权限请求消息始终优先缓存（直到权限被授权后由 completed 消息覆盖）
+    final shouldUpdate = cached == null ||
+        message.type == 'permission' ||
+        message.createdAt.isAfter(cached.createdAt);
+
+    if (shouldUpdate) {
+      _latestMessageCache[key] = message;
+
+      final unreadCount = _notificationHub.getUnreadCount(
+        employeeId: employeeId,
+        fromDeviceId: fromDeviceId.isNotEmpty ? fromDeviceId : null,
+      );
+      _notificationHub.onLatestMessageUpdated(
+        message: message,
+        employeeId: employeeId,
+        fromDeviceId: fromDeviceId,
+        unreadCount: unreadCount,
+      );
+    }
+  }
+
+  /// 清除指定员工相关的最新消息缓存并通知 UI
+  ///
+  /// 遍历 [_latestMessageCache]，移除所有以 [employeeId] 为前缀的缓存条目，
+  /// 并通过 notificationHub 发出 [AgentLatestMessageClearedEvent] 通知 UI 清除预览。
+  void _clearLatestMessageCache(String employeeId) {
+    final keysToRemove = _latestMessageCache.keys
+        .where((key) => key.startsWith('$employeeId:'))
+        .toList();
+
+    for (final key in keysToRemove) {
+      _latestMessageCache.remove(key);
+      final fromDeviceId = key.substring('$employeeId:'.length);
+      _notificationHub.onLatestMessageCleared(
+        employeeId: employeeId,
+        fromDeviceId: fromDeviceId,
+      );
+    }
+  }
 
   /// 订阅 Agent 事件
   void _subscribeAgentEvents(String employeeId, IAgent agent) {
@@ -1007,18 +1085,20 @@ class DeviceClientImpl implements DeviceClient {
       if (status == 'queued' && messageId != null) {
         final content = data['content'] as String?;
         if (content != null && content.isNotEmpty) {
+          final msg = AgentMessage(
+            id: messageId,
+            role: data['role'] as String? ?? 'user',
+            type: data['type'] as String? ?? 'text',
+            content: content,
+            createdAt: DateTime.now(),
+            status: status,
+            metadata: Map<String, dynamic>.from(data)..['deviceId'] = deviceId,
+          );
           _notificationHub.onLocalMessage(
-            message: AgentMessage(
-              id: messageId,
-              role: data['role'] as String? ?? 'user',
-              type: data['type'] as String? ?? 'text',
-              content: content,
-              createdAt: DateTime.now(),
-              status: status,
-              metadata: Map<String, dynamic>.from(data)..['deviceId'] = deviceId,
-            ),
+            message: msg,
             employeeId: employeeId,
           );
+          _updateLatestMessageCache(employeeId, deviceId, msg);
         }
       }
 
@@ -1030,18 +1110,20 @@ class DeviceClientImpl implements DeviceClient {
             (m) => m.role == 'assistant',
             orElse: () => messages.last,
           );
+          final msg = AgentMessage(
+            id: lastAssistant.id,
+            role: lastAssistant.role,
+            type: lastAssistant.type ?? 'text',
+            content: lastAssistant.content,
+            createdAt: lastAssistant.createdAt,
+            status: status,
+            metadata: Map<String, dynamic>.from(data)..['deviceId'] = deviceId,
+          );
           _notificationHub.onLocalMessage(
-            message: AgentMessage(
-              id: lastAssistant.id,
-              role: lastAssistant.role,
-              type: lastAssistant.type ?? 'text',
-              content: lastAssistant.content,
-              createdAt: lastAssistant.createdAt,
-              status: status,
-              metadata: Map<String, dynamic>.from(data)..['deviceId'] = deviceId,
-            ),
+            message: msg,
             employeeId: employeeId,
           );
+          _updateLatestMessageCache(employeeId, deviceId, msg);
         }).catchError((_) {});
       }
     });
@@ -1307,10 +1389,41 @@ class DeviceClientImpl implements DeviceClient {
   int getTotalUnreadCount() => _notificationHub.getTotalUnreadCount();
 
   @override
+  OpenSessionState? get currentOpenSession => _currentOpenSession;
+
+  @override
+  Future<void> setCurrentOpenSession({required String employeeId, String? fromDeviceId}) async {
+    _currentOpenSession = OpenSessionState(employeeId: employeeId, fromDeviceId: fromDeviceId);
+    // 设置打开会话时，同时将该会话的所有未读消息标记为已读
+    markAllMessagesAsRead(employeeId: employeeId, fromDeviceId: fromDeviceId);
+    // 等待 DB 更新完成，确保切回列表时不会读到旧的未读数
+    await _markMessagesAsReadInDb(employeeId, fromDeviceId);
+  }
+
+  @override
+  void clearCurrentOpenSession() {
+    _currentOpenSession = null;
+  }
+
+  @override
+  bool isSessionOpen({required String employeeId, String? fromDeviceId}) {
+    final session = _currentOpenSession;
+    if (session == null) return false;
+    if (session.employeeId != employeeId) return false;
+    if (fromDeviceId != null && session.fromDeviceId != fromDeviceId) return false;
+    return true;
+  }
+
+  @override
+  bool shouldAutoMarkAsRead({required String employeeId, String? fromDeviceId}) {
+    return isSessionOpen(employeeId: employeeId, fromDeviceId: fromDeviceId);
+  }
+
+  @override
   void markAllMessagesAsRead({required String employeeId, String? fromDeviceId}) {
     _notificationHub.markAllAsRead(employeeId: employeeId, fromDeviceId: fromDeviceId);
     _broadcastReadStatus(employeeId: employeeId, fromDeviceId: fromDeviceId);
-    // 异步更新数据库中的已读标记
+    // 异步更新数据库中的已读标记（fire-and-forget，不阻塞调用方）
     _markMessagesAsReadInDb(employeeId, fromDeviceId);
     // 通知本地 Agent 记录已读状态（Agent 会广播给所有设备）
     _notifyAgentReadStatus(employeeId: employeeId, fromDeviceId: fromDeviceId);
@@ -1326,15 +1439,25 @@ class DeviceClientImpl implements DeviceClient {
     ).catchError((_) {});
   }
 
-  /// 异步更新数据库消息为已读（fire-and-forget）
-  void _markMessagesAsReadInDb(String employeeId, String? fromDeviceId) {
-    _messageStoreService.getMessagesWithDeviceId(fromDeviceId, employeeId).then((messages) {
+  /// 异步更新数据库消息为已读
+  ///
+  /// 使用 [fromDeviceId] 查询和更新，确保读写使用同一个 Hive key。
+  /// 当 [fromDeviceId] 为空时回退到本机 deviceId（与消息存储逻辑一致）。
+  Future<void> _markMessagesAsReadInDb(String employeeId, String? fromDeviceId) async {
+    final effectiveDeviceId = (fromDeviceId != null && fromDeviceId.isNotEmpty)
+        ? fromDeviceId
+        : deviceId;
+    try {
+      final messages = await _messageStoreService.getMessagesWithDeviceId(effectiveDeviceId, employeeId);
       for (final m in messages) {
         if (m.role == 'assistant' && m.isRead == 0) {
-          _messageStoreService.updateMessage(m.copyWith(isRead: 1, jsonData: null));
+          await _messageStoreService.updateMessage(
+            m.copyWith(isRead: 1, jsonData: null),
+            deviceId: effectiveDeviceId,
+          );
         }
       }
-    }).catchError((_) {});
+    } catch (_) {}
   }
 
   /// 异步更新数据库中所有有未读消息的员工的消息为已读（fire-and-forget）
@@ -1391,6 +1514,57 @@ class DeviceClientImpl implements DeviceClient {
   }
 
   @override
+  Future<void> restoreUnreadStatus() async {
+    try {
+      // 获取所有会话
+      final sessions = await _sessionManager.getAllSessions();
+      for (final session in sessions) {
+        final employeeId = session.employeeId;
+        // 查询该会话的所有消息，统计未读的助手消息数量
+        final messages = await _messageStoreService.getMessages(employeeId);
+        final unreadCount = messages
+            .where((m) => m.role == 'assistant' && m.isRead == 0)
+            .length;
+
+        if (unreadCount > 0) {
+          _notificationHub.restoreUnreadCount(
+            employeeId: employeeId,
+            count: unreadCount,
+          );
+        }
+
+        // 恢复最新消息缓存（从 DB 加载最新消息到内存缓存，并通知 UI）
+        if (messages.isNotEmpty) {
+          // 获取员工实体以确定消息所属设备
+          final employee = await _employeeManager.getEmployee(employeeId);
+          final rawDeviceId = (employee?.currentDeviceId != null &&
+                  employee!.currentDeviceId!.isNotEmpty)
+              ? employee.currentDeviceId!
+              : deviceId;
+          final messageDeviceId = rawDeviceId;
+
+          // 取最新的消息（列表按旧→新排列）
+          final latestEntity = messages.last;
+          final latestMap = latestEntity.toMessageMap();
+          final latestMsg = AgentMessage.fromMap(latestMap);
+
+          final key = '$employeeId:$messageDeviceId';
+          _latestMessageCache[key] = latestMsg;
+
+          _notificationHub.onLatestMessageUpdated(
+            message: latestMsg,
+            employeeId: employeeId,
+            fromDeviceId: messageDeviceId,
+            unreadCount: _notificationHub.getUnreadCount(employeeId: employeeId),
+          );
+        }
+      }
+    } catch (_) {
+      // 恢复失败静默处理，不影响主流程
+    }
+  }
+
+  @override
   Future<List<AiEmployeeMessageEntity>> getLatestMessages({
     required String employeeId,
     required String deviceId,
@@ -1401,6 +1575,14 @@ class DeviceClientImpl implements DeviceClient {
       employeeId,
       limit: limit,
     );
+  }
+
+  @override
+  AgentMessage? getCachedLatestMessage({
+    required String employeeId,
+    required String deviceId,
+  }) {
+    return _latestMessageCache['$employeeId:$deviceId'];
   }
 
   // ===== 数据同步 =====
@@ -1768,20 +1950,22 @@ class DeviceClientImpl implements DeviceClient {
             final isLocal = fromDeviceId == deviceId;
             if (!isLocal) {
               // 远程 Agent 消息：通过 onRemoteMessage 通知（自动标记未读）
+              final remoteMsg = AgentMessage(
+                id: messageId,
+                role: data['role'] as String? ?? 'assistant',
+                type: data['type'] as String? ?? 'text',
+                content: data['content'] as String?,
+                createdAt: DateTime.now(),
+                status: status,
+                metadata: Map<String, dynamic>.from(data),
+              );
               _notificationHub.onRemoteMessage(
-                message: AgentMessage(
-                  id: messageId,
-                  role: data['role'] as String? ?? 'assistant',
-                  type: data['type'] as String? ?? 'text',
-                  content: data['content'] as String?,
-                  createdAt: DateTime.now(),
-                  status: status,
-                  metadata: Map<String, dynamic>.from(data),
-                ),
+                message: remoteMsg,
                 fromDeviceId: fromDeviceId,
                 toDeviceId: deviceId,
                 employeeId: employeeId,
               );
+              _updateLatestMessageCache(employeeId, fromDeviceId, remoteMsg);
             }
             // 本地 Agent completed 事件由 _subscribeAgentEvents 的直接路径处理，
             // 从 agent.getSessionMessages() 获取完整 AI 回复内容后通知 notificationHub
@@ -1803,22 +1987,24 @@ class DeviceClientImpl implements DeviceClient {
               final permMessageId = requestId != null
                   ? 'perm_$requestId'
                   : 'perm_${DateTime.now().millisecondsSinceEpoch}';
+              final permMsg = AgentMessage(
+                id: permMessageId,
+                role: 'assistant',
+                type: 'permission',
+                content: data['description'] as String? ?? '等待权限确认',
+                createdAt: DateTime.now(),
+                metadata: {
+                  'isPermissionRequest': true,
+                  'permissionRequest': data,
+                },
+              );
               _notificationHub.onRemoteMessage(
-                message: AgentMessage(
-                  id: permMessageId,
-                  role: 'assistant',
-                  type: 'permission',
-                  content: data['description'] as String? ?? '等待权限确认',
-                  createdAt: DateTime.now(),
-                  metadata: {
-                    'isPermissionRequest': true,
-                    'permissionRequest': data,
-                  },
-                ),
+                message: permMsg,
                 fromDeviceId: fromDeviceId,
                 toDeviceId: deviceId,
                 employeeId: employeeId,
               );
+              _updateLatestMessageCache(employeeId, fromDeviceId, permMsg);
             }
           }
         }

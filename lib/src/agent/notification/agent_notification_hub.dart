@@ -41,6 +41,13 @@ class AgentNotificationHub {
   /// 最大缓存已处理消息 ID 数量（防止内存泄漏）
   static const int _maxProcessedIds = 10000;
 
+  /// 是否应自动标记为已读的回调
+  ///
+  /// 由 DeviceClientImpl 设置，用于判断新到达的消息是否属于当前打开的会话。
+  /// 如果属于当前打开的会话，则不标记为未读（自动视为已读）。
+  bool Function({required String employeeId, String? fromDeviceId})?
+      shouldAutoMarkAsReadCallback;
+
   bool _isDisposed = false;
 
   // ============================================================
@@ -64,6 +71,10 @@ class AgentNotificationHub {
             if (e.employeeId != employeeId) return false;
           case AgentUnreadCountChangedEvent e:
             if (e.employeeId != employeeId) return false;
+          case AgentLatestMessageUpdatedEvent e:
+            if (e.employeeId != employeeId) return false;
+          case AgentLatestMessageClearedEvent e:
+            if (e.employeeId != employeeId) return false;
           case AgentStatusNotifyEvent e:
             if (e.employeeId != employeeId) return false;
         }
@@ -74,6 +85,10 @@ class AgentNotificationHub {
           case AgentMessageArrivedEvent e:
             if (e.fromDeviceId != fromDeviceId) return false;
           case AgentUnreadCountChangedEvent e:
+            if (e.fromDeviceId != fromDeviceId) return false;
+          case AgentLatestMessageUpdatedEvent e:
+            if (e.fromDeviceId != fromDeviceId) return false;
+          case AgentLatestMessageClearedEvent e:
             if (e.fromDeviceId != fromDeviceId) return false;
           case AgentStatusNotifyEvent e:
             if (e.fromDeviceId != fromDeviceId) return false;
@@ -129,7 +144,7 @@ class AgentNotificationHub {
 
   /// 接收远程 Agent 返回消息
   ///
-  /// 收到即标记未读
+  /// 收到后检查是否应自动标记为已读（当前会话窗口打开时），否则标记未读
   ///
   /// 由 DeviceClientImpl 在以下时机调用：
   /// 1. 收到 LAN 广播的 agentMessageStatusChanged（status=completed）
@@ -146,8 +161,17 @@ class AgentNotificationHub {
     if (_processedMessageIds.contains(message.id)) return;
     _addProcessedId(message.id);
 
-    // 标记为未读
-    _markUnread(employeeId, message.id, fromDeviceId, message);
+    // 判断是否应自动标记为已读（当前打开的会话）
+    final autoRead = shouldAutoMarkAsReadCallback?.call(
+          employeeId: employeeId,
+          fromDeviceId: fromDeviceId,
+        ) ??
+        false;
+
+    if (!autoRead) {
+      // 未打开的会话：标记为未读
+      _markUnread(employeeId, message.id, fromDeviceId, message);
+    }
 
     // 广播消息到达事件
     _controller.add(AgentMessageArrivedEvent(
@@ -156,6 +180,7 @@ class AgentNotificationHub {
       toDeviceId: toDeviceId,
       employeeId: employeeId,
       isRemote: true,
+      autoRead: autoRead,
     ));
   }
 
@@ -182,6 +207,42 @@ class AgentNotificationHub {
       toDeviceId: message.metadata?['deviceId'] ?? '',
       employeeId: employeeId,
       isRemote: false,
+    ));
+  }
+
+  /// 通知最新消息缓存更新
+  ///
+  /// 由 DeviceClientImpl 在更新内存最新消息缓存后调用，
+  /// 携带最新消息和未读数量，UI 可直接用于刷新会话列表。
+  void onLatestMessageUpdated({
+    required AgentMessage message,
+    required String employeeId,
+    required String fromDeviceId,
+    required int unreadCount,
+  }) {
+    if (_isDisposed) return;
+
+    _controller.add(AgentLatestMessageUpdatedEvent(
+      latestMessage: message,
+      employeeId: employeeId,
+      fromDeviceId: fromDeviceId,
+      unreadCount: unreadCount,
+    ));
+  }
+
+  /// 通知最新消息缓存已清除
+  ///
+  /// 由 DeviceClientImpl 在清空消息后调用，
+  /// UI 应清除该会话的最新消息预览。
+  void onLatestMessageCleared({
+    required String employeeId,
+    required String fromDeviceId,
+  }) {
+    if (_isDisposed) return;
+
+    _controller.add(AgentLatestMessageClearedEvent(
+      employeeId: employeeId,
+      fromDeviceId: fromDeviceId,
     ));
   }
 
@@ -236,29 +297,57 @@ class AgentNotificationHub {
     String? fromDeviceId,
   }) {
     final unreadMap = _unreadMessages[employeeId];
-    if (unreadMap == null || unreadMap.isEmpty) return;
 
-    final idsToRemove = <String>[];
-    for (final entry in unreadMap.entries) {
-      if (fromDeviceId == null || entry.value.fromDeviceId == fromDeviceId) {
-        idsToRemove.add(entry.key);
-        _controller.add(AgentMessageReadStatusChangedEvent(
-          messageId: entry.key,
-          employeeId: employeeId,
-          isRead: true,
-          fromDeviceId: entry.value.fromDeviceId,
-        ));
+    if (unreadMap != null && unreadMap.isNotEmpty) {
+      final idsToRemove = <String>[];
+      for (final entry in unreadMap.entries) {
+        if (fromDeviceId == null || entry.value.fromDeviceId == fromDeviceId) {
+          idsToRemove.add(entry.key);
+          _controller.add(AgentMessageReadStatusChangedEvent(
+            messageId: entry.key,
+            employeeId: employeeId,
+            isRead: true,
+            fromDeviceId: entry.value.fromDeviceId,
+          ));
+        }
+      }
+
+      for (final id in idsToRemove) {
+        unreadMap.remove(id);
       }
     }
 
-    for (final id in idsToRemove) {
-      unreadMap.remove(id);
-    }
-
-    // 重新计算未读计数
+    // 始终重新计算未读计数（覆盖从 DB 恢复但未跟踪消息的场景）
     _recalculateUnreadCount(employeeId);
     if (fromDeviceId != null) {
       _recalculateUnreadCountByDevice(employeeId, fromDeviceId);
+    }
+  }
+
+  /// 从数据库恢复未读计数（用于 App 重启后恢复状态）
+  ///
+  /// 当 App 重启时，内存中的 [_unreadMessages] 为空，
+  /// 但数据库中记录了哪些消息尚未已读。
+  /// 通过此方法直接设置未读计数，无需重建完整的消息事件。
+  void restoreUnreadCount({
+    required String employeeId,
+    required int count,
+    String? fromDeviceId,
+  }) {
+    _unreadCount[employeeId] = count;
+    _controller.add(AgentUnreadCountChangedEvent(
+      employeeId: employeeId,
+      unreadCount: count,
+    ));
+
+    if (fromDeviceId != null && fromDeviceId.isNotEmpty) {
+      final key = '$employeeId:$fromDeviceId';
+      _unreadCountByDevice[key] = count;
+      _controller.add(AgentUnreadCountChangedEvent(
+        employeeId: employeeId,
+        fromDeviceId: fromDeviceId,
+        unreadCount: count,
+      ));
     }
   }
 
