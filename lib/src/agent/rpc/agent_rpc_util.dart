@@ -100,11 +100,21 @@ class AgentRpcUtil {
     return _rpcCall(AgentRpcConfig.methodSetProvider, request.toMap());
   }
 
+  /// 获取提供者配置
+  Future<Map<String, dynamic>> getProvider(GetProviderRequest request) async {
+    return _rpcCall(AgentRpcConfig.methodGetProvider, request.toMap());
+  }
+
   // ===== Agent 项目管理 =====
 
   /// 设置项目
   Future<Map<String, dynamic>> setProject(SetProjectRequest request) async {
     return _rpcCall(AgentRpcConfig.methodSetProject, request.toMap());
+  }
+
+  /// 获取当前项目UUID
+  Future<Map<String, dynamic>> getProjectUuid(GetProjectUuidRequest request) async {
+    return _rpcCall(AgentRpcConfig.methodGetProjectUuid, request.toMap());
   }
 
   // ===== Agent 权限管理 =====

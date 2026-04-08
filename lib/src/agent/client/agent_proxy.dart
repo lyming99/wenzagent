@@ -449,6 +449,7 @@ class AgentProxy {
       providerConfig: providerConfig.toMap(),
     );
     await _rpcUtil!.setProvider(request);
+    _remoteCache.providerConfig = providerConfig.toMap();
   }
 
   ProviderConfig? getProviderConfig() {
@@ -457,6 +458,21 @@ class AgentProxy {
     }
     final configMap = _remoteCache.providerConfig;
     return configMap != null ? ProviderConfig.fromMap(configMap) : null;
+  }
+
+  /// 获取提供者配置（异步版本，支持远程 RPC）
+  Future<ProviderConfig?> getProviderConfigAsync() async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.getProviderConfig();
+    }
+    final request = GetProviderRequest(employeeId: employeeId);
+    final result = await _rpcUtil!.getProvider(request);
+    final configMap = result['providerConfig'] as Map<String, dynamic>?;
+    if (configMap != null) {
+      _remoteCache.providerConfig = configMap;
+      return ProviderConfig.fromMap(configMap);
+    }
+    return null;
   }
 
   // ===== 项目管理 =====
@@ -470,6 +486,7 @@ class AgentProxy {
       projectData: projectData?.toMap(),
     );
     await _rpcUtil!.setProject(request);
+    _remoteCache.projectUuid = projectData?.projectUuid;
   }
 
   String? getCurrentProjectUuid() {
@@ -477,6 +494,18 @@ class AgentProxy {
       return _localAgent.getCurrentProjectUuid();
     }
     return _remoteCache.projectUuid;
+  }
+
+  /// 获取当前项目UUID（异步版本，支持远程 RPC）
+  Future<String?> getCurrentProjectUuidAsync() async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.getCurrentProjectUuid();
+    }
+    final request = GetProjectUuidRequest(employeeId: employeeId);
+    final result = await _rpcUtil!.getProjectUuid(request);
+    final uuid = result['projectUuid'] as String?;
+    _remoteCache.projectUuid = uuid;
+    return uuid;
   }
 
   // ===== 工具管理 =====

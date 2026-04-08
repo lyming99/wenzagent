@@ -758,7 +758,8 @@ class CachedAgentProxy {
   
   /// 同步远程会话状态和权限请求
   ///
-  /// 在初始化时查询远程 Agent 状态，如果正在等待权限，则查询并缓存权限请求
+  /// 在初始化时查询远程 Agent 状态，如果正在等待权限，则查询并缓存权限请求。
+  /// 同时同步远程的 Provider 配置和项目 UUID 到本地缓存。
   Future<void> _syncRemoteStateAndPermission() async {
     if (_isDisposed || !_needCache) return;
 
@@ -769,7 +770,27 @@ class CachedAgentProxy {
       final stateSnapshot = await _proxy.getStateSnapshotAsync();
       print('[CachedAgentProxy] 远程 Agent 状态: ${stateSnapshot.status}');
 
-      // 2. 如果正在等待权限，查询权限请求
+      // 2. 同步远程 Provider 配置
+      try {
+        final providerConfig = await _proxy.getProviderConfigAsync();
+        if (providerConfig != null) {
+          print('[CachedAgentProxy] 远程 Provider 配置: ${providerConfig.provider} · ${providerConfig.model}');
+        } else {
+          print('[CachedAgentProxy] 远程无 Provider 配置');
+        }
+      } catch (e) {
+        print('[CachedAgentProxy] 同步远程 Provider 配置失败: $e');
+      }
+
+      // 3. 同步远程项目 UUID
+      try {
+        final projectUuid = await _proxy.getCurrentProjectUuidAsync();
+        print('[CachedAgentProxy] 远程项目 UUID: $projectUuid');
+      } catch (e) {
+        print('[CachedAgentProxy] 同步远程项目 UUID 失败: $e');
+      }
+
+      // 4. 如果正在等待权限，查询权限请求
       if (stateSnapshot.status == AgentStatus.waitingPermission) {
         print('[CachedAgentProxy] 检测到远程 Agent 正在等待权限，查询权限请求...');
         
@@ -1274,6 +1295,10 @@ class CachedAgentProxy {
   
   /// 获取Provider配置
   ProviderConfig? getProviderConfig() => _proxy.getProviderConfig();
+
+  /// 获取Provider配置（异步版本，支持远程 RPC）
+  Future<ProviderConfig?> getProviderConfigAsync() =>
+      _proxy.getProviderConfigAsync();
   
   /// 设置项目
   Future<void> setProject(ProjectData? projectData) =>
@@ -1281,6 +1306,10 @@ class CachedAgentProxy {
   
   /// 获取当前项目UUID
   String? getCurrentProjectUuid() => _proxy.getCurrentProjectUuid();
+
+  /// 获取当前项目UUID（异步版本，支持远程 RPC）
+  Future<String?> getCurrentProjectUuidAsync() =>
+      _proxy.getCurrentProjectUuidAsync();
   
   /// 注册工具
   void registerTool(AgentTool tool) => _proxy.registerTool(tool);

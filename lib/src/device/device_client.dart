@@ -243,6 +243,24 @@ abstract class DeviceClient {
   /// 通过LAN RPC查询其他设备的会话数据并合并
   Future<void> syncSessionsFromDevices();
 
+  // ===== 远程员工同步 =====
+
+  /// 将员工信息同步到指定远程设备
+  ///
+  /// 当在设备 A 创建员工并选择设备 B 作为目标设备时，
+  /// 需要先在设备 B 上创建员工记录，否则设备 B 的 RPC 会因
+  /// "Employee not found" 失败。
+  ///
+  /// [employeeId] 员工UUID
+  /// [targetDeviceId] 目标设备ID
+  ///
+  /// 返回 true 表示同步成功，false 表示目标设备上员工已存在。
+  /// 如果目标设备不在线或 RPC 调用失败，返回 false。
+  Future<bool> syncEmployeeToDevice({
+    required String employeeId,
+    required String targetDeviceId,
+  });
+
   // ===== LAN消息扩展 =====
 
   /// 设置LAN消息接收处理器
