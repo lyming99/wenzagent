@@ -21,6 +21,7 @@ class HiveManager {
   static const String sessionMessagesBoxName = 'session_messages';
   static const String employeeSessionsBoxName = 'employee_sessions';
   static const String deviceConfigBoxName = 'device_config_box';
+  static const String scheduledTaskBoxName = 'scheduled_task_box';
 
   /// 初始化Hive
   ///
@@ -49,6 +50,7 @@ class HiveManager {
       _openBoxSafe(sessionMessagesBoxName),
       _openBoxSafe(employeeSessionsBoxName),
       _openBoxSafe(deviceConfigBoxName),
+      _openBoxSafe(scheduledTaskBoxName),
     ]);
   }
 

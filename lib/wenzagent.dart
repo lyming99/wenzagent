@@ -24,3 +24,6 @@ export 'src/service/service.dart';
 
 // Host
 export 'src/host/host.dart';
+
+// Scheduler
+export 'src/scheduler/scheduler.dart';

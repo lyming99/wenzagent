@@ -2,6 +2,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:uuid/uuid.dart';
+
 import '../../agent/adapter/persistent_chat_adapter.dart';
 import '../../agent/agent_state.dart';
 import '../../agent/client/agent_proxy.dart';
@@ -12,6 +14,7 @@ import '../../agent/i_agent.dart';
 import '../../agent/impl/agent_impl.dart';
 import '../../agent/notification/agent_notification_hub.dart';
 import '../../agent/rpc/agent_rpc_config.dart';
+import '../../agent/tool/builtin/schedule_task_tool.dart';
 import '../../entity/host_rpc_request.dart';
 import '../../entity/lan_device_info.dart';
 import '../../entity/lan_message.dart';
@@ -170,6 +173,9 @@ class DeviceClientImpl implements DeviceClient {
   /// 设备配置存储
   late final DeviceConfigStore _deviceConfigStore;
 
+  /// 定时任务管理器
+  final ScheduledTaskManagerImpl _scheduledTaskManager = ScheduledTaskManagerImpl();
+
   DeviceClientImpl({
     required this.deviceId,
     this.deviceName,
@@ -192,6 +198,12 @@ class DeviceClientImpl implements DeviceClient {
 
     // 初始化设备配置存储
     _deviceConfigStore = DeviceConfigStore();
+
+    // 定时任务触发时，通过主 agent 注入 system 消息并触发 LLM 处理
+    _scheduledTaskManager.getAgent = (employeeId) async {
+      return _localAgents[employeeId];
+    };
+    _scheduledTaskManager.start();
 
     // 初始化通知中心
     _notificationHub = AgentNotificationHub();
@@ -739,6 +751,8 @@ class DeviceClientImpl implements DeviceClient {
 
     await disconnect();
 
+    _scheduledTaskManager.dispose();
+
     for (final subscription in _agentEventSubscriptions.values) {
       await subscription.cancel();
     }
@@ -934,6 +948,9 @@ class DeviceClientImpl implements DeviceClient {
     agent = AgentImpl(employeeId: employeeId, chatAdapter: chatAdapter);
     await agent.initialize(employeeId: employeeId); // 传递 employeeId 以加载历史消息
 
+    // 注入 ScheduleTaskTool 回调
+    _injectScheduleTaskCallbacks(agent, employeeId);
+
     // 设置 Provider 配置（从当前设备配置获取）
     final deviceConfig = session.getConfig(deviceId);
     if (deviceConfig?.providerConfig != null) {
@@ -980,6 +997,79 @@ class DeviceClientImpl implements DeviceClient {
 
     _localAgents[employeeId] = agent;
     return agent;
+  }
+
+  /// 将 ScheduledTaskManager 回调注入到 Agent 的 ScheduleTaskTool
+  void _injectScheduleTaskCallbacks(IAgent agent, String agentEmployeeId) {
+    final impl = agent as AgentImpl;
+    final scheduleTool = impl.toolRegistry.getTool('schedule_task');
+    if (scheduleTool is! ScheduleTaskTool) return;
+
+    final now = DateTime.now();
+
+    scheduleTool.onCreateTask = (data) async {
+      final taskType = data['taskType'] as String? ?? 'reminder';
+      final repeatType = data['repeatType'] as String? ?? 'recurring';
+
+      // 解析 schedule 表达式判断调度类型
+      final scheduleExpr = data['schedule'] as String;
+      final scheduleType = _parseScheduleType(scheduleExpr);
+
+      final entity = AiScheduledTaskEntity(
+        uuid: const Uuid().v4(),
+        employeeId: agentEmployeeId,
+        name: data['name'] as String? ?? 'Scheduled task',
+        scheduleType: scheduleType,
+        scheduleExpression: scheduleExpr,
+        repeatType: repeatType,
+        taskType: taskType,
+        taskConfig: jsonEncode({
+          'action': 'sendMessage',
+          'message': data['message'],
+        }),
+        createTime: now,
+        updateTime: now,
+      );
+      final created = await _scheduledTaskManager.createTask(entity);
+      return {
+        'taskId': created.uuid,
+        'name': created.name,
+        'taskType': created.taskType,
+        'schedule': created.scheduleExpression,
+        'nextExecutionAt': created.nextExecutionAt?.toIso8601String(),
+      };
+    };
+
+    scheduleTool.onListTasks = ({String? employeeId}) async {
+      final tasks = await _scheduledTaskManager
+          .getTasks(employeeId: employeeId ?? agentEmployeeId);
+      return tasks.map((t) => <String, dynamic>{
+        'taskId': t.uuid,
+        'name': t.name,
+        'schedule': t.scheduleExpression,
+        'nextExecutionAt': t.nextExecutionAt?.toIso8601String(),
+        'enabled': t.isEnabled,
+      }).toList();
+    };
+
+    scheduleTool.onCancelTask = (taskId) async {
+      try {
+        await _scheduledTaskManager.deleteTask(taskId);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    };
+
+    print('[DeviceClient] ScheduleTaskTool callbacks injected for $agentEmployeeId');
+  }
+
+  /// 解析调度类型：包含空格或星号 → cron，否则 → interval
+  static String _parseScheduleType(String expression) {
+    if (expression.contains(' ') || expression.contains('*')) {
+      return 'cron';
+    }
+    return 'interval';
   }
 
   /// 设置持久化回调
@@ -1164,23 +1254,28 @@ class DeviceClientImpl implements DeviceClient {
       final messageId = data['messageId'] as String?;
 
       // queued：立即推送用户消息到会话列表（同步，无延迟，解决空白期问题）
+      // 定时任务触发的消息（trigger=scheduled_task）不推送，用户不应看到触发指令
       if (status == 'queued' && messageId != null) {
-        final content = data['content'] as String?;
-        if (content != null && content.isNotEmpty) {
-          final msg = AgentMessage(
-            id: messageId,
-            role: data['role'] as String? ?? 'user',
-            type: data['type'] as String? ?? 'text',
-            content: content,
-            createdAt: DateTime.now(),
-            status: status,
-            metadata: Map<String, dynamic>.from(data)..['deviceId'] = deviceId,
-          );
-          _notificationHub.onLocalMessage(
-            message: msg,
-            employeeId: employeeId,
-          );
-          _updateLatestMessageCache(employeeId, deviceId, msg);
+        final metadata = data['metadata'] as Map<String, dynamic>?;
+        final isScheduledTrigger = metadata?['trigger'] == 'scheduled_task';
+        if (!isScheduledTrigger) {
+          final content = data['content'] as String?;
+          if (content != null && content.isNotEmpty) {
+            final msg = AgentMessage(
+              id: messageId,
+              role: data['role'] as String? ?? 'user',
+              type: data['type'] as String? ?? 'text',
+              content: content,
+              createdAt: DateTime.now(),
+              status: status,
+              metadata: Map<String, dynamic>.from(data)..['deviceId'] = deviceId,
+            );
+            _notificationHub.onLocalMessage(
+              message: msg,
+              employeeId: employeeId,
+            );
+            _updateLatestMessageCache(employeeId, deviceId, msg);
+          }
         }
       }
 

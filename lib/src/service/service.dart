@@ -7,3 +7,5 @@ export 'message_store_service.dart';
 export 'skill_manager.dart';
 export 'agent_factory.dart';
 export 'employee_config_service.dart';
+export 'scheduled_task_manager.dart';
+export 'task_executor.dart';

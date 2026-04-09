@@ -1,16 +1,20 @@
 ﻿import 'dart:async';
 import 'dart:convert';
 
+import 'package:uuid/uuid.dart';
+
 import '../agent/adapter/persistent_chat_adapter.dart';
 import '../agent/entity/entity.dart';
 import '../agent/i_agent.dart';
 import '../agent/impl/agent_impl.dart';
 import '../agent/agent_state.dart';
+import '../agent/tool/builtin/schedule_task_tool.dart';
 import '../persistence/persistence.dart';
 import 'employee_manager.dart';
 import 'session_manager.dart';
 import 'message_store_service.dart';
 import 'skill_manager.dart';
+import 'scheduled_task_manager.dart';
 
 /// Agent生命周期类型
 enum AgentLifecycleType { created, destroyed }
@@ -61,6 +65,7 @@ class AgentFactoryImpl implements AgentFactory {
   final SessionManager _sessionManager;
   final MessageStoreService _messageStore;
   final SkillManager _skillManager;
+  final ScheduledTaskManager? _scheduledTaskManager;
 
   /// 判断消息是否应直接写入已读状态的回调
   ///
@@ -75,10 +80,12 @@ class AgentFactoryImpl implements AgentFactory {
     required SessionManager sessionManager,
     required MessageStoreService messageStore,
     required SkillManager skillManager,
+    ScheduledTaskManager? scheduledTaskManager,
   })  : _employeeManager = employeeManager,
        _sessionManager = sessionManager,
        _messageStore = messageStore,
-       _skillManager = skillManager;
+       _skillManager = skillManager,
+       _scheduledTaskManager = scheduledTaskManager;
 
   @override
   Future<IAgent> getOrCreateAgent({
@@ -140,10 +147,83 @@ class AgentFactoryImpl implements AgentFactory {
       await agent.setContext({'systemPrompt': employee.systemPrompt});
     }
 
+    // 注入 ScheduleTaskTool 回调
+    _injectScheduleTaskCallbacks(agent, employeeId);
+
     _agents[employeeId] = agent;
     _notifyLifecycle(AgentLifecycleType.created, agent);
 
     return agent;
+  }
+
+  /// 将 ScheduledTaskManager 的回调注入到 Agent 的 ScheduleTaskTool
+  void _injectScheduleTaskCallbacks(IAgent agent, String employeeId) {
+    if (_scheduledTaskManager == null) return;
+
+    // 找到 Agent 内部的 ScheduleTaskTool 并注入回调
+    final impl = agent as AgentImpl;
+    final scheduleTool = impl.toolRegistry.getTool('schedule_task');
+    if (scheduleTool is! ScheduleTaskTool) return;
+
+    final agentEmployeeId = employeeId; // 避免闭包中 shadow
+
+    final now = DateTime.now();
+
+    scheduleTool.onCreateTask = (data) async {
+      final taskType = data['taskType'] as String? ?? 'reminder';
+      final repeatType = data['repeatType'] as String? ?? 'recurring';
+
+      // 解析 schedule 表达式判断调度类型
+      final scheduleExpr = data['schedule'] as String;
+      final scheduleType = _parseScheduleType(scheduleExpr);
+
+      final entity = AiScheduledTaskEntity(
+        uuid: const Uuid().v4(),
+        employeeId: agentEmployeeId,
+        name: data['name'] as String? ?? 'Scheduled task',
+        scheduleType: scheduleType,
+        scheduleExpression: scheduleExpr,
+        repeatType: repeatType,
+        taskType: taskType,
+        taskConfig: jsonEncode({
+          'action': 'sendMessage',
+          'message': data['message'],
+        }),
+        createTime: now,
+        updateTime: now,
+      );
+      final created = await _scheduledTaskManager.createTask(entity);
+      return {
+        'taskId': created.uuid,
+        'name': created.name,
+        'taskType': created.taskType,
+        'schedule': created.scheduleExpression,
+        'nextExecutionAt': created.nextExecutionAt?.toIso8601String(),
+      };
+    };
+
+    scheduleTool.onListTasks = ({String? employeeId}) async {
+      final tasks = await _scheduledTaskManager
+          .getTasks(employeeId: employeeId ?? agentEmployeeId);
+      return tasks.map((t) => <String, dynamic>{
+        'taskId': t.uuid,
+        'name': t.name,
+        'schedule': t.scheduleExpression,
+        'nextExecutionAt': t.nextExecutionAt?.toIso8601String(),
+        'enabled': t.isEnabled,
+      }).toList();
+    };
+
+    scheduleTool.onCancelTask = (taskId) async {
+      try {
+        await _scheduledTaskManager.deleteTask(taskId);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    };
+
+    print('[AgentFactory] ScheduleTaskTool callbacks injected for $agentEmployeeId');
   }
 
   void _setupPersistCallbacks(
@@ -257,5 +337,15 @@ class AgentFactoryImpl implements AgentFactory {
   /// 释放资源
   void dispose() {
     _lifecycleController.close();
+  }
+
+  /// 根据 schedule 表达式判断调度类型
+  ///
+  /// 包含空格或星号 → cron，否则 → interval
+  static String _parseScheduleType(String expression) {
+    if (expression.contains(' ') || expression.contains('*')) {
+      return 'cron';
+    }
+    return 'interval';
   }
 }

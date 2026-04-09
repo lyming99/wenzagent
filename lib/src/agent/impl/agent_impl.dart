@@ -2,6 +2,7 @@
 
 import 'package:uuid/uuid.dart';
 
+import '../../../wenzagent.dart';
 import '../agent_state.dart';
 import '../entity/entity.dart';
 import '../i_agent.dart';
@@ -38,6 +39,9 @@ class AgentImpl implements IAgent {
 
   /// 工具注册器
   final ToolRegistry _toolRegistry = ToolRegistry();
+
+  /// 获取工具注册器（供内部模块注入回调使用）
+  ToolRegistry get toolRegistry => _toolRegistry;
 
   /// 权限管理器
   final ToolPermissionManager _permissionManager = ToolPermissionManager();
@@ -197,6 +201,9 @@ class AgentImpl implements IAgent {
         extraData['role'] = msgMap['role'] ?? 'user';
         extraData['type'] = msgMap['type'] ?? 'text';
         extraData['content'] = msgMap['content'];
+        if (msgMap['metadata'] != null) {
+          extraData['metadata'] = msgMap['metadata'];
+        }
       }
       _broadcasterBroadcastMessageStatusChange(
         messageId: messageId,
@@ -204,6 +211,8 @@ class AgentImpl implements IAgent {
         error: error,
         extraData: extraData,
       );
+
+
     };
 
     _touch();
@@ -742,6 +751,134 @@ class AgentImpl implements IAgent {
       _lockCompleter = null;
       completer?.complete();
     }
+  }
+
+  /// 注入一条 assistant 消息（不触发 LLM）
+  ///
+  /// 用于定时任务等场景：sub-agent 生成内容后，直接注入到主 agent 会话中。
+  /// 消息会被写入 adapter session（内存）和持久化存储（Hive），
+  /// 并通过事件流广播 messageStatusChanged，让 UI 能正常收到。
+  Future<void> injectAssistantMessage({
+    required String messageId,
+    required String content,
+  }) async {
+    if (_status == AgentStatus.disposed) return;
+
+    // 1. 写入 adapter session + 持久化
+    if (_chatAdapter is PersistentChatAdapter) {
+      (_chatAdapter as PersistentChatAdapter)
+          .injectAssistantMessage(messageId, content, 'default');
+    }
+
+    // 2. 广播 completed 事件（UI 监听此事件渲染消息）
+    _broadcasterBroadcastMessageStatusChange(
+      messageId: messageId,
+      status: AgentMessageStatus.completed,
+      extraData: {
+        'role': 'assistant',
+        'type': 'text',
+        'content': content,
+      },
+    );
+
+    _touch();
+  }
+
+  /// 触发定时任务（注入 system 消息 + 触发 LLM 处理）
+  ///
+  /// 1. 将任务内容以 system 消息注入到会话（role=system，持久化）
+  /// 2. 发送一条 user 消息触发 LLM 处理（走完整的 streamMessage 流程）
+  /// 3. 用户不会看到 system 消息和触发消息，只看到 LLM 的自然回复
+  Future<String?> triggerSystemTask({
+    required String taskContent,
+    String? taskName,
+  }) async {
+    if (_status == AgentStatus.disposed) return null;
+    _touch();
+
+    // 1. 注入 system 消息（role=system，写入 session + 持久化）
+    final systemMsgId = const Uuid().v4();
+    final systemContent = taskName != null
+        ? '【定时任务：$taskName】\n$taskContent'
+        : '【定时任务触发】\n$taskContent';
+
+    if (_chatAdapter is PersistentChatAdapter) {
+      (_chatAdapter as PersistentChatAdapter)
+          .injectSystemMessage(systemMsgId, systemContent, 'default');
+    }
+
+    // 2. 发送 user 消息触发 LLM 处理（metadata 标记 trigger=scheduled_task，
+    //    queued 状态会被 device_client 过滤，用户不可见）
+    final userMsgId = const Uuid().v4();
+
+    return await _withLock(() async {
+      final messageData = {
+        'id': userMsgId,
+        'role': 'system',
+        'type': 'text',
+        'content': taskContent,
+        'createdAt': DateTime.now().toIso8601String(),
+        'metadata': {
+          'trigger': 'scheduled_task',
+          'scheduledSystemMessageId': systemMsgId,
+        },
+      };
+      await _processor?.submitMessage(userMsgId, messageData);
+      return userMsgId;
+    });
+  }
+
+  /// 注入一条提醒类助手消息（不调用 LLM API）
+  ///
+  /// 用于定时提醒场景：提醒内容在创建时已预渲染，
+  /// 触发时直接写入会话并广播给设备，用户看到的是一条助手消息。
+  Future<String?> injectReminderMessage({
+    required String content,
+    String? taskName,
+    String? taskId,
+  }) async {
+    if (_status == AgentStatus.disposed) return null;
+    _touch();
+
+    final msgId = const Uuid().v4();
+    final now = DateTime.now();
+
+    if (_chatAdapter is PersistentChatAdapter) {
+      (_chatAdapter as PersistentChatAdapter)
+          .injectAssistantMessage(msgId, content, 'system');
+    }
+
+    // 广播消息状态变更（completed），与正常助手消息完成流程一致
+    _broadcasterBroadcastMessageStatusChange(
+      messageId: msgId,
+      status: AgentMessageStatus.completed,
+      extraData: {
+        'role': 'assistant',
+        'content': content,
+        'createdAt': now.toIso8601String(),
+        'metadata': {
+          'trigger': 'scheduled_reminder',
+          'taskName': taskName,
+          'taskId': taskId,
+        },
+      },
+    );
+
+    // 强制广播 agentStatusChanged(idle)，触发前端刷新消息列表
+    // 与正常助手消息完成后的状态变更流程一致
+    // 注入消息时 Agent 本身就是 idle，_setStatus 的 guard 会阻止重复广播，
+    // 所以直接通过 controller 推送，绕过 guard
+    if (!_stateController.isClosed && !_eventController.isClosed) {
+      final snapshot = getStateSnapshot();
+      _stateController.add(snapshot);
+      _eventController.add({
+        'type': 'agentStatusChanged',
+        'data': snapshot.toMap(),
+        'employeeId': employeeId,
+      });
+    }
+
+    return msgId;
   }
 
   /// 广播消息状态变更

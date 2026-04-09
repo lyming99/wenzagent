@@ -8,6 +8,7 @@ import 'file_list_tool.dart';
 import 'file_read_tool.dart';
 import 'file_search_tool.dart';
 import 'file_write_tool.dart';
+import 'schedule_task_tool.dart';
 
 /// 内置工具集合
 ///
@@ -27,6 +28,7 @@ class BuiltinTools {
       FileInfoTool(),
       FileDeleteTool(),
       DirectoryCreateTool(),
+      ScheduleTaskTool(),
     ];
   }
 

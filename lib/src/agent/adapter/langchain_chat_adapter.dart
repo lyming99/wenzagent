@@ -386,9 +386,11 @@ class LangChainChatAdapter implements IChatAdapter {
           final stopwatch = Stopwatch()..start();
           ToolResult result;
           _currentTool = tool;  // 记录当前工具用于取消
+          print('[LangChainChatAdapter] 执行工具: $toolName, arguments: $toolArguments');
           try {
-            // 使用可取消的执行器
-            final executor = CancellableToolExecutor(tool, cancellationToken!);
+            // 使用可取消的执行器（cancellationToken 为 null 时用默认值）
+            final token = cancellationToken ?? CancellationToken();
+            final executor = CancellableToolExecutor(tool, token);
             result = await executor.execute(toolArguments);
           } on ToolCancelledException {
             yield StreamResponse.error('Cancelled');
@@ -399,6 +401,8 @@ class LangChainChatAdapter implements IChatAdapter {
             _currentTool = null;  // 清除当前工具
           }
           stopwatch.stop();
+          print('[LangChainChatAdapter] 工具执行完成: $toolName, isError=${result.isError}, '
+              'duration=${stopwatch.elapsedMilliseconds}ms, result=${result.content}');
 
           // 将工具结果加入历史
           memoryManager.addMessage(
@@ -662,7 +666,7 @@ class LangChainChatAdapter implements IChatAdapter {
       );
     }
 
-    // 3. 补充信息
+    // 4. 补充信息
     final additionalInfo = _context!['additionalInfo'];
     if (additionalInfo != null) {
       parts.add('补充信息:\n$additionalInfo');

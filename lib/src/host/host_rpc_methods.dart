@@ -1,4 +1,4 @@
-﻿import '../persistence/persistence.dart';
+import '../persistence/persistence.dart';
 import '../rpc/remote_call_server.dart';
 import '../service/service.dart';
 import 'client_session_manager.dart';
@@ -34,6 +34,16 @@ class HostRpcConfig {
   static const String methodGetOnlineDevices = 'getOnlineDevices';
   static const String methodGetDeviceInfo = 'getDeviceInfo';
   static const String methodUpdateDeviceInfo = 'updateDeviceInfo';
+
+  // ===== 定时任务管理 =====
+  static const String methodGetScheduledTasks = 'hostGetScheduledTasks';
+  static const String methodGetScheduledTask = 'hostGetScheduledTask';
+  static const String methodCreateScheduledTask = 'hostCreateScheduledTask';
+  static const String methodUpdateScheduledTask = 'hostUpdateScheduledTask';
+  static const String methodDeleteScheduledTask = 'hostDeleteScheduledTask';
+  static const String methodEnableScheduledTask = 'hostEnableScheduledTask';
+  static const String methodDisableScheduledTask = 'hostDisableScheduledTask';
+  static const String methodTriggerScheduledTask = 'hostTriggerScheduledTask';
 }
 
 /// 注册Host端RPC方法
@@ -44,6 +54,7 @@ void registerHostRpcMethods({
   required SkillManager skillManager,
   required MessageStoreService messageStore,
   required ClientSessionManager clientSessionManager,
+  ScheduledTaskManager? scheduledTaskManager,
 }) {
   // ===== 员工管理方法 =====
 
@@ -243,5 +254,81 @@ void registerHostRpcMethods({
         'clientCount': clients.length,
       },
     };
+  });
+
+  // ===== 定时任务管理方法 =====
+  if (scheduledTaskManager != null) {
+    _registerScheduledTaskRpcMethods(
+      rpcServer: rpcServer,
+      manager: scheduledTaskManager,
+    );
+  }
+}
+
+/// 注册定时任务相关的 RPC 方法
+void _registerScheduledTaskRpcMethods({
+  required RemoteCallServer rpcServer,
+  required ScheduledTaskManager manager,
+}) {
+  // 获取任务列表
+  rpcServer.register(HostRpcConfig.methodGetScheduledTasks, (params) async {
+    final tasks = await manager.getTasks(
+      employeeId: params['employeeId'] as String?,
+    );
+    return {'tasks': tasks.map((t) => t.toMap()).toList()};
+  });
+
+  // 获取单个任务
+  rpcServer.register(HostRpcConfig.methodGetScheduledTask, (params) async {
+    final uuid = params['uuid'] as String;
+    final task = await manager.getTask(uuid);
+    if (task == null) {
+      throw Exception('Scheduled task not found: $uuid');
+    }
+    return {'task': task.toMap()};
+  });
+
+  // 创建任务
+  rpcServer.register(HostRpcConfig.methodCreateScheduledTask, (params) async {
+    final taskData = params['task'] as Map<String, dynamic>;
+    final task = AiScheduledTaskEntity.fromMap(taskData);
+    final created = await manager.createTask(task);
+    return {'task': created.toMap()};
+  });
+
+  // 更新任务
+  rpcServer.register(HostRpcConfig.methodUpdateScheduledTask, (params) async {
+    final taskData = params['task'] as Map<String, dynamic>;
+    final task = AiScheduledTaskEntity.fromMap(taskData);
+    final updated = await manager.updateTask(task);
+    return {'task': updated.toMap()};
+  });
+
+  // 删除任务
+  rpcServer.register(HostRpcConfig.methodDeleteScheduledTask, (params) async {
+    final uuid = params['uuid'] as String;
+    await manager.deleteTask(uuid);
+    return {'success': true};
+  });
+
+  // 启用任务
+  rpcServer.register(HostRpcConfig.methodEnableScheduledTask, (params) async {
+    final uuid = params['uuid'] as String;
+    await manager.enableTask(uuid);
+    return {'success': true};
+  });
+
+  // 禁用任务
+  rpcServer.register(HostRpcConfig.methodDisableScheduledTask, (params) async {
+    final uuid = params['uuid'] as String;
+    await manager.disableTask(uuid);
+    return {'success': true};
+  });
+
+  // 立即触发
+  rpcServer.register(HostRpcConfig.methodTriggerScheduledTask, (params) async {
+    final uuid = params['uuid'] as String;
+    await manager.triggerTaskNow(uuid);
+    return {'success': true};
   });
 }

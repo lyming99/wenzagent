@@ -273,6 +273,53 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     return await super.getSessionMessages(employeeId);
   }
 
+  /// 注入一条 assistant 消息到当前会话
+  ///
+  /// 不触发 LLM，直接写入 session 内存 + 持久化到 Hive。
+  /// 用于定时任务、系统通知等场景。
+  void injectAssistantMessage(String messageId, String content, String deviceIdentifier) {
+    final session = memoryManager.getSession(currentEmployeeUuid!);
+    if (session == null) return;
+
+    final now = DateTime.now();
+    final wrapper = MessageWrapper(
+      uuid: messageId,
+      message: ChatMessage.ai(content),
+      createdAt: now,
+      metadata: {'status': 'completed'},
+    );
+    session.addMessageWrapper(deviceIdentifier, wrapper);
+
+    // 持久化到 Hive
+    final messageMap = _messageWrapperToMap(wrapper);
+    _persistedMessageIds.add(messageId);
+    _persistMessage(messageMap);
+  }
+
+  /// 注入一条 system 消息到当前会话
+  ///
+  /// 不触发 LLM，直接写入 session 内存 + 持久化到 Hive。
+  /// 用于定时任务触发等场景，将任务指令以 system 角色注入会话，
+  /// 之后由 AgentImpl 触发一次 sendMessage 让 LLM 处理。
+  void injectSystemMessage(String messageId, String content, String deviceIdentifier) {
+    final session = memoryManager.getSession(currentEmployeeUuid!);
+    if (session == null) return;
+
+    final now = DateTime.now();
+    final wrapper = MessageWrapper(
+      uuid: messageId,
+      message: ChatMessage.system(content),
+      createdAt: now,
+      metadata: {'status': 'completed', 'trigger': 'scheduled_task'},
+    );
+    session.addMessageWrapper(deviceIdentifier, wrapper);
+
+    // 持久化到 Hive
+    final messageMap = _messageWrapperToMap(wrapper);
+    _persistedMessageIds.add(messageId);
+    _persistMessage(messageMap);
+  }
+
   /// 持久化新添加的消息
   Future<void> _persistNewMessages(
     SessionHistory? session,
