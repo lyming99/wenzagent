@@ -1,13 +1,10 @@
 ﻿import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:uuid/uuid.dart';
 
 import '../../../wenzagent.dart';
-import '../agent_state.dart';
-import '../entity/entity.dart';
-import '../i_agent.dart';
-import '../processor/interrupt_judge.dart';
-import '../processor/message_processor.dart';
 import '../tool/agent_tool.dart';
 import '../tool/builtin/builtin_tools.dart';
 import '../tool/permission_manager.dart';
@@ -51,6 +48,12 @@ class AgentImpl implements IAgent {
 
   /// 待处理的权限请求信息
   final Map<String, AgentPermissionRequest> _pendingPermissionRequests = {};
+
+  /// 技能管理器
+  SkillLifecycleManager? _skillManager;
+
+  /// 是否已启用技能系统
+  bool _enableSkills = false;
 
   /// 消息接收状态跟踪
   /// Map<messageId, Map<receiverDeviceId, updateTime>>
@@ -114,7 +117,11 @@ class AgentImpl implements IAgent {
   // ===== IAgent: 生命周期 =====
 
   @override
-  Future<void> initialize({String? employeeId, bool enableBuiltinTools = true}) async {
+  Future<void> initialize({
+    String? employeeId,
+    bool enableBuiltinTools = true,
+    bool enableSkills = true,
+  }) async {
     // 初始化适配器
     await _chatAdapter.initSession(
       employeeId: employeeId ?? this.employeeId,
@@ -123,6 +130,11 @@ class AgentImpl implements IAgent {
     // 注册内置工具（可选）
     if (enableBuiltinTools) {
       _toolRegistry.registerTools(BuiltinTools.all());
+    }
+
+    // 初始化技能系统（在工具注册器和适配器设置之后）
+    if (enableSkills) {
+      await _initSkillSystem(employeeId ?? this.employeeId);
     }
 
     // 设置工具注册器和权限管理器到适配器
@@ -237,6 +249,9 @@ class AgentImpl implements IAgent {
     _processor?.dispose();
     _processor = null;
 
+    await _skillManager?.dispose();
+    _skillManager = null;
+
     await _chatAdapter.dispose();
     await _stateController.close();
     await _eventController.close();
@@ -254,6 +269,153 @@ class AgentImpl implements IAgent {
   void detach() {
     if (_refCount > 0) _refCount--;
     _touch();
+  }
+
+  // ===== Skill 系统 =====
+
+  /// 是否启用技能系统
+  bool get isSkillEnabled => _enableSkills;
+
+  /// 获取技能管理器
+  SkillLifecycleManager? get skillManager => _skillManager;
+
+  /// 运行时动态添加技能
+  Future<void> addSkill(Skill skill) async {
+    if (_skillManager == null) return;
+    await _skillManager!.loadSkill(skill);
+  }
+
+  /// 运行时移除技能
+  Future<void> removeSkill(String skillId) async {
+    await _skillManager?.unloadSkill(skillId);
+  }
+
+  /// 运行时重新加载技能
+  Future<void> reloadSkill(String skillId) async {
+    await _skillManager?.reloadSkill(skillId);
+  }
+
+  /// 初始化技能系统
+  Future<void> _initSkillSystem(String employeeId) async {
+    print('[Skill] ========== 开始初始化技能系统, employeeId=$employeeId ==========');
+
+    final context = SkillContext(
+      toolRegistry: _toolRegistry,
+      employeeId: employeeId,
+      invokeLlm: (prompt) => _chatAdapter.invokeOnce(prompt),
+      logger: (level, msg) => print('[Skill][$level] $msg'),
+    );
+
+    _skillManager = SkillLifecycleManager(context);
+
+    // 从数据库加载 Type 1 (mcp) 和 Type 3 (config) 技能
+    await _loadPersistedSkills(employeeId);
+
+    // 扫描文件夹加载 Type 2 (folder) 技能
+    await _scanFolderSkills(context);
+
+    _enableSkills = true;
+    print('[Skill] ========== 技能系统初始化完成 ==========');
+  }
+
+  /// 从数据库加载持久化技能
+  Future<void> _loadPersistedSkills(String employeeId) async {
+    final store = SkillStore();
+    print('[Skill] 开始加载持久化技能, employeeId=$employeeId');
+
+    final entities = await store.findByEmployeeWithDeviceId(null, employeeId);
+    print('[Skill] 数据库查询完成, 共 ${entities.length} 条技能记录');
+
+    int loaded = 0;
+    int skipped = 0;
+    int failed = 0;
+
+    for (final entity in entities) {
+      print('[Skill] 处理技能: uuid=${entity.uuid}, name=${entity.name}, '
+          'type=${entity.skillType}, enabled=${entity.enabled}, '
+          'config=${entity.config?.substring(0, entity.config!.length > 80 ? 80 : entity.config!.length)}');
+
+      if (entity.enabled != 1) {
+        print('[Skill] 跳过已禁用技能: ${entity.name}');
+        skipped++;
+        continue;
+      }
+
+      Skill? skill;
+      switch (entity.skillType) {
+        case 'mcp':
+          try {
+            skill = McpSkill.fromEntity(entity);
+            print('[Skill] MCP 技能实体创建成功: ${entity.name}');
+          } catch (e) {
+            print('[Skill] MCP 技能实体创建失败: ${entity.name}, $e');
+          }
+          break;
+        case 'config':
+          try {
+            skill = ConfigSkill.fromEntity(entity);
+            print('[Skill] Config 技能实体创建成功: ${entity.name}');
+          } catch (e) {
+            print('[Skill] Config 技能实体创建失败: ${entity.name}, $e');
+          }
+          break;
+        case 'folder':
+          String? folderPath;
+          try {
+            final configMap = jsonDecode(entity.config!) as Map<String, dynamic>;
+            folderPath = configMap['folder_path'] as String?;
+          } catch (_) {
+            folderPath = entity.config;
+          }
+          if (folderPath != null && folderPath.isNotEmpty) {
+            final s = FolderSkill(path: folderPath, id: entity.uuid, name: entity.name);
+            s.setContext(SkillContext(
+              toolRegistry: _toolRegistry,
+              employeeId: employeeId,
+              invokeLlm: (prompt) => _chatAdapter.invokeOnce(prompt),
+              logger: (level, msg) => print('[Skill][$level] $msg'),
+            ));
+            skill = s;
+            print('[Skill] Folder 技能实体创建成功: ${entity.name}, path=$folderPath');
+          } else {
+            print('[Skill] Folder 技能跳过(无路径): ${entity.name}');
+          }
+          break;
+        default:
+          print('[Skill] 未知技能类型: ${entity.skillType}, name=${entity.name}');
+          break;
+      }
+
+      if (skill != null) {
+        try {
+          await _skillManager!.loadSkill(skill);
+          print('[Skill] 技能加载并激活成功: ${entity.name}');
+          loaded++;
+        } catch (e, st) {
+          print('[Skill] 技能加载失败: ${entity.name}, error=$e\n$st');
+          failed++;
+        }
+      }
+    }
+
+    print('[Skill] 持久化技能加载完成: 成功=$loaded, 跳过=$skipped, 失败=$failed');
+  }
+
+  /// 扫描文件夹技能
+  Future<void> _scanFolderSkills(SkillContext context) async {
+    final skillsDir = Directory('skills${Platform.pathSeparator}folder');
+    if (!await skillsDir.exists()) return;
+
+    await for (final entity in skillsDir.list()) {
+      if (entity is! Directory) continue;
+      final skill = FolderSkill(path: entity.path, id: entity.path);
+      skill.setContext(context);
+      try {
+        await _skillManager!.loadSkill(skill);
+      } catch (e) {
+        print('[Skill] 文件夹加载失败: ${entity.path}, $e');
+      }
+    }
   }
 
   // ===== IAgent: 对话操作 =====

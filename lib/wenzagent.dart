@@ -27,3 +27,17 @@ export 'src/host/host.dart';
 
 // Scheduler
 export 'src/scheduler/scheduler.dart';
+
+// Skill
+export 'src/skill/skill.dart';
+export 'src/skill/skill_context.dart';
+export 'src/skill/skill_manager.dart';
+export 'src/skill/config/config_skill.dart';
+export 'src/skill/config/config_tool_adapter.dart';
+export 'src/skill/folder/folder_skill.dart';
+export 'src/skill/folder/folder_tool_adapter.dart';
+export 'src/skill/folder/skill_md_parser.dart';
+export 'src/skill/mcp/mcp_skill.dart';
+export 'src/skill/mcp/mcp_tool_adapter.dart';
+export 'src/skill/mcp/mcp_client.dart';
+export 'src/skill/mcp/mcp_client_impl.dart';

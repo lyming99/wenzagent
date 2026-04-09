@@ -31,7 +31,8 @@ abstract class IAgent {
   /// 初始化 Agent
   ///
   /// [employeeId] 指定员工ID，为 null 则查找或创建新会话
-  Future<void> initialize({String? employeeId});
+  Future<void> initialize(
+      {String? employeeId, bool enableBuiltinTools = true, bool enableSkills = true,});
 
   /// 销毁 Agent，释放所有资源
   Future<void> dispose();
@@ -207,10 +208,8 @@ abstract class IAgent {
   ///
   /// [requestId] 权限请求ID
   /// [decision] 用户的权限决策
-  Future<void> respondToPermission(
-    String requestId,
-    PermissionDecision decision,
-  );
+  Future<void> respondToPermission(String requestId,
+      PermissionDecision decision,);
 
   /// 获取当前权限请求（如果有）
   ///

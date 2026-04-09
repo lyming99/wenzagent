@@ -13,6 +13,7 @@ dependencies:
   web_socket_channel: ^3.0.1
   crypto: ^3.0.6
   path: ^1.9.0
+  yaml: ^3.1.2
   meta: ^1.12.0
   # Hive for local storage
   hive: ^2.2.3
@@ -21,6 +22,8 @@ dependencies:
   langchain_openai: ^0.8.0
   langchain_anthropic: ^0.3.0
   # langchain_google: ^0.7.0  # 暂时禁用：存在 googleai_dart API 兼容性问题
+  # MCP SDK
+  mcp_dart: ^2.1.0
 
 dev_dependencies:
   lints: ^6.0.0

@@ -68,7 +68,7 @@ class McpRetryConfig {
 
 /// MCP服务器配置
 ///
-/// 支持标准MCP协议格式，包括stdio、SSE、WebSocket传输类型
+/// 支持标准MCP协议格式，包括stdio、SSE、HTTP传输类型
 class McpServerConfig {
   /// 服务名称（唯一标识）
   final String name;
@@ -79,7 +79,7 @@ class McpServerConfig {
   /// 描述
   final String? description;
 
-  /// 传输类型: 'stdio' | 'sse' | 'websocket'
+  /// 传输类型: 'stdio' | 'sse' | 'http'
   final String transportType;
 
   /// 启动命令（stdio类型）
@@ -91,7 +91,7 @@ class McpServerConfig {
   /// 环境变量
   final Map<String, String>? env;
 
-  /// 服务URL（sse/websocket类型）
+  /// 服务URL（sse/http类型）
   final String? url;
 
   /// HTTP头（sse类型）
@@ -256,12 +256,13 @@ class McpServerConfig {
     );
   }
 
-  /// 创建WebSocket类型的配置
-  factory McpServerConfig.websocket({
+  /// 创建HTTP类型的配置
+  factory McpServerConfig.http({
     required String name,
     String? displayName,
     String? description,
     required String url,
+    Map<String, String>? headers,
     bool enabled = true,
     bool autoStart = true,
     int? timeout,
@@ -271,8 +272,9 @@ class McpServerConfig {
       name: name,
       displayName: displayName,
       description: description,
-      transportType: 'websocket',
+      transportType: 'http',
       url: url,
+      headers: headers,
       enabled: enabled,
       autoStart: autoStart,
       timeout: timeout,

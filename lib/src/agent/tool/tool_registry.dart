@@ -41,6 +41,13 @@ class ToolRegistry {
   /// 获取所有工具名称
   List<String> get toolNames => _tools.keys.toList();
 
+  /// 注册或覆盖工具（技能热更新时使用）
+  ///
+  /// 如果已存在同名工具，直接替换；否则新增。
+  void registerOrReplaceTool(AgentTool tool) {
+    _tools[tool.name] = tool;
+  }
+
   /// 是否包含指定工具
   bool contains(String name) => _tools.containsKey(name);
 

@@ -398,7 +398,6 @@ class MessageProcessor {
       bool hasContent = false;
 
       await for (final response in stream) {
-        print('[MessageProcessor] response: ${response.isDone ? "DONE" : response.error != null ? "ERROR: ${response.error}" : "CHUNK: ${response.content?.substring(0, (response.content?.length ?? 0).clamp(0, 30))}"}');
         if (_currentCancellationToken?.isCancelled ?? false) {
           print('[MessageProcessor] cancelled');
           break;
