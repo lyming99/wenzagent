@@ -74,7 +74,12 @@ class SessionManagerImpl implements SessionManager {
   Future<AiEmployeeSessionEntity> getOrCreateSession(
     String employeeId,
   ) async {
-    return _sessionStore.getOrCreate(employeeId);
+    final session = await _sessionStore.getOrCreate(employeeId);
+    // 如果是复活（deleted 变为 0）也视为创建事件，通知列表刷新
+    if (session.deleted == 0) {
+      _notifyChange(SessionChangeType.created, session);
+    }
+    return session;
   }
 
   @override
@@ -110,7 +115,6 @@ class SessionManagerImpl implements SessionManager {
 
     session.config[deviceId] = updatedConfig;
     await save(session.copyWith(updateTime: DateTime.now()));
-    _notifyChange(SessionChangeType.updated, session);
   }
 
   @override
@@ -138,11 +142,13 @@ class SessionManagerImpl implements SessionManager {
   @override
   Future<void> save(AiEmployeeSessionEntity session) async {
     await _sessionStore.save(session);
+    _notifyChange(SessionChangeType.updated, session);
   }
 
   @override
   Future<void> deleteSession(String employeeId) async {
-    await _sessionStore.hardDelete(employeeId);
+    // 使用软删除，保留记录以便同步时识别已删除状态，防止其他设备同步回写
+    await _sessionStore.delete(employeeId);
     _notifyChange(SessionChangeType.deleted, employeeId);
   }
 
@@ -156,7 +162,6 @@ class SessionManagerImpl implements SessionManager {
       updateTime: DateTime.now(),
     );
     await save(updated);
-    _notifyChange(SessionChangeType.archived, updated);
   }
 
   @override

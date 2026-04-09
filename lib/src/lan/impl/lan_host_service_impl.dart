@@ -350,8 +350,15 @@ class LanHostServiceImpl implements LanHostService {
           );
         }
 
+        // 从 content JSON 中解析设备信息
+        String? clientIp;
+        try {
+          final contentData = jsonDecode(msg.content!) as Map<String, dynamic>;
+          clientIp = contentData['ip'] as String?;
+        } catch (_) {}
+
         _clients[idx] = _clients[idx].copyWith(
-          ip: msg.content,
+          ip: clientIp,
           name: msg.fromName,
           deviceId: msg.fileName,
           topic: msg.topic,

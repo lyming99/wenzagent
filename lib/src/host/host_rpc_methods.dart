@@ -33,6 +33,7 @@ class HostRpcConfig {
   // ===== 设备管理 =====
   static const String methodGetOnlineDevices = 'getOnlineDevices';
   static const String methodGetDeviceInfo = 'getDeviceInfo';
+  static const String methodUpdateDeviceInfo = 'updateDeviceInfo';
 }
 
 /// 注册Host端RPC方法

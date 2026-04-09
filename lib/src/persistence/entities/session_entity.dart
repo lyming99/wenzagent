@@ -123,10 +123,25 @@ class AiEmployeeSessionEntity {
   DateTime createTime;
   DateTime updateTime;
 
+  /// 本地删除时间（用于同步合并判断）
+  /// 如果 deleteTime < updateTime，说明删除后有新消息，会话被重新激活
+  DateTime? deleteTime;
+
   // ===== 便捷访问器 =====
 
   /// 获取指定设备的配置
   DeviceSessionConfig? getConfig(String deviceId) => config[deviceId];
+
+  /// 是否处于有效删除状态
+  ///
+  /// 删除后若有新消息（updateTime > deleteTime），会话自动复活。
+  bool isEffectivelyDeleted() {
+    if (deleted != 1) return false;
+    // 有 deleteTime 且 deleteTime >= updateTime → 仍处于删除状态
+    // deleteTime < updateTime → 删除后有新活动，已复活
+    if (deleteTime == null) return true;
+    return !updateTime.isAfter(deleteTime!);
+  }
 
   /// 获取或创建设备配置
   DeviceSessionConfig getOrCreateConfig(String deviceId) {
@@ -143,6 +158,7 @@ class AiEmployeeSessionEntity {
     this.isArchived = 0,
     this.isPinned = 0,
     this.deleted = 0,
+    this.deleteTime,
     required this.createTime,
     required this.updateTime,
   }) : config = config ?? {};
@@ -168,6 +184,11 @@ class AiEmployeeSessionEntity {
       isArchived: map['isArchived'] as int? ?? 0,
       isPinned: map['isPinned'] as int? ?? 0,
       deleted: map['deleted'] as int? ?? 0,
+      deleteTime: map['deleteTime'] != null
+          ? (map['deleteTime'] is DateTime
+              ? map['deleteTime'] as DateTime
+              : DateTime.fromMillisecondsSinceEpoch(map['deleteTime'] as int))
+          : null,
       createTime: map['createTime'] is DateTime
           ? map['createTime'] as DateTime
           : DateTime.fromMillisecondsSinceEpoch(map['createTime'] as int? ?? 0),
@@ -209,6 +230,11 @@ class AiEmployeeSessionEntity {
       isArchived: map['isArchived'] as int? ?? 0,
       isPinned: map['isPinned'] as int? ?? 0,
       deleted: map['deleted'] as int? ?? 0,
+      deleteTime: map['deleteTime'] != null
+          ? (map['deleteTime'] is DateTime
+              ? map['deleteTime'] as DateTime
+              : DateTime.fromMillisecondsSinceEpoch(map['deleteTime'] as int))
+          : null,
       createTime: map['createTime'] is DateTime
           ? map['createTime'] as DateTime
           : DateTime.fromMillisecondsSinceEpoch(map['createTime'] as int? ?? 0),
@@ -229,6 +255,7 @@ class AiEmployeeSessionEntity {
       'isArchived': isArchived,
       'isPinned': isPinned,
       'deleted': deleted,
+      'deleteTime': deleteTime?.millisecondsSinceEpoch,
       'createTime': createTime.millisecondsSinceEpoch,
       'updateTime': updateTime.millisecondsSinceEpoch,
     };
@@ -242,6 +269,7 @@ class AiEmployeeSessionEntity {
     int? isArchived,
     int? isPinned,
     int? deleted,
+    DateTime? deleteTime,
     DateTime? createTime,
     DateTime? updateTime,
   }) {
@@ -252,6 +280,7 @@ class AiEmployeeSessionEntity {
       isArchived: isArchived ?? this.isArchived,
       isPinned: isPinned ?? this.isPinned,
       deleted: deleted ?? this.deleted,
+      deleteTime: deleteTime ?? this.deleteTime,
       createTime: createTime ?? this.createTime,
       updateTime: updateTime ?? this.updateTime,
     );

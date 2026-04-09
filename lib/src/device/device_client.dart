@@ -92,6 +92,12 @@ abstract class DeviceClient {
   /// 连接状态流
   Stream<DeviceConnectionState> get onStateChanged;
 
+  /// 员工在线状态变化流
+  ///
+  /// 当员工的在线状态发生变化时发布事件。
+  /// 通过 deviceId 统一感知：局域网断开、设备下线通知等。
+  Stream<EmployeeOnlineEvent> get onEmployeeOnlineChanged;
+
   /// Agent 事件流
   Stream<Map<String, dynamic>> get onAgentEvent;
 
@@ -123,6 +129,21 @@ abstract class DeviceClient {
   EmployeeConfigService get configService;
 
   // ===== 连接管理 =====
+
+  /// Ping 指定员工，检测其是否在线/存活
+  ///
+  /// - 本地员工：直接检查 Agent 的 isAlive 状态
+  /// - 远程员工：通过 RPC 发送 agentPing 请求，超时返回 false
+  ///
+  /// [employeeId] 员工UUID
+  /// [timeout] 远程 ping 的超时时间，默认 2 秒
+  Future<bool> pingEmployee(String employeeId, {Duration timeout = const Duration(seconds: 2)});
+
+  /// 获取员工的缓存在线状态（同步）
+  ///
+  /// 返回最后一次 ping 检测到的在线状态。
+  /// 如果从未 ping 过该员工，返回 null。
+  bool? isEmployeeOnline(String employeeId);
 
   /// 连接到服务器
   Future<void> connect();
@@ -215,6 +236,18 @@ abstract class DeviceClient {
   /// [deviceInfo] 设备信息配置对象
   Future<void> updateDeviceInfo(DeviceInfoConfig deviceInfo);
 
+  /// 远程更新指定设备的设备信息
+  ///
+  /// 通过 RPC 调用目标设备的 updateDeviceInfo，用于从当前设备
+  /// 修改其他设备的名称等信息。
+  ///
+  /// [targetDeviceId] 目标设备ID
+  /// [deviceInfo] 设备信息配置对象
+  Future<void> updateRemoteDeviceInfo({
+    required String targetDeviceId,
+    required DeviceInfoConfig deviceInfo,
+  });
+
   /// 更新设备环境变量
   ///
   /// [environmentVariables] 环境变量映射表
@@ -230,6 +263,14 @@ abstract class DeviceClient {
   ///
   /// [key] 环境变量名
   Future<void> deleteEnvironmentVariable(String key);
+
+  // ===== 会话操作（含跨设备同步） =====
+
+  /// 删除会话并同步到其他设备
+  ///
+  /// 本地软删除会话（保留记录用于同步判断），同时通过 RPC 通知其他
+  /// 在线设备也删除该会话，防止同步时被其他设备回写恢复。
+  Future<void> deleteSession(String employeeId);
 
   // ===== 数据同步（内部LAN RPC实现） =====
 
@@ -374,6 +415,24 @@ abstract class DeviceClient {
     String fileId,
     String savePath, {
     void Function(double)? onProgress,
+  });
+}
+
+/// 员工在线状态变化事件
+class EmployeeOnlineEvent {
+  /// 员工ID
+  final String employeeId;
+
+  /// 是否在线
+  final bool isOnline;
+
+  /// 设备ID（员工所在的设备）
+  final String? deviceId;
+
+  EmployeeOnlineEvent({
+    required this.employeeId,
+    required this.isOnline,
+    this.deviceId,
   });
 }
 

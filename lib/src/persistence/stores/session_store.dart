@@ -37,9 +37,21 @@ class SessionStore {
 
   /// 获取或创建Session
   /// 只需要employeeId
+  /// 如果会话处于已删除状态，自动复活（清除 deleted 和 deleteTime）
   Future<AiEmployeeSessionEntity> getOrCreate(String employeeId) async {
     var session = await find(employeeId);
-    if (session != null) return session;
+    if (session != null) {
+      // 已删除的会话自动复活（删除后收到新消息等场景）
+      if (session.deleted == 1) {
+        session = session.copyWith(
+          deleted: 0,
+          deleteTime: null,
+          updateTime: DateTime.now(),
+        );
+        await save(session);
+      }
+      return session;
+    }
 
     final now = DateTime.now();
     session = AiEmployeeSessionEntity(
@@ -69,7 +81,8 @@ class SessionStore {
     for (final key in box.keys) {
       final entity = _decodeEntity(box.get(key));
       if (entity == null) continue;
-      if (!includeDeleted && entity.deleted == 1) continue;
+      // 已删除且未被复活（deleteTime 存在且 deleteTime >= updateTime）则过滤
+      if (!includeDeleted && entity.isEffectivelyDeleted()) continue;
       if (!includeArchived && entity.isArchived == 1) continue;
       sessions.add(entity);
     }
@@ -85,11 +98,16 @@ class SessionStore {
     return sessions;
   }
 
-  /// 删除Session（软删除）
+  /// 删除Session（软删除，记录 deleteTime）
   Future<void> delete(String employeeId) async {
     final session = await find(employeeId);
     if (session != null) {
-      await save(session.copyWith(deleted: 1, updateTime: DateTime.now()));
+      final now = DateTime.now();
+      await save(session.copyWith(
+        deleted: 1,
+        deleteTime: now,
+        updateTime: now,
+      ));
     }
   }
 

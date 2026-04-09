@@ -56,7 +56,7 @@ class DeviceClientImpl implements DeviceClient {
   final String deviceId;
 
   @override
-  final String? deviceName;
+  String? deviceName;
 
   @override
   String host;
@@ -101,11 +101,30 @@ class DeviceClientImpl implements DeviceClient {
   /// 设备事件控制器
   final _deviceEventController = StreamController<DeviceEvent>.broadcast();
 
+  /// 员工在线状态变化控制器
+  final _employeeOnlineController = StreamController<EmployeeOnlineEvent>.broadcast();
+
+  /// 员工在线状态缓存 (employeeId -> online)
+  final Map<String, bool> _employeeOnlineState = {};
+
+  /// 员工在线状态 Ping 定时器（检测本地/远程 Agent 存活）
+  Timer? _employeePingTimer;
+
+  /// 员工到设备的映射缓存 (employeeId -> deviceId)
+  /// 在 _doPingAllEmployees 中填充，供设备下线时同步查找使用
+  final Map<String, String> _employeeDeviceMap = {};
+
   /// 设备缓存 (deviceId -> LanDeviceInfo)
   final Map<String, LanDeviceInfo> _deviceCache = {};
 
+  /// 本机局域网 IP（连接后初始化）
+  String? _localIp;
+
   /// 消息订阅
   StreamSubscription<LanMessage>? _messageSubscription;
+
+  /// 连接状态监控定时器（检测 LAN 客户端断开/重连）
+  Timer? _connectionMonitorTimer;
 
   /// LAN 消息处理器
   LanMessageHandler? _lanMessageHandler;
@@ -206,6 +225,9 @@ class DeviceClientImpl implements DeviceClient {
   Stream<DeviceEvent> get onDeviceEvent => _deviceEventController.stream;
 
   @override
+  Stream<EmployeeOnlineEvent> get onEmployeeOnlineChanged => _employeeOnlineController.stream;
+
+  @override
   List<LanDeviceInfo> get cachedDevices => _deviceCache.values.toList();
 
   @override
@@ -214,6 +236,42 @@ class DeviceClientImpl implements DeviceClient {
   // ===== 连接管理 =====
 
   @override
+  @override
+  Future<bool> pingEmployee(String employeeId, {Duration timeout = const Duration(seconds: 2)}) async {
+    // 本地员工：直接检查 isAlive
+    final localAgent = _localAgents[employeeId];
+    if (localAgent != null) {
+      return localAgent.isAlive;
+    }
+
+    // 远程员工：通过 RPC ping
+    final employee = await _employeeManager.getEmployee(employeeId);
+    if (employee == null) return false;
+
+    final targetDeviceId = employee.currentDeviceId;
+    if (targetDeviceId == null || targetDeviceId.isEmpty) return false;
+    if (targetDeviceId == deviceId) return false; // 本设备但 _localAgents 中不存在
+
+    if (_rpcManager == null || !isConnected) return false;
+
+    try {
+      final result = await _rpcManager!.invoke(
+        AgentRpcConfig.methodPing,
+        PingRequest(employeeId: employeeId).toMap(),
+        toDeviceId: targetDeviceId,
+        timeout: timeout.inMilliseconds,
+      );
+      return result['alive'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  bool? isEmployeeOnline(String employeeId) {
+    return _employeeOnlineState[employeeId];
+  }
+
   Future<void> connect() async {
     await _connectionLock.synchronized(() => _connectInternal());
   }
@@ -254,12 +312,16 @@ class DeviceClientImpl implements DeviceClient {
       // 5. 订阅消息流
       _messageSubscription = _lanClient!.messageStream.listen(_handleMessage);
 
-      // 6. 发送设备注册信息
-      _sendDeviceRegistration();
+      // 6. 获取本机 IP 并发送设备注册信息
+      _localIp = await _getLocalIp();
+      await _sendDeviceRegistration();
 
       _updateState(DeviceConnectionState.connected);
 
-      // 7. 刷新设备缓存
+      // 7. 启动连接状态监控（检测 LAN 客户端断开/重连）
+      _startConnectionMonitor();
+
+      // 8. 刷新设备缓存
       _refreshDeviceList();
     } catch (e) {
       _updateState(DeviceConnectionState.disconnected);
@@ -605,6 +667,17 @@ class DeviceClientImpl implements DeviceClient {
       // 通过 Host 获取设备列表
       return {'devices': []};
     });
+
+    // 远程更新设备信息（如名称）
+    _rpcServer!.register(HostRpcConfig.methodUpdateDeviceInfo, (params) async {
+      final deviceInfoMap = params['deviceInfo'] as Map<String, dynamic>?;
+      if (deviceInfoMap == null) {
+        throw Exception('deviceInfo is required');
+      }
+      final deviceInfo = DeviceInfoConfig.fromMap(deviceInfoMap);
+      await updateDeviceInfo(deviceInfo);
+      return {'success': true};
+    });
   }
 
   @override
@@ -614,6 +687,8 @@ class DeviceClientImpl implements DeviceClient {
 
   /// 内部断开连接方法（无锁，供reconnect调用）
   Future<void> _disconnectInternal() async {
+    _stopConnectionMonitor();
+    _stopEmployeeOnlineMonitor();
     await _messageSubscription?.cancel();
     _messageSubscription = null;
 
@@ -662,6 +737,7 @@ class DeviceClientImpl implements DeviceClient {
     await _eventController.close();
     await _lanMessageController.close();
     await _deviceEventController.close();
+    await _employeeOnlineController.close();
     _deviceCache.clear();
   }
 
@@ -1250,16 +1326,24 @@ class DeviceClientImpl implements DeviceClient {
           .toList();
 
       // 合并缓存中的设备广播数据，丰富设备信息
-      // HTTP API 只返回基础连接字段，缓存中可能有广播响应带来的详细信息
+      // HTTP API 只返回基础连接字段，缓存中可能有广播响应带来的详细信息（type/os/platform 等）
+      // 但 HTTP API 的 name 来自 Host 的 _clients[idx].name，是最新值（通过 clientInfo 消息更新）
+      // 因此 name 优先用 HTTP API 的值，其他详细字段从缓存补充
       return httpDevices.map((device) {
         final cached = _deviceCache[device.id];
         if (cached != null) {
           return cached.copyWith(
+            name: device.name ?? cached.name,
             ip: device.ip,
             connectedAt: device.connectedAt,
             isHost: device.isHost,
             status: device.status ?? 'online',
           );
+        }
+        // 本机设备没有缓存时，用本地已知信息丰富
+        // （本机收不到自己发出的 deviceInfoRequest 广播，所以缓存中不会有本机信息）
+        if (device.id == deviceId) {
+          return _buildLocalDeviceInfo(device);
         }
         return device;
       }).toList();
@@ -1312,7 +1396,60 @@ class DeviceClientImpl implements DeviceClient {
 
   @override
   Future<void> updateDeviceInfo(DeviceInfoConfig deviceInfo) async {
-    await _deviceConfigStore.updateDeviceInfo(deviceId, deviceInfo);
+    // 先读取现有配置，做 merge 更新而非全量替换
+    // 避免前端只传 name 时把 description、type 等已有字段清空
+    try {
+      final existing = await _deviceConfigStore.find(deviceId);
+      if (existing != null) {
+        final mergedInfo = existing.deviceInfo.copyWith(
+          name: deviceInfo.name,
+          type: deviceInfo.type,
+          description: deviceInfo.description,
+          icon: deviceInfo.icon,
+          os: deviceInfo.os,
+          osVersion: deviceInfo.osVersion,
+          appVersion: deviceInfo.appVersion,
+          model: deviceInfo.model,
+          manufacturer: deviceInfo.manufacturer,
+          tags: deviceInfo.tags.isNotEmpty ? deviceInfo.tags : null,
+          metadata: deviceInfo.metadata.isNotEmpty ? deviceInfo.metadata : null,
+        );
+        await _deviceConfigStore.updateDeviceInfo(deviceId, mergedInfo);
+      } else {
+        await _deviceConfigStore.updateDeviceInfo(deviceId, deviceInfo);
+      }
+    } catch (_) {
+      // 查询失败时回退到直接替换
+      await _deviceConfigStore.updateDeviceInfo(deviceId, deviceInfo);
+    }
+    // 更新内存中的 deviceName 并重新发送注册信息
+    if (deviceInfo.name != null) {
+      deviceName = deviceInfo.name;
+      await _sendDeviceRegistration();
+    }
+  }
+
+  @override
+  Future<void> updateRemoteDeviceInfo({
+    required String targetDeviceId,
+    required DeviceInfoConfig deviceInfo,
+  }) async {
+    if (_rpcManager == null || !isConnected) {
+      throw StateError('未连接到服务器');
+    }
+    print('[DeviceClientImpl] updateRemoteDeviceInfo: targetDeviceId=$targetDeviceId, localDeviceId=$deviceId, match=${targetDeviceId == deviceId}');
+    if (targetDeviceId == deviceId) {
+      // 目标设备是本机，直接调用本地方法
+      print('[DeviceClientImpl] 本机更新设备信息: name=${deviceInfo.name}');
+      await updateDeviceInfo(deviceInfo);
+      return;
+    }
+    print('[DeviceClientImpl] 远程更新设备信息: targetDeviceId=$targetDeviceId');
+    await _rpcManager!.invoke(
+      HostRpcConfig.methodUpdateDeviceInfo,
+      {'deviceInfo': deviceInfo.toMap()},
+      toDeviceId: targetDeviceId,
+    );
   }
 
   @override
@@ -1659,6 +1796,35 @@ class DeviceClientImpl implements DeviceClient {
   }
 
   @override
+  Future<void> deleteSession(String employeeId) async {
+    // 1. 本地软删除（保留记录以便同步时识别已删除状态）
+    await _sessionManager.deleteSession(employeeId);
+
+    // 2. 后台异步通知其他在线设备，不阻塞 UI
+    _syncDeleteToDevices(employeeId);
+  }
+
+  /// 后台异步传播删除到其他设备
+  void _syncDeleteToDevices(String employeeId) {
+    Future(() async {
+      if (_rpcManager == null || !isConnected) return;
+      try {
+        final devices = await getOnlineDevices();
+        for (final device in devices) {
+          if (device.id == deviceId) continue;
+          try {
+            await _rpcManager!.invoke(
+              HostRpcConfig.methodDeleteSession,
+              {'employeeId': employeeId},
+              toDeviceId: device.id,
+            );
+          } catch (_) {}
+        }
+      } catch (_) {}
+    });
+  }
+
+  @override
   Future<void> syncSessionsFromDevices() async {
     if (_rpcManager == null || !isConnected) {
       throw StateError('未连接到服务器');
@@ -1682,29 +1848,49 @@ class DeviceClientImpl implements DeviceClient {
           final existing = await _sessionManager.getSession(
             session.employeeId,
           );
-          
+
           if (existing == null) {
-            // 本地不存在 → 创建（包括已删除的会话）
-            await _sessionManager.save(session);
+            // 本地不存在 → 远程未删除的直接创建；远程已删除且未被复活的也同步（保留删除状态）
+            if (session.deleted != 1 ||
+                (session.deleteTime != null && session.updateTime.isAfter(session.deleteTime!))) {
+              // 远程未删除，或已复活 → 创建
+              await _sessionManager.save(session);
+            }
+            // 远程已删除且未复活 → 不同步（避免拉回垃圾数据）
           } else {
-            // 本地已存在 → 判断是否需要更新
-            
-            // 优先比较 deletedTime（如果任一会话被删除）
-            // 注意：Session 实体目前没有 deletedTime 字段，使用 updateTime 代替
-            if (session.deleted == 1 || existing.deleted == 1) {
-              // 至少一方被删除，比较 updateTime（因为 deleted 时会更新 updateTime）
-              if (session.updateTime.isAfter(existing.updateTime)) {
-                // 远程删除更新 → 同步删除状态
+            // 本地已存在 → 合并逻辑
+            if (existing.deleted == 1 && session.deleted == 1) {
+              // 双方都已删除 → 保留 deleteTime 更大（更晚删除）的一方
+              final eTime = existing.deleteTime ?? existing.updateTime;
+              final sTime = session.deleteTime ?? session.updateTime;
+              if (sTime.isAfter(eTime)) {
                 await _sessionManager.save(session);
+              }
+            } else if (existing.deleted == 1) {
+              // 仅本地已删除 → 检查是否已被远程复活（远程 updateTime > 本地 deleteTime）
+              final localDeleteTime = existing.deleteTime ?? existing.updateTime;
+              if (session.updateTime.isAfter(localDeleteTime)) {
+                // 远程有更新活动（新消息等）→ 远程复活，同步过来
+                await _sessionManager.save(session.copyWith(
+                  deleted: 0,
+                  deleteTime: null,
+                ));
               }
               // 否则保留本地的删除状态
-            } else {
-              // 都未删除，正常比较 updateTime
-              if (session.updateTime.isAfter(existing.updateTime)) {
-                // 远程更新 → 更新本地
+            } else if (session.deleted == 1) {
+              // 仅远程已删除 → 检查本地是否有更新活动
+              final remoteDeleteTime = session.deleteTime ?? session.updateTime;
+              if (existing.updateTime.isAfter(remoteDeleteTime)) {
+                // 本地有更新活动 → 忽略远程删除（本地已复活）
+              } else {
+                // 本地无更新活动 → 同步远程删除
                 await _sessionManager.save(session);
               }
-              // 否则：本地更新或相同 → 保留本地
+            } else {
+              // 双方都未删除 → 正常比较 updateTime
+              if (session.updateTime.isAfter(existing.updateTime)) {
+                await _sessionManager.save(session);
+              }
             }
           }
         }
@@ -1784,6 +1970,39 @@ class DeviceClientImpl implements DeviceClient {
     }
   }
 
+  /// 构建本机设备的完整信息
+  ///
+  /// HTTP API 只返回基础字段（id、name、ip），不包含 type、os、platform 等。
+  /// 本机无法收到自己发出的 deviceInfoRequest 广播，所以 _deviceCache 中没有本机详细信息。
+  /// 此方法用本地已知的平台信息和 DB 中的设备名称来丰富基础数据。
+  LanDeviceInfo _buildLocalDeviceInfo(LanDeviceInfo base) {
+    String? os, platform;
+    if (Platform.isAndroid) {
+      os = 'android';
+      platform = 'mobile';
+    } else if (Platform.isIOS) {
+      os = 'ios';
+      platform = 'mobile';
+    } else if (Platform.isWindows) {
+      os = 'windows';
+      platform = 'desktop';
+    } else if (Platform.isMacOS) {
+      os = 'macos';
+      platform = 'desktop';
+    } else if (Platform.isLinux) {
+      os = 'linux';
+      platform = 'desktop';
+    }
+
+    return base.copyWith(
+      name: base.name ?? deviceName,
+      type: base.type ?? platform,
+      os: base.os ?? os,
+      platform: base.platform ?? platform,
+      status: base.status ?? 'online',
+    );
+  }
+
   void _monitorProgress(double progress, void Function(double) onProgress) {
     Timer.periodic(const Duration(milliseconds: 100), (timer) {
       onProgress(progress);
@@ -1797,10 +2016,183 @@ class DeviceClientImpl implements DeviceClient {
   void _updateState(DeviceConnectionState state) {
     _connectionState = state;
     _stateController.add(state);
+
+    if (state == DeviceConnectionState.connected) {
+      // LAN 连接成功，启动员工在线监控
+      _startEmployeeOnlineMonitor();
+    } else if (state == DeviceConnectionState.disconnected) {
+      // LAN 断开，停止监控并标记所有员工离线
+      _stopEmployeeOnlineMonitor();
+      _markAllRemoteEmployeesOffline();
+    }
   }
 
-  void _sendDeviceRegistration() {
+  /// 启动连接状态监控定时器
+  ///
+  /// 定期检查底层 LAN 客户端的连接状态，当检测到
+  /// LAN 客户端断开（如服务器关闭）或重连成功时同步更新 DeviceClient 的状态。
+  void _startConnectionMonitor() {
+    _stopConnectionMonitor();
+    _connectionMonitorTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (_disposed) {
+        _stopConnectionMonitor();
+        return;
+      }
+
+      final lanClient = _lanClient;
+      if (lanClient == null) return;
+
+      final lanConnected = lanClient.isConnected;
+      final lanConnecting = lanClient.isConnecting;
+
+      if (lanConnecting && _connectionState != DeviceConnectionState.connecting && _connectionState != DeviceConnectionState.connected) {
+        // LAN 客户端正在重连
+        _updateState(DeviceConnectionState.connecting);
+      } else if (lanConnected && _connectionState != DeviceConnectionState.connected) {
+        // LAN 客户端重连成功
+        _updateState(DeviceConnectionState.connected);
+        _sendDeviceRegistration();
+        _refreshDeviceList();
+      } else if (!lanConnected && !lanConnecting && _connectionState == DeviceConnectionState.connected) {
+        // LAN 客户端已断开（服务器关闭等）
+        _updateState(DeviceConnectionState.disconnected);
+      }
+    });
+  }
+
+  /// 停止连接状态监控定时器
+  void _stopConnectionMonitor() {
+    _connectionMonitorTimer?.cancel();
+    _connectionMonitorTimer = null;
+  }
+
+  // ===== 员工在线状态监控 =====
+
+  /// 启动员工在线状态监控
+  ///
+  /// 定期 ping 所有已知员工，检测其在线状态，通过 Stream 发布状态变化。
+  void _startEmployeeOnlineMonitor() {
+    _stopEmployeeOnlineMonitor();
+    _doPingAllEmployees(); // 立即 ping 一次
+    _employeePingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (_disposed) {
+        _stopEmployeeOnlineMonitor();
+        return;
+      }
+      _doPingAllEmployees();
+    });
+  }
+
+  /// 停止员工在线状态监控
+  void _stopEmployeeOnlineMonitor() {
+    _employeePingTimer?.cancel();
+    _employeePingTimer = null;
+  }
+
+  /// Ping 所有已知员工并更新在线状态
+  Future<void> _doPingAllEmployees() async {
+    try {
+      final employees = await _employeeManager.getEmployees();
+      for (final employee in employees) {
+        final empId = employee.uuid;
+        final devId = employee.currentDeviceId;
+
+        // 更新员工-设备映射缓存
+        if (devId != null && devId.isNotEmpty) {
+          _employeeDeviceMap[empId] = devId;
+        }
+
+        bool online = false;
+
+        if (devId != null && devId.isNotEmpty) {
+          if (devId == deviceId) {
+            // 本设备员工：检查本地 Agent
+            online = _localAgents[empId]?.isAlive ?? false;
+          } else {
+            // 远程员工：先检查设备是否在缓存中
+            if (!_deviceCache.containsKey(devId) || _rpcManager == null || !isConnected) {
+              online = false;
+            } else {
+              // 设备在线，进一步 RPC ping
+              try {
+                final result = await _rpcManager!.invoke(
+                  AgentRpcConfig.methodPing,
+                  PingRequest(employeeId: empId).toMap(),
+                  toDeviceId: devId,
+                  timeout: 2000,
+                );
+                online = result['alive'] == true;
+              } catch (_) {
+                online = false;
+              }
+            }
+          }
+        }
+
+        _updateEmployeeOnlineState(empId, online, devId);
+      }
+    } catch (_) {}
+  }
+
+  /// 更新员工在线状态并发布事件
+  void _updateEmployeeOnlineState(String employeeId, bool isOnline, String? deviceId) {
+    final wasOnline = _employeeOnlineState[employeeId];
+    if (wasOnline != isOnline) {
+      _employeeOnlineState[employeeId] = isOnline;
+      if (!_disposed) {
+        _employeeOnlineController.add(EmployeeOnlineEvent(
+          employeeId: employeeId,
+          isOnline: isOnline,
+          deviceId: deviceId,
+        ));
+      }
+    }
+  }
+
+  /// 局域网断开时，标记所有远程员工离线
+  void _markAllRemoteEmployeesOffline() {
+    for (final entry in Map<String, bool>.from(_employeeOnlineState).entries) {
+      if (entry.value) {
+        _employeeOnlineState[entry.key] = false;
+        if (!_disposed) {
+          _employeeOnlineController.add(EmployeeOnlineEvent(
+            employeeId: entry.key,
+            isOnline: false,
+          ));
+        }
+      }
+    }
+  }
+
+  /// 指定设备下线时，标记该设备上所有员工离线
+  void _markDeviceEmployeesOffline(String offlineDeviceId) {
+    if (offlineDeviceId == deviceId) return;
+    for (final entry in Map<String, bool>.from(_employeeOnlineState).entries) {
+      if (!entry.value) continue;
+      if (_employeeDeviceMap[entry.key] == offlineDeviceId) {
+        _employeeOnlineState[entry.key] = false;
+        if (!_disposed) {
+          _employeeOnlineController.add(EmployeeOnlineEvent(
+            employeeId: entry.key,
+            isOnline: false,
+            deviceId: offlineDeviceId,
+          ));
+        }
+      }
+    }
+  }
+
+  Future<void> _sendDeviceRegistration() async {
     if (_lanClient == null || !_lanClient!.isConnected) return;
+
+    // 从 DB 读取设备配置中的名称
+    String? effectiveName = deviceName;
+    try {
+      final config = await _deviceConfigStore.find(deviceId);
+      if (config?.deviceInfo.name != null) {
+        effectiveName = config!.deviceInfo.name;
+      }
+    } catch (_) {}
 
     // 收集平台信息
     String? os, osVersion, platform;
@@ -1824,19 +2216,36 @@ class DeviceClientImpl implements DeviceClient {
     final msg = LanMessage(
       type: LanMessageType.clientInfo,
       fromId: deviceId,
-      fromName: deviceName,
+      fromName: effectiveName,
       content: jsonEncode({
         'deviceId': deviceId,
-        'deviceName': deviceName,
+        'deviceName': effectiveName,
         'topic': topic,
         'os': os,
         'platform': platform,
+        'ip': _localIp,
       }),
       fileName: deviceId,
       topic: topic ?? '',
     );
 
     _lanClient!.sendLanMessage(msg);
+  }
+
+  Future<String?> _getLocalIp() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+      );
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          if (!addr.isLoopback && addr.type == InternetAddressType.IPv4) {
+            return addr.address;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   void _handleMessage(LanMessage msg) {
@@ -2061,6 +2470,8 @@ class DeviceClientImpl implements DeviceClient {
         case LanMessageType.deviceOffline:
           eventType = DeviceEventType.offline;
           _deviceCache.remove(device.id);
+          // 设备下线，标记该设备上的所有员工离线
+          _markDeviceEmployeesOffline(device.id);
           break;
         case LanMessageType.deviceInfoChanged:
         case LanMessageType.deviceInfoResponse:
@@ -2139,6 +2550,8 @@ class DeviceClientImpl implements DeviceClient {
       final devices = await getOnlineDevices();
       _deviceCache.clear();
       for (final device in devices) {
+        // getOnlineDevices 已做了合并（HTTP name + 缓存详情 + 本机本地信息）
+        // 直接存入缓存即可
         _deviceCache[device.id] = device.copyWith(status: 'online');
       }
     } catch (e) {
