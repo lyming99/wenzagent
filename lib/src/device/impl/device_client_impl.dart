@@ -1419,7 +1419,7 @@ class DeviceClientImpl implements DeviceClient {
     };
 
     adapter.persistMessage = (message) async {
-      // 使用 fromMessageMap 将整个 Map 序列化为 JSON 字符串存入 Hive
+      // 使用 fromMessageMap 将整个 Map 序列化为 JSON 字符串存入数据库
       var entity = AiEmployeeMessageEntity.fromMessageMap(message);
       // 如果当前正在查看该会话，直接写入已读状态（避免重启后因 DB 未更新而误显示未读）
       if (entity.role == 'assistant' && _currentOpenSession?.employeeId == employeeId) {
@@ -2002,7 +2002,7 @@ class DeviceClientImpl implements DeviceClient {
 
   /// 异步更新数据库消息为已读（批量更新，减少逐条 await 的开销）
   ///
-  /// 使用 [fromDeviceId] 查询和更新，确保读写使用同一个 Hive key。
+  /// 使用 [fromDeviceId] 查询和更新，确保读写使用同一个数据库 key。
   /// 当 [fromDeviceId] 为空时回退到本机 deviceId（与消息存储逻辑一致）。
   Future<void> _markMessagesAsReadInDb(String employeeId, String? fromDeviceId) async {
     final effectiveDeviceId = (fromDeviceId != null && fromDeviceId.isNotEmpty)

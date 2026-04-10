@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-/// AI员工消息实体（Hive版本）
+/// AI员工消息实体
 class AiEmployeeMessageEntity {
   /// 消息UUID
   final String uuid;

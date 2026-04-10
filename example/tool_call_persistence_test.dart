@@ -105,8 +105,8 @@ class ToolCallPersistenceTest {
     tempDirPath = tempDir.path;
     print('  临时目录: $tempDirPath');
 
-    await HiveManager.instance.initialize(storagePath: tempDirPath);
-    print('  ✓ Hive 初始化完成');
+    await DatabaseManager.instance.initialize(storagePath: tempDirPath);
+    print('  ✓ 数据库初始化完成');
   }
 
   /// 创建测试环境
@@ -203,39 +203,29 @@ class ToolCallPersistenceTest {
 
   /// 验证持久化结果
   Future<void> _verifyPersistence() async {
-    final hiveManager = HiveManager.instance;
-    final messageBox = hiveManager.messageBox;
-    final indexBox = hiveManager.sessionMessagesBox;
+    final messageStore = MessageStore();
 
-    print('  Hive messageBox 消息总数: ${messageBox.length}');
+    final messages = await messageStore.getMessages(deviceId, employeeId);
 
-    final indexKey = hiveManager.buildSessionMessagesKey(deviceId, employeeId);
-    final messageUuids = indexBox.get(indexKey);
+    print('  数据库中消息数量: ${messages.length}');
 
-    print('  会话消息索引中的消息数量: ${messageUuids?.length ?? 0}');
-
-    if (messageUuids == null || messageUuids.isEmpty) {
-      print('  ⚠️  Hive 中没有持久化的消息');
+    if (messages.isEmpty) {
+      print('  ⚠️  数据库中没有持久化的消息');
       return;
     }
 
-    print('  ✓ Hive 中有 ${messageUuids.length} 条持久化消息');
+    print('  ✓ 数据库中有 ${messages.length} 条持久化消息');
 
     // 读取并分析每条消息
-    for (var i = 0; i < messageUuids.length; i++) {
-      final msgUuid = messageUuids[i] as String;
-      final key = hiveManager.buildMessageKey(deviceId, msgUuid);
-      final msg = messageBox.get(key);
-
-      if (msg != null) {
-        print('  消息 ${i + 1} ($msgUuid):');
-        print('    - role: ${msg.role}');
-        print('    - type: ${msg.type}');
-        print('    - has toolCalls: ${msg.toolCalls != null}');
-        print('    - has toolResult: ${msg.toolResult != null}');
-        final content = msg.content ?? '';
-        print('    - content: ${content.length > 50 ? "${content.substring(0, 50)}..." : content}');
-      }
+    for (var i = 0; i < messages.length; i++) {
+      final msg = messages[i];
+      print('  消息 ${i + 1} (${msg.uuid}):');
+      print('    - role: ${msg.role}');
+      print('    - type: ${msg.type}');
+      print('    - has toolCalls: ${msg.toolCalls != null}');
+      print('    - has toolResult: ${msg.toolResult != null}');
+      final content = msg.content ?? '';
+      print('    - content: ${content.length > 50 ? "${content.substring(0, 50)}..." : content}');
     }
   }
 
@@ -300,8 +290,8 @@ class ToolCallPersistenceTest {
     } catch (_) {}
 
     try {
-      await HiveManager.instance.close();
-      print('  ✓ Hive 已关闭');
+      await DatabaseManager.instance.close();
+      print('  ✓ 数据库已关闭');
     } catch (_) {}
 
     try {

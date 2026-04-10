@@ -1,6 +1,6 @@
 import 'mcp_server_config.dart';
 
-/// AI员工实体（Hive版本）
+/// AI员工实体
 class AiEmployeeEntity {
   /// 员工UUID
   final String uuid;

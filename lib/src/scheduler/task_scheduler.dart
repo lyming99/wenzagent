@@ -45,7 +45,7 @@ class TaskScheduler {
 
   /// 启动调度器
   ///
-  /// [tasks] 初始任务列表（通常从 Hive 加载的已启用任务）
+  /// [tasks] 初始任务列表（通常从数据库加载的已启用任务）
   void start(List<AiScheduledTaskEntity> tasks) {
     if (_running) return;
 

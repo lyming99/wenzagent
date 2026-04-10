@@ -871,7 +871,7 @@ class AgentImpl implements IAgent {
           .map((m) => McpServerConfig.fromMap(m))
           .toList();
 
-      // 从 Hive 加载当前员工实体
+      // 从数据库加载当前员工实体
       final employees = await employeeStore.findAll(null);
       final employee = employees.where((e) => e.uuid == employeeId).firstOrNull;
       if (employee != null) {
@@ -1137,7 +1137,7 @@ class AgentImpl implements IAgent {
   /// 注入一条 assistant 消息（不触发 LLM）
   ///
   /// 用于定时任务等场景：sub-agent 生成内容后，直接注入到主 agent 会话中。
-  /// 消息会被写入 adapter session（内存）和持久化存储（Hive），
+  /// 消息会被写入 adapter session（内存）和持久化存储（SQLite），
   /// 并通过事件流广播 messageStatusChanged，让 UI 能正常收到。
   Future<void> injectAssistantMessage({
     required String messageId,

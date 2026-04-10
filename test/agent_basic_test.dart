@@ -56,9 +56,9 @@ void main() {
       model: apiModel,
     );
     
-    // 初始化 Hive（指定存储路径）
-    await HiveManager.instance.initialize(
-      storagePath: 'D:\\project\\GitHub\\wenzagent\\test_hive',
+    // 初始化数据库（指定存储路径）
+    await DatabaseManager.instance.initialize(
+      storagePath: 'D:\\project\\GitHub\\wenzagent\\test_db',
     );
     
     // 生成测试 ID
@@ -130,7 +130,7 @@ void main() {
   });
   
   tearDownAll(() async {
-    await HiveManager.instance.close();
+    await DatabaseManager.instance.close();
   });
   
   group('基础功能测试', () {

@@ -272,7 +272,7 @@ class ScheduledTaskManagerImpl implements ScheduledTaskManager {
       }
     };
 
-    // 从 Hive 加载所有启用的任务
+    // 从数据库加载所有启用的任务
     final allTasks = await _store.findAll();
     final enabledTasks =
         allTasks.where((t) => t.isEnabled && !t.isExpired).toList();

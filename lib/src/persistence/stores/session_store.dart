@@ -1,43 +1,64 @@
 import 'dart:convert';
 
-import '../hive_manager.dart';
+import 'package:sqlite3/sqlite3.dart';
+
+import '../database_manager.dart';
 import '../entities/session_entity.dart';
 
 /// 会话数据存储
 ///
-/// 使用employeeId作为主键：一个员工只有一个会话。
-/// 使用 LazyBox 实现异步读取，避免主线程阻塞。
+/// 使用 SQLite 实现，保持与原 Hive 版本完全相同的公共 API。
+/// 主键：employeeId（一个员工只有一个会话）。
 class SessionStore {
-  final HiveManager _hiveManager;
+  final DatabaseManager _dbManager;
 
-  SessionStore({HiveManager? hiveManager})
-    : _hiveManager = hiveManager ?? HiveManager.instance;
+  SessionStore({DatabaseManager? dbManager})
+      : _dbManager = dbManager ?? DatabaseManager.instance;
 
-  /// 构建Session key（使用employeeId作为主键）
-  String _buildKey(String employeeId) {
-    return 'wenz_sess:$employeeId';
-  }
+  Database get _db => _dbManager.db;
 
-  /// 解码JSON字符串为实体
-  AiEmployeeSessionEntity? _decodeEntity(dynamic jsonString) {
-    if (jsonString == null) return null;
-    if (jsonString is String && jsonString.isNotEmpty) {
-      return AiEmployeeSessionEntity.fromMap(
-        jsonDecode(jsonString) as Map<String, dynamic>,
-      );
+  /// 从数据库行解码为实体
+  AiEmployeeSessionEntity _rowToEntity(Row row) {
+    Map<String, DeviceSessionConfig> configMap = {};
+    final configStr = row['config'] as String?;
+    if (configStr != null && configStr.isNotEmpty) {
+      final raw = jsonDecode(configStr) as Map<String, dynamic>;
+      configMap = raw.map((key, value) => MapEntry(
+          key,
+          DeviceSessionConfig.fromMap(value as Map<String, dynamic>)));
     }
-    return null;
+
+    return AiEmployeeSessionEntity(
+      employeeId: row['employee_id'] as String,
+      config: configMap,
+      title: (row['title'] as String?) ?? '新对话',
+      isArchived: (row['is_archived'] as int?) ?? 0,
+      isPinned: (row['is_pinned'] as int?) ?? 0,
+      deleted: (row['deleted'] as int?) ?? 0,
+      deleteTime: row['delete_time'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(row['delete_time'] as int)
+          : null,
+      createTime: DateTime.fromMillisecondsSinceEpoch(
+          row['create_time'] as int),
+      updateTime: DateTime.fromMillisecondsSinceEpoch(
+          row['update_time'] as int),
+    );
   }
 
   /// 获取Session（主键查找）
   Future<AiEmployeeSessionEntity?> find(String employeeId) async {
-    final box = _hiveManager.sessionBox;
-    final key = _buildKey(employeeId);
-    return _decodeEntity(await box.get(key));
+    final resultSet = _db.select(
+      'SELECT * FROM sessions WHERE employee_id = ?',
+      [employeeId],
+    );
+    for (final row in resultSet) {
+      return _rowToEntity(row);
+    }
+    return null;
   }
 
   /// 获取或创建Session
-  /// 只需要employeeId
+  ///
   /// 如果会话处于已删除状态，自动复活（清除 deleted 和 deleteTime）
   Future<AiEmployeeSessionEntity> getOrCreate(String employeeId) async {
     var session = await find(employeeId);
@@ -64,11 +85,24 @@ class SessionStore {
     return session;
   }
 
-  /// 保存Session
+  /// 保存Session（INSERT OR REPLACE）
   Future<void> save(AiEmployeeSessionEntity session) async {
-    final box = _hiveManager.sessionBox;
-    final key = _buildKey(session.employeeId);
-    await box.put(key, jsonEncode(session.toMap()));
+    _db.execute('''
+      INSERT OR REPLACE INTO sessions (
+        employee_id, config, title, is_archived, is_pinned,
+        deleted, delete_time, create_time, update_time
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', [
+      session.employeeId,
+      jsonEncode(session.config.map((k, v) => MapEntry(k, v.toMap()))),
+      session.title,
+      session.isArchived,
+      session.isPinned,
+      session.deleted,
+      session.deleteTime?.millisecondsSinceEpoch,
+      session.createTime.millisecondsSinceEpoch,
+      session.updateTime.millisecondsSinceEpoch,
+    ]);
   }
 
   /// 获取所有Session（会话列表）
@@ -76,26 +110,23 @@ class SessionStore {
     bool includeArchived = false,
     bool includeDeleted = false,
   }) async {
-    final box = _hiveManager.sessionBox;
+    final conditions = <String>[];
+    final params = <Object?>[];
 
-    var sessions = <AiEmployeeSessionEntity>[];
-    for (final key in box.keys) {
-      final entity = _decodeEntity(await box.get(key));
-      if (entity == null) continue;
-      if (!includeDeleted && entity.isEffectivelyDeleted()) continue;
-      if (!includeArchived && entity.isArchived == 1) continue;
-      sessions.add(entity);
+    if (!includeDeleted) {
+      conditions.add(
+        '(deleted != 1 OR (delete_time IS NOT NULL AND delete_time >= update_time))',
+      );
+    }
+    if (!includeArchived) {
+      conditions.add('is_archived != 1');
     }
 
-    // 按置顶和更新时间排序
-    sessions.sort((a, b) {
-      if (a.isPinned != b.isPinned) {
-        return b.isPinned.compareTo(a.isPinned);
-      }
-      return b.updateTime.compareTo(a.updateTime);
-    });
+    final where = conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
+    final sql =
+        'SELECT * FROM sessions $where ORDER BY is_pinned DESC, update_time DESC';
 
-    return sessions;
+    return _db.select(sql, params).map(_rowToEntity).toList();
   }
 
   /// 删除Session（软删除，记录 deleteTime）
@@ -113,9 +144,7 @@ class SessionStore {
 
   /// 硬删除Session
   Future<void> hardDelete(String employeeId) async {
-    final box = _hiveManager.sessionBox;
-    final key = _buildKey(employeeId);
-    await box.delete(key);
+    _db.execute('DELETE FROM sessions WHERE employee_id = ?', [employeeId]);
   }
 
   /// 获取会话数量

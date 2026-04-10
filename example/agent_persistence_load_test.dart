@@ -10,7 +10,7 @@ import 'package:uuid/uuid.dart';
 /// 2. 创建 Agent 并发送消息
 /// 3. 销毁 Agent
 /// 4. 重新创建 Agent
-/// 5. 验证 Agent 是否能从 Hive 加载之前持久化的消息
+/// 5. 验证 Agent 是否能从数据库加载之前持久化的消息
 ///
 /// 预期结果：重新创建的 Agent 应该能够加载所有持久化的消息历史
 
@@ -40,7 +40,7 @@ class AgentPersistenceLoadTest {
   Future<void> run() async {
     try {
       // ===== 阶段 1: 初始化存储 =====
-      print('\n[阶段 1] 初始化 Hive 存储...');
+      print('\n[阶段 1] 初始化数据库存储...');
       await _initializeStorage();
 
       // ===== 阶段 2: 创建设备和员工 =====
@@ -51,8 +51,8 @@ class AgentPersistenceLoadTest {
       print('\n[阶段 3] 第一次创建 Agent 并发送消息...');
       await _firstAgentSendMessages();
 
-      // ===== 阶段 4: 验证 Hive 中的持久化数据 =====
-      print('\n[阶段 4] 验证 Hive 中的持久化数据...');
+      // ===== 阶段 4: 验证数据库中的持久化数据 =====
+      print('\n[阶段 4] 验证数据库中的持久化数据...');
       await _verifyPersistence();
 
       // ===== 阶段 5: 销毁 Agent =====
@@ -84,8 +84,8 @@ class AgentPersistenceLoadTest {
     tempDirPath = tempDir.path;
     print('  临时目录: $tempDirPath');
 
-    await HiveManager.instance.initialize(storagePath: tempDirPath);
-    print('  ✓ Hive 初始化完成');
+    await DatabaseManager.instance.initialize(storagePath: tempDirPath);
+    print('  ✓ 数据库初始化完成');
   }
 
   /// 创建设备和员工
@@ -159,26 +159,19 @@ class AgentPersistenceLoadTest {
     print('  内存中消息数量: ${messagesInMemory.length}');
   }
 
-  /// 验证 Hive 中的持久化数据
+  /// 验证数据库中的持久化数据
   Future<void> _verifyPersistence() async {
-    final hiveManager = HiveManager.instance;
-    final messageBox = hiveManager.messageBox;
-    final indexBox = hiveManager.sessionMessagesBox;
+    final messageStore = MessageStore();
+    final count = await messageStore.count(deviceId, employeeId);
 
-    print('  Hive messageBox 中的消息总数: ${messageBox.length}');
+    print('  数据库中的消息总数: $count');
 
-    // 获取会话消息索引
-    final indexKey = hiveManager.buildSessionMessagesKey(deviceId, employeeId);
-    final messageUuids = indexBox.get(indexKey);
-
-    print('  会话消息索引中的消息数量: ${messageUuids?.length ?? 0}');
-
-    if (messageUuids == null || messageUuids.isEmpty) {
-      print('  ❌ 警告: Hive 中没有持久化的消息');
+    if (count == 0) {
+      print('  ❌ 警告: 数据库中没有持久化的消息');
       return;
     }
 
-    print('  ✓ Hive 中有 ${messageUuids.length} 条持久化消息');
+    print('  ✓ 数据库中有 $count 条持久化消息');
   }
 
   /// 销毁 Agent
@@ -201,10 +194,10 @@ class AgentPersistenceLoadTest {
 
     if (messages.isEmpty) {
       print('  ❌ 错误: 重新创建的 Agent 没有加载任何消息');
-      throw StateError('Agent 未能从 Hive 加载持久化的消息');
+      throw StateError('Agent 未能从数据库加载持久化的消息');
     }
 
-    print('  ✓ Agent 成功从 Hive 加载了 ${messages.length} 条消息');
+    print('  ✓ Agent 成功从数据库加载了 ${messages.length} 条消息');
 
     // 打印消息摘要
     for (var i = 0; i < messages.length; i++) {
@@ -218,61 +211,47 @@ class AgentPersistenceLoadTest {
 
   /// 验证消息内容一致性
   Future<void> _verifyMessageConsistency() async {
-    // 从 Hive 直接读取
-    final hiveManager = HiveManager.instance;
-    final messageBox = hiveManager.messageBox;
-    final indexBox = hiveManager.sessionMessagesBox;
+    // 从数据库直接读取
+    final messageStore = MessageStore();
+    final dbMessages = await messageStore.getMessages(deviceId, employeeId);
 
-    final indexKey = hiveManager.buildSessionMessagesKey(deviceId, employeeId);
-    final messageUuids = indexBox.get(indexKey);
-
-    if (messageUuids == null || messageUuids.isEmpty) {
-      print('  ⚠️  Hive 中没有消息，跳过一致性验证');
+    if (dbMessages.isEmpty) {
+      print('  ⚠️  数据库中没有消息，跳过一致性验证');
       return;
-    }
-
-    // 从 Hive 读取消息
-    final hiveMessages = <AiEmployeeMessageEntity>[];
-    for (final msgUuid in messageUuids) {
-      final key = hiveManager.buildMessageKey(deviceId, msgUuid as String);
-      final msg = messageBox.get(key);
-      if (msg != null) {
-        hiveMessages.add(msg);
-      }
     }
 
     // 从 Agent 读取消息
     final agentProxy = await device.getOrCreateAgentProxy(employeeId: employeeId);
     final agentMessages = await agentProxy.getSessionMessages();
 
-    print('  Hive 消息数量: ${hiveMessages.length}');
+    print('  数据库消息数量: ${dbMessages.length}');
     print('  Agent 消息数量: ${agentMessages.length}');
 
-    if (hiveMessages.length != agentMessages.length) {
+    if (dbMessages.length != agentMessages.length) {
       print('  ❌ 错误: 消息数量不一致');
-      throw StateError('Hive 和 Agent 中的消息数量不一致');
+      throw StateError('数据库和 Agent 中的消息数量不一致');
     }
 
     print('  ✓ 消息数量一致');
 
     // 验证每条消息的内容
-    for (var i = 0; i < hiveMessages.length; i++) {
-      final hiveMsg = hiveMessages[i];
+    for (var i = 0; i < dbMessages.length; i++) {
+      final dbMsg = dbMessages[i];
       final agentMsg = agentMessages[i];
 
-      if (hiveMsg.role != agentMsg.role) {
+      if (dbMsg.role != agentMsg.role) {
         print('  ❌ 错误: 消息 ${i + 1} 的 role 不一致');
         continue;
       }
 
-      if (hiveMsg.content != agentMsg.content) {
+      if (dbMsg.content != agentMsg.content) {
         print('  ❌ 错误: 消息 ${i + 1} 的 content 不一致');
-        print('     Hive: ${hiveMsg.content}');
+        print('     数据库: ${dbMsg.content}');
         print('     Agent: ${agentMsg.content}');
         continue;
       }
 
-      print('  ✓ 消息 ${i + 1} 内容一致: [${hiveMsg.role}] ${hiveMsg.content}');
+      print('  ✓ 消息 ${i + 1} 内容一致: [${dbMsg.role}] ${dbMsg.content}');
     }
 
     print('  ✓ 所有消息内容验证通过');
@@ -293,8 +272,8 @@ class AgentPersistenceLoadTest {
     } catch (_) {}
 
     try {
-      await HiveManager.instance.close();
-      print('  ✓ Hive 已关闭');
+      await DatabaseManager.instance.close();
+      print('  ✓ 数据库已关闭');
     } catch (_) {}
 
     try {

@@ -7,15 +7,15 @@ import 'package:uuid/uuid.dart';
 /// 消息持久化测试
 ///
 /// 测试场景：
-/// 1. 初始化 Hive 存储
+/// 1. 初始化数据库存储
 /// 2. 创建员工和会话
 /// 3. 发送消息
-/// 4. 验证消息是否正确持久化到 Hive
+/// 4. 验证消息是否正确持久化到数据库
 /// 5. 验证消息 ID 的一致性
 
 Future<void> main() async {
   print('╔══════════════════════════════════════════════════════════╗');
-  print('║                 消息持久化测试 - Hive 存储                  ║');
+  print('║                 消息持久化测试 - SQLite 存储                  ║');
   print('╚══════════════════════════════════════════════════════════╝\n');
 
   final test = MessagePersistenceTest();
@@ -39,7 +39,7 @@ class MessagePersistenceTest {
   Future<void> run() async {
     try {
       // ===== 阶段 1: 初始化存储 =====
-      print('\n[阶段 1] 初始化 Hive 存储...');
+      print('\n[阶段 1] 初始化数据库存储...');
       await _initializeStorage();
 
       // ===== 阶段 2: 创建设备和员工 =====
@@ -75,8 +75,8 @@ class MessagePersistenceTest {
     tempDirPath = tempDir.path;
     print('  临时目录: $tempDirPath');
 
-    await HiveManager.instance.initialize(storagePath: tempDirPath);
-    print('  ✓ Hive 初始化完成');
+    await DatabaseManager.instance.initialize(storagePath: tempDirPath);
+    print('  ✓ 数据库初始化完成');
   }
 
   /// 创建设备和员工
@@ -147,21 +147,12 @@ class MessagePersistenceTest {
 
   /// 验证消息持久化
   Future<void> _verifyMessagePersistence() async {
-    // 直接从 Hive 读取消息
-    final hiveManager = HiveManager.instance;
-    final messageBox = hiveManager.messageBox;
+    final messageStore = MessageStore();
+    final messages = await messageStore.getMessages(deviceId, employeeId);
 
-    print('  Hive messageBox 中的消息总数: ${messageBox.length}');
+    print('  数据库中的消息总数: ${messages.length}');
 
-    // 获取会话消息索引（使用 deviceId 作为 spaceId）
-    final indexBox = hiveManager.sessionMessagesBox;
-    final indexKey = hiveManager.buildSessionMessagesKey(deviceId, employeeId);
-    final messageUuids = indexBox.get(indexKey);
-
-    print('  索引 key: $indexKey');
-    print('  会话消息索引中的消息数量: ${messageUuids?.length ?? 0}');
-
-    if (messageUuids == null || messageUuids.isEmpty) {
+    if (messages.isEmpty) {
       print('  ⚠️  警告: 没有找到持久化的消息');
       print('  这可能意味着：');
       print('    1. 消息还未发送到 AI（API Key 未配置）');
@@ -170,18 +161,14 @@ class MessagePersistenceTest {
     }
 
     // 读取每条消息的详细信息
-    for (final msgUuid in messageUuids) {
-      final key = hiveManager.buildMessageKey(deviceId, msgUuid as String);
-      final msg = messageBox.get(key);
-      if (msg != null) {
-        print('  消息详情:');
-        print('    UUID: ${msg.uuid}');
-        print('    Role: ${msg.role}');
-        print('    Type: ${msg.type}');
-        print('    Content: ${msg.content?.substring(0, msg.content!.length > 50 ? 50 : msg.content!.length)}...');
-        print('    CreateTime: ${msg.createTime}');
-        print('    ProcessingStatus: ${msg.processingStatus}');
-      }
+    for (final msg in messages) {
+      print('  消息详情:');
+      print('    UUID: ${msg.uuid}');
+      print('    Role: ${msg.role}');
+      print('    Type: ${msg.type}');
+      print('    Content: ${msg.content?.substring(0, msg.content!.length > 50 ? 50 : msg.content!.length)}...');
+      print('    CreateTime: ${msg.createTime}');
+      print('    ProcessingStatus: ${msg.processingStatus}');
     }
 
     print('  ✓ 消息持久化验证完成');
@@ -191,34 +178,28 @@ class MessagePersistenceTest {
   Future<void> _testMessageIdConsistency() async {
     print('  检查消息 ID 一致性...');
 
-    final hiveManager = HiveManager.instance;
-    final indexBox = hiveManager.sessionMessagesBox;
-    final indexKey = hiveManager.buildSessionMessagesKey(deviceId, employeeId);
-    final messageUuids = indexBox.get(indexKey) ?? [];
+    final messageStore = MessageStore();
+    final messages = await messageStore.getMessages(deviceId, employeeId);
 
-    if (messageUuids.isEmpty) {
+    if (messages.isEmpty) {
       print('  ⚠️  跳过 ID 一致性测试（没有持久化的消息）');
       return;
     }
 
     // 检查是否有重复的消息 UUID
-    final uniqueUuids = messageUuids.toSet();
-    if (uniqueUuids.length != messageUuids.length) {
+    final uuids = messages.map((m) => m.uuid).toList();
+    final uniqueUuids = uuids.toSet();
+    if (uniqueUuids.length != uuids.length) {
       print('  ❌ 发现重复的消息 UUID！');
-      print('     总数: ${messageUuids.length}, 唯一数: ${uniqueUuids.length}');
+      print('     总数: ${uuids.length}, 唯一数: ${uniqueUuids.length}');
     } else {
       print('  ✓ 没有发现重复的消息 UUID');
     }
 
     // 检查消息 ID 格式
-    final messageBox = hiveManager.messageBox;
-    for (final msgUuid in messageUuids) {
-      final key = hiveManager.buildMessageKey(deviceId, msgUuid as String);
-      final msg = messageBox.get(key);
-      if (msg != null) {
-        if (!msg.uuid.startsWith('msg-')) {
-          print('  ⚠️  消息 UUID 格式不正确: ${msg.uuid}');
-        }
+    for (final msg in messages) {
+      if (!msg.uuid.startsWith('msg-')) {
+        print('  ⚠️  消息 UUID 格式不正确: ${msg.uuid}');
       }
     }
 
@@ -235,8 +216,8 @@ class MessagePersistenceTest {
     } catch (_) {}
 
     try {
-      await HiveManager.instance.close();
-      print('  ✓ Hive 已关闭');
+      await DatabaseManager.instance.close();
+      print('  ✓ 数据库已关闭');
     } catch (_) {}
 
     try {

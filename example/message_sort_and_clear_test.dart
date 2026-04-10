@@ -81,7 +81,7 @@ class MessageSortAndClearTest {
     tempDirPath = tempDir.path;
     print('  临时目录: $tempDirPath');
 
-    await HiveManager.instance.initialize(storagePath: tempDirPath);
+    await DatabaseManager.instance.initialize(storagePath: tempDirPath);
 
     messageStoreService = MessageStoreServiceImpl(deviceId: deviceId);
 

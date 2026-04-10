@@ -93,7 +93,7 @@ class ReconnectTest {
   Future<void> _initializeStorage() async {
     final tempDir = await Directory.systemTemp.createTemp('wenzagent_reconnect_');
     print('  临时目录: ${tempDir.path}');
-    await HiveManager.instance.initialize(storagePath: tempDir.path);
+    await DatabaseManager.instance.initialize(storagePath: tempDir.path);
     print('  ✓ Hive 初始化完成');
   }
 

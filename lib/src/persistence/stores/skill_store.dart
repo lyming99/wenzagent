@@ -1,26 +1,34 @@
-﻿import 'dart:convert';
+﻿import 'package:sqlite3/sqlite3.dart';
 
-import '../hive_manager.dart';
+import '../database_manager.dart';
 import '../entities/skill_entity.dart';
 
 /// 技能数据存储
 ///
-/// 使用 LazyBox 实现异步读取，避免主线程阻塞。
+/// 使用 SQLite 实现，保持与原 Hive 版本完全相同的公共 API。
 class SkillStore {
-  final HiveManager _hiveManager;
+  final DatabaseManager _dbManager;
 
-  SkillStore({HiveManager? hiveManager})
-      : _hiveManager = hiveManager ?? HiveManager.instance;
+  SkillStore({DatabaseManager? dbManager})
+      : _dbManager = dbManager ?? DatabaseManager.instance;
 
-  /// 解码JSON字符串为实体
-  AiEmployeeSkillEntity? _decodeEntity(dynamic jsonString) {
-    if (jsonString == null) return null;
-    if (jsonString is String && jsonString.isNotEmpty) {
-      return AiEmployeeSkillEntity.fromMap(
-        jsonDecode(jsonString) as Map<String, dynamic>,
-      );
-    }
-    return null;
+  Database get _db => _dbManager.db;
+
+  /// 从数据库行解码为实体
+  AiEmployeeSkillEntity _rowToEntity(Row row) {
+    return AiEmployeeSkillEntity.fromMap({
+      'uuid': row['uuid'],
+      'employeeId': row['employee_id'],
+      'name': row['name'],
+      'description': row['description'],
+      'skillType': row['skill_type'],
+      'config': row['config'],
+      'enabled': row['enabled'],
+      'sortOrder': row['sort_order'],
+      'deleted': row['deleted'],
+      'createTime': row['create_time'],
+      'updateTime': row['update_time'],
+    });
   }
 
   /// 获取员工的技能列表
@@ -28,27 +36,11 @@ class SkillStore {
     String? deviceId,
     String employeeId,
   ) async {
-    final box = _hiveManager.skillBox;
-    final prefix = deviceId != null ? ':$deviceId:' : '::';
-
-    var skills = <AiEmployeeSkillEntity>[];
-    for (final key in box.keys) {
-      final entity = _decodeEntity(await box.get(key));
-      if (entity == null) continue;
-      final buildKey = _hiveManager.buildSkillKey(
-        entity.employeeId.split('-').first,
-        entity.uuid,
-      );
-      if (!buildKey.contains(prefix)) continue;
-      if (entity.deleted == 1) continue;
-      if (entity.employeeId != employeeId) continue;
-      skills.add(entity);
-    }
-
-    // 按排序序号排序
-    skills.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-
-    return skills;
+    final resultSet = _db.select(
+      'SELECT * FROM skills WHERE employee_id = ? AND deleted = 0 ORDER BY sort_order ASC',
+      [employeeId],
+    );
+    return resultSet.map(_rowToEntity).toList();
   }
 
   /// 使用明确deviceId获取员工技能
@@ -56,38 +48,41 @@ class SkillStore {
     String? deviceId,
     String employeeId,
   ) async {
-    final box = _hiveManager.skillBox;
-
-    var skills = <AiEmployeeSkillEntity>[];
-    for (final key in box.keys) {
-      final entity = _decodeEntity(await box.get(key));
-      if (entity == null) continue;
-      if (entity.deleted == 1) continue;
-      if (entity.employeeId != employeeId) continue;
-      skills.add(entity);
-    }
-
-    // 按排序序号排序
-    skills.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-
-    return skills;
+    return findByEmployee(deviceId, employeeId);
   }
 
   /// 查找单个技能
   Future<AiEmployeeSkillEntity?> find(String? deviceId, String uuid) async {
-    final box = _hiveManager.skillBox;
-    final key = _hiveManager.buildSkillKey(deviceId, uuid);
-    return _decodeEntity(await box.get(key));
+    final resultSet = _db.select(
+      'SELECT * FROM skills WHERE uuid = ? AND deleted = 0',
+      [uuid],
+    );
+    for (final row in resultSet) {
+      return _rowToEntity(row);
+    }
+    return null;
   }
 
   /// 保存技能
   Future<void> save(AiEmployeeSkillEntity entity) async {
-    final box = _hiveManager.skillBox;
-    final key = _hiveManager.buildSkillKey(
-      entity.employeeId.split('-').first,
+    _db.execute('''
+      INSERT OR REPLACE INTO skills (
+        uuid, employee_id, name, description, skill_type,
+        config, enabled, sort_order, deleted, create_time, update_time
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', [
       entity.uuid,
-    );
-    await box.put(key, jsonEncode(entity.toMap()));
+      entity.employeeId,
+      entity.name,
+      entity.description,
+      entity.skillType,
+      entity.config,
+      entity.enabled,
+      entity.sortOrder,
+      entity.deleted,
+      entity.createTime.millisecondsSinceEpoch,
+      entity.updateTime.millisecondsSinceEpoch,
+    ]);
   }
 
   /// 使用明确deviceId保存技能
@@ -95,42 +90,39 @@ class SkillStore {
     String? deviceId,
     AiEmployeeSkillEntity entity,
   ) async {
-    final box = _hiveManager.skillBox;
-    final key = _hiveManager.buildSkillKey(deviceId, entity.uuid);
-    await box.put(key, jsonEncode(entity.toMap()));
+    await save(entity);
   }
 
   /// 删除技能（软删除）
   Future<void> delete(String? deviceId, String uuid) async {
-    final box = _hiveManager.skillBox;
-    final key = _hiveManager.buildSkillKey(deviceId, uuid);
-    final entity = _decodeEntity(await box.get(key));
-    if (entity != null) {
-      await box.put(key, jsonEncode(entity.copyWith(deleted: 1).toMap()));
-    }
+    _db.execute(
+      'UPDATE skills SET deleted = 1 WHERE uuid = ?',
+      [uuid],
+    );
   }
 
   /// 硬删除技能
   Future<void> hardDelete(String? deviceId, String uuid) async {
-    final box = _hiveManager.skillBox;
-    final key = _hiveManager.buildSkillKey(deviceId, uuid);
-    await box.delete(key);
+    _db.execute('DELETE FROM skills WHERE uuid = ?', [uuid]);
   }
 
-  /// 删除员工的所有技能
+  /// 删除员工的所有技能（软删除）
   Future<void> deleteByEmployee(
     String? deviceId,
     String employeeId,
   ) async {
-    final skills = await findByEmployeeWithDeviceId(deviceId, employeeId);
-    for (final skill in skills) {
-      await delete(deviceId, skill.uuid);
-    }
+    _db.execute(
+      'UPDATE skills SET deleted = 1 WHERE employee_id = ?',
+      [employeeId],
+    );
   }
 
   /// 获取技能数量
   Future<int> count(String? deviceId, String employeeId) async {
-    final skills = await findByEmployeeWithDeviceId(deviceId, employeeId);
-    return skills.length;
+    final resultSet = _db.select(
+      'SELECT COUNT(*) as cnt FROM skills WHERE employee_id = ? AND deleted = 0',
+      [employeeId],
+    );
+    return resultSet.first['cnt'] as int;
   }
 }

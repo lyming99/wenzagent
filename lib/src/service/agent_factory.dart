@@ -291,7 +291,7 @@ class AgentFactoryImpl implements AgentFactory {
 
     // 持久化消息回调
     adapter.persistMessage = (message) async {
-      // 使用 fromMessageMap 将整个 Map 序列化为 JSON 字符串存入 Hive
+      // 使用 fromMessageMap 将整个 Map 序列化为 JSON 字符串存入数据库
       var entity = AiEmployeeMessageEntity.fromMessageMap(message);
       // 如果当前正在查看该会话，直接写入已读状态（避免重启后因 DB 未更新而误显示未读）
       if (entity.role == 'assistant' && shouldMarkMessageAsRead?.call(employeeId) == true) {

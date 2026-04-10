@@ -15,7 +15,7 @@ import 'package:uuid/uuid.dart';
 /// 预期结果：
 /// - 用户消息正确持久化
 /// - AI 回复消息正确持久化
-/// - 清空消息后 Hive 和内存都清空
+/// - 清空消息后数据库和内存都清空
 /// - 清空后重新发送消息可以正确持久化
 /// - 跨实例消息内容一致
 
@@ -94,8 +94,8 @@ class MessagePersistenceFullTest {
     tempDirPath = tempDir.path;
     print('  临时目录: $tempDirPath');
 
-    await HiveManager.instance.initialize(storagePath: tempDirPath);
-    print('  ✓ Hive 初始化完成');
+    await DatabaseManager.instance.initialize(storagePath: tempDirPath);
+    print('  ✓ 数据库初始化完成');
   }
 
   /// 创建测试环境
@@ -164,8 +164,8 @@ class MessagePersistenceFullTest {
     final messagesInMemory = await agentProxy.getSessionMessages();
     print('  内存中消息数量: ${messagesInMemory.length}');
 
-    // 验证 Hive 中的消息
-    await _verifyHiveMessages(expectedCount: userMessages.length);
+    // 验证数据库中的消息
+    await _verifyDbMessages(expectedCount: userMessages.length);
 
     // 验证消息内容
     print('  验证消息内容...');
@@ -214,8 +214,8 @@ class MessagePersistenceFullTest {
       return;
     }
 
-    // 验证 Hive 中的消息
-    await _verifyHiveMessages(expectedCount: messages.length);
+    // 验证数据库中的消息
+    await _verifyDbMessages(expectedCount: messages.length);
 
     // 打印 AI 回复
     for (var i = 0; i < aiResponses.length; i++) {
@@ -254,18 +254,15 @@ class MessagePersistenceFullTest {
       throw StateError('内存消息清空失败');
     }
 
-    // 验证 Hive 中的消息
-    final hiveManager = HiveManager.instance;
-    final indexBox = hiveManager.sessionMessagesBox;
-    final indexKey = hiveManager.buildSessionMessagesKey(deviceId, employeeId);
-    final messageUuids = indexBox.get(indexKey);
+    // 验证数据库中的消息
+    final messageStore = MessageStore();
+    final dbMessageCount = await messageStore.count(deviceId, employeeId);
 
-    print('  清空后 Hive 消息数量: ${messageUuids?.length ?? 0}');
+    print('  清空后数据库消息数量: $dbMessageCount');
 
-    if (messageUuids != null && messageUuids.isNotEmpty) {
-      print('  ❌ 错误: Hive 中的消息未清空');
-      print('  剩余消息 UUIDs: $messageUuids');
-      throw StateError('Hive 消息清空失败');
+    if (dbMessageCount > 0) {
+      print('  ❌ 错误: 数据库中的消息未清空');
+      throw StateError('数据库消息清空失败');
     }
 
     print('  ✓ 消息清空功能测试通过');
@@ -301,8 +298,8 @@ class MessagePersistenceFullTest {
       throw StateError('消息内容不匹配');
     }
 
-    // 验证 Hive
-    await _verifyHiveMessages(expectedCount: 1);
+    // 验证数据库
+    await _verifyDbMessages(expectedCount: 1);
 
     print('  ✓ 消息内容: $content');
     print('  ✓ 清空后重新发送测试通过');
@@ -341,25 +338,22 @@ class MessagePersistenceFullTest {
     print('  ✓ 跨实例消息一致性测试通过');
   }
 
-  /// 验证 Hive 中的消息数量
-  Future<void> _verifyHiveMessages({required int expectedCount}) async {
-    final hiveManager = HiveManager.instance;
-    final indexBox = hiveManager.sessionMessagesBox;
-    final indexKey = hiveManager.buildSessionMessagesKey(deviceId, employeeId);
-    final messageUuids = indexBox.get(indexKey);
+  /// 验证数据库中的消息数量
+  Future<void> _verifyDbMessages({required int expectedCount}) async {
+    final messageStore = MessageStore();
+    final actualCount = await messageStore.count(deviceId, employeeId);
 
-    final actualCount = messageUuids?.length ?? 0;
-    print('  Hive 消息数量: $actualCount (期望: $expectedCount)');
+    print('  数据库消息数量: $actualCount (期望: $expectedCount)');
 
     if (actualCount != expectedCount) {
-      print('  ❌ 错误: Hive 消息数量不正确');
-      print('     消息 UUIDs: $messageUuids');
-      throw StateError('Hive 消息数量不正确，期望 $expectedCount，实际 $actualCount');
+      print('  ❌ 错误: 数据库消息数量不正确');
+      throw StateError('数据库消息数量不正确，期望 $expectedCount，实际 $actualCount');
     }
 
-    // 打印所有消息 UUID
-    if (messageUuids != null && messageUuids.isNotEmpty) {
-      print('  Hive 消息 UUIDs: ${messageUuids.join(", ")}');
+    // 打印所有消息
+    final messages = await messageStore.getMessages(deviceId, employeeId);
+    if (messages.isNotEmpty) {
+      print('  数据库消息 UUIDs: ${messages.map((m) => m.uuid).join(", ")}');
     }
   }
 
@@ -378,8 +372,8 @@ class MessagePersistenceFullTest {
     } catch (_) {}
 
     try {
-      await HiveManager.instance.close();
-      print('  ✓ Hive 已关闭');
+      await DatabaseManager.instance.close();
+      print('  ✓ 数据库已关闭');
     } catch (_) {}
 
     try {

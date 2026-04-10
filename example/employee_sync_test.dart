@@ -100,7 +100,7 @@ class EmployeeSyncTest {
     print('  设备B 临时目录: $tempDirB');
 
     // 初始化设备 A
-    await HiveManager.instance.initialize(storagePath: tempDirA);
+    await DatabaseManager.instance.initialize(storagePath: tempDirA);
     deviceA = DeviceClientImpl(
       deviceId: deviceAId,
       deviceName: 'Device Alpha',
@@ -108,8 +108,8 @@ class EmployeeSyncTest {
       port: 9090,
     );
 
-    // 初始化设备 B（需要新的 HiveManager 实例）
-    // 注意：实际测试中应该使用独立的 HiveManager
+    // 初始化设备 B（需要新的 DatabaseManager 实例）
+    // 注意：实际测试中应该使用独立的 DatabaseManager
     deviceB = DeviceClientImpl(
       deviceId: deviceBId,
       deviceName: 'Device Beta',

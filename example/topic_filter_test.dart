@@ -71,7 +71,7 @@ class TopicFilterTest {
       'wenzagent_topic_filter_',
     );
     print('  临时目录: ${tempDir.path}');
-    await HiveManager.instance.initialize(storagePath: tempDir.path);
+    await DatabaseManager.instance.initialize(storagePath: tempDir.path);
     print('  ✓ Hive 初始化完成');
   }
 

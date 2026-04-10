@@ -214,13 +214,13 @@ class PersistentChatAdapter extends LangChainChatAdapter {
   Future<void> clearCurrentSession() async {
     await super.clearCurrentSession();
 
-    // 删除 Hive 中的消息
+    // 删除数据库中的消息
     if (deleteMessagesCallback != null && currentSessionUuid != null) {
       try {
         await deleteMessagesCallback!(currentSessionUuid!);
-        print('[PersistentChatAdapter] clearCurrentSession: 已删除 Hive 中的消息');
+        print('[PersistentChatAdapter] clearCurrentSession: 已删除数据库中的消息');
       } catch (e) {
-        print('[PersistentChatAdapter] clearCurrentSession: 删除 Hive 消息失败: $e');
+        print('[PersistentChatAdapter] clearCurrentSession: 删除数据库消息失败: $e');
       }
     }
 
@@ -309,7 +309,7 @@ class PersistentChatAdapter extends LangChainChatAdapter {
 
   /// 注入一条 assistant 消息到当前会话
   ///
-  /// 不触发 LLM，直接写入 session 内存 + 持久化到 Hive。
+  /// 不触发 LLM，直接写入 session 内存 + 持久化到数据库。
   /// 用于定时任务、系统通知等场景。
   void injectAssistantMessage(String messageId, String content, String deviceIdentifier) {
     final session = memoryManager.getSession(currentEmployeeUuid!);
@@ -324,7 +324,7 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     );
     session.addMessageWrapper(deviceIdentifier, wrapper);
 
-    // 持久化到 Hive
+    // 持久化到数据库
     final messageMap = _messageWrapperToMap(wrapper);
     _persistedMessageIds.add(messageId);
     _persistMessage(messageMap);
@@ -332,7 +332,7 @@ class PersistentChatAdapter extends LangChainChatAdapter {
 
   /// 注入一条 system 消息到当前会话
   ///
-  /// 不触发 LLM，直接写入 session 内存 + 持久化到 Hive。
+  /// 不触发 LLM，直接写入 session 内存 + 持久化到数据库。
   /// 用于定时任务触发等场景，将任务指令以 system 角色注入会话，
   /// 之后由 AgentImpl 触发一次 sendMessage 让 LLM 处理。
   void injectSystemMessage(String messageId, String content, String deviceIdentifier) {
@@ -348,7 +348,7 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     );
     session.addMessageWrapper(deviceIdentifier, wrapper);
 
-    // 持久化到 Hive
+    // 持久化到数据库
     final messageMap = _messageWrapperToMap(wrapper);
     _persistedMessageIds.add(messageId);
     _persistMessage(messageMap);
@@ -527,7 +527,7 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     final toolCalls = map['toolCalls'];
     List<dynamic>? toolCallsList;
 
-    // toolCalls 可能是 List（来自内存）或 String（来自 Hive JSON 字符串）
+    // toolCalls 可能是 List（来自内存）或 String（来自数据库 JSON 字符串）
     if (toolCalls is List && toolCalls.isNotEmpty) {
       toolCallsList = toolCalls;
     } else if (toolCalls is String && toolCalls.isNotEmpty) {

@@ -81,7 +81,7 @@ class SessionSyncTest {
     print('  设备B 临时目录: $tempDirB');
 
     // 初始化设备 A
-    await HiveManager.instance.initialize(storagePath: tempDirA);
+    await DatabaseManager.instance.initialize(storagePath: tempDirA);
     deviceA = DeviceClientImpl(
       deviceId: deviceAId,
       deviceName: 'Device Alpha',

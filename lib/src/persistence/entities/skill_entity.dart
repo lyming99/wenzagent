@@ -1,4 +1,4 @@
-﻿/// AI员工技能实体（Hive版本）
+﻿/// AI员工技能实体
 class AiEmployeeSkillEntity {
   /// 技能UUID
   final String uuid;

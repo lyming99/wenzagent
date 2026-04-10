@@ -15,8 +15,8 @@ dependencies:
   path: ^1.9.0
   yaml: ^3.1.2
   meta: ^1.12.0
-  # Hive for local storage
-  hive: ^2.2.3
+  # SQLite for local storage (纯 Dart FFI，异步不阻塞)
+  sqlite3: ^2.4.6
   # LangChain
   langchain_core: ^0.4.1
   langchain_openai: ^0.8.1

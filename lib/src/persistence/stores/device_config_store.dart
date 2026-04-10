@@ -1,39 +1,60 @@
 import 'dart:convert';
 
-import '../hive_manager.dart';
+import 'package:sqlite3/sqlite3.dart';
+
+import '../database_manager.dart';
 import '../entities/device_config_entity.dart';
 
 /// 设备配置存储
 ///
-/// 使用deviceId作为主键：一个设备只有一个配置。
-/// 使用 LazyBox 实现异步读取，避免主线程阻塞。
+/// 使用 SQLite 实现，保持与原 Hive 版本完全相同的公共 API。
+/// 主键：deviceId（一个设备只有一个配置）。
 class DeviceConfigStore {
-  final HiveManager _hiveManager;
+  final DatabaseManager _dbManager;
 
-  DeviceConfigStore({HiveManager? hiveManager})
-      : _hiveManager = hiveManager ?? HiveManager.instance;
+  DeviceConfigStore({DatabaseManager? dbManager})
+      : _dbManager = dbManager ?? DatabaseManager.instance;
 
-  /// 构建设备配置key（使用 wenz_ 前缀）
-  String _buildKey(String deviceId) {
-    return 'wenz_devconf:$deviceId';
-  }
+  Database get _db => _dbManager.db;
 
-  /// 解码JSON字符串为实体
-  DeviceConfigEntity? _decodeEntity(dynamic jsonString) {
-    if (jsonString == null) return null;
-    if (jsonString is String && jsonString.isNotEmpty) {
-      return DeviceConfigEntity.fromMap(
-        jsonDecode(jsonString) as Map<String, dynamic>,
+  /// 从数据库行解码为实体
+  DeviceConfigEntity _rowToEntity(Row row) {
+    DeviceInfoConfig deviceInfo = DeviceInfoConfig();
+    final deviceInfoStr = row['device_info'] as String?;
+    if (deviceInfoStr != null && deviceInfoStr.isNotEmpty) {
+      deviceInfo = DeviceInfoConfig.fromMap(
+        jsonDecode(deviceInfoStr) as Map<String, dynamic>,
       );
     }
-    return null;
+
+    Map<String, String> envVars = {};
+    final envVarsStr = row['env_vars'] as String?;
+    if (envVarsStr != null && envVarsStr.isNotEmpty) {
+      final raw = jsonDecode(envVarsStr) as Map;
+      envVars = raw.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
+
+    return DeviceConfigEntity(
+      deviceId: row['device_id'] as String,
+      deviceInfo: deviceInfo,
+      environmentVariables: envVars,
+      createTime: DateTime.fromMillisecondsSinceEpoch(
+          row['create_time'] as int),
+      updateTime: DateTime.fromMillisecondsSinceEpoch(
+          row['update_time'] as int),
+    );
   }
 
   /// 获取设备配置（主键查找）
   Future<DeviceConfigEntity?> find(String deviceId) async {
-    final box = _hiveManager.deviceConfigBox;
-    final key = _buildKey(deviceId);
-    return _decodeEntity(await box.get(key));
+    final resultSet = _db.select(
+      'SELECT * FROM device_configs WHERE device_id = ?',
+      [deviceId],
+    );
+    for (final row in resultSet) {
+      return _rowToEntity(row);
+    }
+    return null;
   }
 
   /// 获取或创建设备配置
@@ -52,11 +73,19 @@ class DeviceConfigStore {
     return config;
   }
 
-  /// 保存设备配置
+  /// 保存设备配置（INSERT OR REPLACE）
   Future<void> save(DeviceConfigEntity config) async {
-    final box = _hiveManager.deviceConfigBox;
-    final key = _buildKey(config.deviceId);
-    await box.put(key, jsonEncode(config.toMap()));
+    _db.execute('''
+      INSERT OR REPLACE INTO device_configs (
+        device_id, device_info, env_vars, create_time, update_time
+      ) VALUES (?, ?, ?, ?, ?)
+    ''', [
+      config.deviceId,
+      jsonEncode(config.deviceInfo.toMap()),
+      jsonEncode(config.environmentVariables),
+      config.createTime.millisecondsSinceEpoch,
+      config.updateTime.millisecondsSinceEpoch,
+    ]);
   }
 
   /// 更新设备信息配置
@@ -130,26 +159,25 @@ class DeviceConfigStore {
 
   /// 删除设备配置
   Future<void> delete(String deviceId) async {
-    final box = _hiveManager.deviceConfigBox;
-    final key = _buildKey(deviceId);
-    await box.delete(key);
+    _db.execute(
+      'DELETE FROM device_configs WHERE device_id = ?',
+      [deviceId],
+    );
   }
 
   /// 获取所有设备配置
   Future<List<DeviceConfigEntity>> findAll() async {
-    final box = _hiveManager.deviceConfigBox;
-
-    var configs = <DeviceConfigEntity>[];
-    for (final key in box.keys) {
-      final entity = _decodeEntity(await box.get(key));
-      if (entity != null) configs.add(entity);
-    }
-    return configs;
+    return _db
+        .select('SELECT * FROM device_configs')
+        .map(_rowToEntity)
+        .toList();
   }
 
   /// 获取设备配置数量
   Future<int> count() async {
-    final configs = await findAll();
-    return configs.length;
+    final resultSet = _db.select(
+      'SELECT COUNT(*) as cnt FROM device_configs',
+    );
+    return resultSet.first['cnt'] as int;
   }
 }

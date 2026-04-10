@@ -6,7 +6,7 @@ library;
 import 'dart:io';
 
 import 'package:wenzagent/src/persistence/entities/device_config_entity.dart';
-import 'package:wenzagent/src/persistence/hive_manager.dart';
+import 'package:wenzagent/src/persistence/database_manager.dart';
 import 'package:wenzagent/src/device/device_client.dart';
 import 'package:wenzagent/src/device/impl/device_client_impl.dart';
 
@@ -16,7 +16,7 @@ Future<void> main() async {
   // 1. 初始化持久化层
   final testPath = '${Directory.systemTemp.path}/device_config_example';
   await Directory(testPath).create(recursive: true);
-  await HiveManager.instance.initialize(storagePath: testPath);
+  await DatabaseManager.instance.initialize(storagePath: testPath);
 
   // 2. 创建设备客户端
   final deviceClient = DeviceClientImpl(
@@ -137,7 +137,7 @@ Future<void> main() async {
   } finally {
     // 清理资源
     await deviceClient.dispose();
-    await HiveManager.instance.close();
+    await DatabaseManager.instance.close();
 
     // 删除测试目录
     try {

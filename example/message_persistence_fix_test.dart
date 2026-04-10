@@ -60,7 +60,7 @@ class MessagePersistenceFixTest {
     tempDirPath = tempDir.path;
     print('  临时目录: $tempDirPath');
 
-    await HiveManager.instance.initialize(storagePath: tempDirPath);
+    await DatabaseManager.instance.initialize(storagePath: tempDirPath);
     print('  ✓ Hive 初始化完成');
   }
 
