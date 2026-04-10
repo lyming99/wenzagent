@@ -6,6 +6,9 @@ import 'package:langchain_openai/langchain_openai.dart';
 
 import 'provider_config.dart';
 
+/// Anthropic 工具名正则: 仅允许 a-zA-Z0-9_-，最长 64 字符
+final _anthropicToolNameRegex = RegExp(r'^[a-zA-Z0-9_-]{1,64}$');
+
 /// ChatModel 工厂类
 ///
 /// 根据配置创建对应的 LLM ChatModel 实例
@@ -40,12 +43,38 @@ class ChatModelFactory {
       case LLMProvider.ollama:
         return ChatOpenAIOptions(tools: toolSpecs);
       case LLMProvider.anthropic:
-        return ChatAnthropicOptions(tools: toolSpecs);
+        return ChatAnthropicOptions(
+          tools: toolSpecs.map(_sanitizeToolSpec).toList(),
+        );
       case LLMProvider.google:
         // 暂时禁用：存在 googleai_dart API 兼容性问题
         // return ChatGoogleGenerativeAIOptions(tools: toolSpecs);
         throw UnimplementedError('Google AI support is temporarily disabled');
     }
+  }
+
+  /// 清洗 ToolSpec 以满足 Anthropic 工具名规范
+  ///
+  /// Anthropic 要求: `^[a-zA-Z0-9_-]{1,64}$`
+  /// - 中文名、空格等非法字符 → 替换为下划线
+  /// - 超长名称 → 截断到 64 字符
+  /// - 前缀 `skill_` + 原名清洗后的结果（仅对需要清洗的名称）
+  static ToolSpec _sanitizeToolSpec(ToolSpec spec) {
+    if (_anthropicToolNameRegex.hasMatch(spec.name)) {
+      return spec;
+    }
+    final sanitized = spec.name
+        .replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+    final finalName = sanitized.isEmpty || sanitized.length > 64
+        ? 'skill_${sanitized.isEmpty ? 'unnamed' : sanitized.substring(0, 64)}'
+        : sanitized;
+    return ToolSpec(
+      name: finalName,
+      description: spec.description,
+      inputJsonSchema: spec.inputJsonSchema,
+    );
   }
 
   /// 创建 OpenAI ChatModel
