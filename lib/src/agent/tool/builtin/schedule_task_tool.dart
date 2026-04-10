@@ -150,7 +150,7 @@ class ScheduleTaskTool extends AgentTool {
   }
 
   Future<ToolResult> _create(Map<String, dynamic> arguments) async {
-    final message = arguments['message'] as String?;
+    var message = arguments['message'] as String?;
     final schedule = arguments['schedule'] as String?;
     final name = arguments['name'] as String?;
     final taskType = arguments['taskType'] as String? ?? 'reminder';
@@ -161,7 +161,8 @@ class ScheduleTaskTool extends AgentTool {
 
     if (message == null || message.isEmpty) {
       print('[ScheduleTaskTool] _create failed: message is empty');
-      return ToolResult.error('message is required');
+      // return ToolResult.error('message is required');
+      message = name ?? 'Scheduled task';
     }
     if (schedule == null || schedule.isEmpty) {
       print('[ScheduleTaskTool] _create failed: schedule is empty');

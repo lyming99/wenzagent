@@ -849,6 +849,10 @@ class LangChainChatAdapter implements IChatAdapter {
       if (toolName != null) {
         map['toolName'] = toolName;
       }
+      // ErrorToolChatMessage 的 isError 标记
+      if (message is ErrorToolChatMessage && message.isError) {
+        map['isError'] = true;
+      }
     }
 
     // 从 wrapper.metadata 读取 status

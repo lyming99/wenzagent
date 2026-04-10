@@ -24,7 +24,7 @@ class ToolResult {
 
   /// 创建错误结果
   factory ToolResult.error(String content, {Map<String, dynamic>? metadata}) {
-    return ToolResult(content: content, isError: true, metadata: metadata);
+    return ToolResult(content: "error: $content", isError: true, metadata: metadata);
   }
 
   Map<String, dynamic> toMap() {

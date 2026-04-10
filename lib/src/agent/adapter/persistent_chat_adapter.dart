@@ -9,6 +9,7 @@ import '../processor/cancellation_token.dart';
 import '../processor/message_processor.dart';
 import '../processor/persistence_queue.dart';
 import 'langchain_chat_adapter.dart';
+import 'error_tool_chat_message.dart';
 import 'session_memory_manager.dart';
 
 /// 持久化回调函数类型
@@ -458,6 +459,10 @@ class PersistentChatAdapter extends LangChainChatAdapter {
       if (toolName != null) {
         map['toolName'] = toolName;
       }
+      // ErrorToolChatMessage 的 isError 标记
+      if (message is ErrorToolChatMessage && message.isError) {
+        map['isError'] = true;
+      }
     }
 
     return map;
@@ -473,6 +478,10 @@ class PersistentChatAdapter extends LangChainChatAdapter {
     if (type == 'functionResult' || role == 'tool') {
       final toolCallId =
           map['toolCallId'] as String? ?? map['id'] as String? ?? '';
+      final isError = map['isError'] == true;
+      if (isError) {
+        return ErrorToolChatMessage(toolCallId: toolCallId, content: content, isError: true);
+      }
       return ToolChatMessage(toolCallId: toolCallId, content: content);
     }
 

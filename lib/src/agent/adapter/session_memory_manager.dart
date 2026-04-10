@@ -69,14 +69,13 @@ class SessionHistory {
   }) : createdAt = createdAt ?? DateTime.now(),
        messagesMap = messagesMap ?? {};
 
-  /// 获取所有设备的所有消息（合并）
+  /// 获取所有设备的所有消息（合并），按 createdAt 升序排列
   List<MessageWrapper> get allMessages {
     final all = <MessageWrapper>[];
-    // 按设备ID排序，保持一致性
-    final sortedDeviceIds = messagesMap.keys.toList()..sort();
-    for (final deviceId in sortedDeviceIds) {
-      all.addAll(messagesMap[deviceId]!);
+    for (final messages in messagesMap.values) {
+      all.addAll(messages);
     }
+    all.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     return all;
   }
 

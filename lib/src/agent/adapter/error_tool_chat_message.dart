@@ -17,4 +17,11 @@ class ErrorToolChatMessage extends ToolChatMessage {
     required super.content,
     this.isError = false,
   });
+
+  /// Converts this ChatMessage to a map along with a type hint for deserialization.
+  @override
+  Map<String, dynamic> toMap() => {
+    ...super.toMap(),
+    'isError': isError,
+  };
 }
