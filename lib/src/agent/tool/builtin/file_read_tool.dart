@@ -30,7 +30,7 @@ class FileReadTool extends AgentTool {
         'properties': {
           'path': {
             'type': 'string',
-            'description': 'The absolute or relative path to the file to read',
+            'description': 'Absolute path to the file to read. IMPORTANT: Always use absolute paths (e.g., /home/user/project/file.txt or D:\\project\\file.txt), never use relative paths.',
           },
           'offset': {
             'type': 'integer',

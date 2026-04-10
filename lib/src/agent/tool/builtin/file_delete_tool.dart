@@ -20,7 +20,7 @@ class FileDeleteTool extends AgentTool {
     'properties': {
       'path': {
         'type': 'string',
-        'description': 'The path to the file or directory to delete',
+        'description': 'Absolute path to the file or directory to delete. IMPORTANT: Always use absolute paths, never use relative paths.',
       },
       'recursive': {
         'type': 'boolean',

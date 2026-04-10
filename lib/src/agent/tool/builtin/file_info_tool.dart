@@ -20,7 +20,7 @@ class FileInfoTool extends AgentTool {
     'properties': {
       'path': {
         'type': 'string',
-        'description': 'The path to the file or directory',
+        'description': 'Absolute path to the file or directory. IMPORTANT: Always use absolute paths, never use relative paths.',
       },
     },
     'required': ['path'],

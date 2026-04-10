@@ -4,6 +4,7 @@ import 'package:langchain_core/tools.dart';
 // import 'package:langchain_google/langchain_google.dart';  // 暂时禁用：存在 googleai_dart API 兼容性问题
 import 'package:langchain_openai/langchain_openai.dart';
 
+import 'anthropic_chat_model.dart';
 import 'provider_config.dart';
 
 /// Anthropic 工具名正则: 仅允许 a-zA-Z0-9_-，最长 64 字符
@@ -92,17 +93,28 @@ class ChatModelFactory {
     );
   }
 
+  /// Anthropic 默认最大输出 token 数
+  ///
+  /// langchain_anthropic 默认仅 1024，对于编程场景明显不够，
+  /// 因此在用户未显式配置时使用 16384 作为默认值。
+  static const int _anthropicDefaultMaxTokens = 32768;
+
   /// 创建 Anthropic ChatModel (Claude)
-  static ChatAnthropic _createAnthropic(ProviderConfig config) {
-    return ChatAnthropic(
+  ///
+  /// 使用 [AnthropicErrorAwareChatModel] 替代标准 [ChatAnthropic]，
+  /// 支持将工具执行错误传播到 API 的 is_error 字段，
+  /// 避免 Claude 死循环重试失败的工具调用。
+  static AnthropicErrorAwareChatModel _createAnthropic(ProviderConfig config) {
+    return AnthropicErrorAwareChatModel(
       apiKey: config.apiKey!,
       baseUrl: config.baseUrl ?? 'https://api.anthropic.com/v1',
       defaultOptions: ChatAnthropicOptions(
         model: config.model,
         temperature: config.options.temperature,
-        maxTokens: config.options.maxTokens,
+        maxTokens: config.options.maxTokens ?? _anthropicDefaultMaxTokens,
         topP: config.options.topP,
         stopSequences: config.options.stop,
+        thinking: const ChatAnthropicThinking.disabled(),
       ),
     );
   }

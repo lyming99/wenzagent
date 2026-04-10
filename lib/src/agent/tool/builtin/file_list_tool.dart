@@ -29,7 +29,7 @@ class FileListTool extends AgentTool {
         'properties': {
           'path': {
             'type': 'string',
-            'description': 'The directory path to list contents of',
+            'description': 'Absolute path to the directory to list contents of. IMPORTANT: Always use absolute paths, never use relative paths.',
           },
           'recursive': {
             'type': 'boolean',

@@ -15,6 +15,7 @@ import '../../agent/impl/agent_impl.dart';
 import '../../agent/notification/agent_notification_hub.dart';
 import '../../agent/rpc/agent_rpc_config.dart';
 import '../../agent/tool/builtin/schedule_task_tool.dart';
+import '../../agent/tool/permission_rule.dart';
 import '../../entity/host_rpc_request.dart';
 import '../../entity/lan_device_info.dart';
 import '../../entity/lan_message.dart';
@@ -833,6 +834,11 @@ class DeviceClientImpl implements DeviceClient {
         } else {
           await _employeeManager.updateEmployee(employee);
         }
+        // 热更新已运行 Agent 的权限配置
+        if (existing != null &&
+            (employee.permissionConfig != existing.permissionConfig)) {
+          _reloadPermissionConfig(employee.uuid, employee);
+        }
       }
       return {'count': employees.length};
     });
@@ -1153,8 +1159,61 @@ class DeviceClientImpl implements DeviceClient {
       await agent.setProject(ProjectData(projectUuid: employee.projectUuid));
     }
 
+    // 注入权限配置（从员工实体的 permissionConfig 字段）
+    _injectPermissionConfig(agent, employee);
+
     _localAgents[employeeId] = agent;
     return agent;
+  }
+
+  /// 注入权限配置到 Agent 的 PermissionManager
+  void _injectPermissionConfig(IAgent agent, AiEmployeeEntity employee) {
+    final impl = agent as AgentImpl;
+    final manager = impl.permissionManager;
+
+    if (employee.permissionConfig != null &&
+        employee.permissionConfig!.isNotEmpty) {
+      final config =
+          PermissionConfig.fromJsonString(employee.permissionConfig!);
+      manager.configure(config);
+      print('[DeviceClient] Permission config injected for ${employee.uuid}'
+          ' (${config.whitelist.length} whitelist, ${config.blacklist.length} blacklist rules)');
+    }
+
+    // 监听配置变更，自动持久化回员工实体
+    manager.onConfigChanged = (newConfig) async {
+      try {
+        final updatedEmployee = await _employeeManager.getEmployee(employee.uuid);
+        if (updatedEmployee != null) {
+          final saved = updatedEmployee.copyWith(
+            permissionConfig: newConfig.toJsonString(),
+            updateTime: DateTime.now(),
+          );
+          await _employeeManager.updateEmployee(saved);
+          print('[DeviceClient] Permission config saved for ${employee.uuid}');
+        }
+      } catch (e) {
+        print('[DeviceClient] Failed to save permission config: $e');
+      }
+    };
+  }
+
+  /// 热更新已运行 Agent 的权限配置（用于远程同步后）
+  void _reloadPermissionConfig(String employeeId, AiEmployeeEntity employee) {
+    final agent = _localAgents[employeeId];
+    if (agent == null) return;
+
+    final impl = agent as AgentImpl;
+    final manager = impl.permissionManager;
+
+    if (employee.permissionConfig != null &&
+        employee.permissionConfig!.isNotEmpty) {
+      final config =
+          PermissionConfig.fromJsonString(employee.permissionConfig!);
+      manager.configure(config);
+      print('[DeviceClient] Permission config reloaded for $employeeId'
+          ' (${config.whitelist.length} whitelist, ${config.blacklist.length} blacklist rules)');
+    }
   }
 
   /// 将 ScheduledTaskManager 回调注入到 Agent 的 ScheduleTaskTool

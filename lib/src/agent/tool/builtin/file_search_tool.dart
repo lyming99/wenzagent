@@ -25,7 +25,7 @@ class FileSearchTool extends AgentTool {
     'properties': {
       'directory': {
         'type': 'string',
-        'description': 'The root directory to search in',
+        'description': 'Absolute path to the root directory to search in. IMPORTANT: Always use absolute paths, never use relative paths.',
       },
       'pattern': {
         'type': 'string',

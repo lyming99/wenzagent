@@ -21,7 +21,7 @@ class FileWriteTool extends AgentTool {
     'properties': {
       'path': {
         'type': 'string',
-        'description': 'The absolute or relative path to the file to write',
+        'description': 'Absolute path to the file to write. IMPORTANT: Always use absolute paths (e.g., /home/user/project/file.txt or D:\\project\\file.txt), never use relative paths.',
       },
       'content': {
         'type': 'string',

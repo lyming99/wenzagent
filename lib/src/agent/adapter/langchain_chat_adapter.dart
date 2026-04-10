@@ -15,6 +15,7 @@ import '../tool/permission_manager.dart';
 import '../tool/tool_registry.dart';
 import 'chat_model_factory.dart';
 import 'context_compressor.dart';
+import 'error_tool_chat_message.dart';
 import 'session_memory_manager.dart';
 
 /// Tool calling 循环最大迭代次数
@@ -177,6 +178,13 @@ class LangChainChatAdapter implements IChatAdapter {
 
       // Tool calling 循环
       bool completedNormally = false;
+
+      // 重复工具调用检测：记录最近一轮的工具调用签名，防止死循环
+      // 当 LLM 连续两轮发出完全相同的工具调用时，说明它陷入了死循环
+      String? lastToolCallsSignature;
+      const int maxConsecutiveDuplicateRounds = 3;
+      int consecutiveDuplicateCount = 0;
+
       for (var iteration = 0; iteration < _maxToolCallIterations; iteration++) {
         // 检查取消
         if (cancellationToken?.isCancelled == true) {
@@ -295,11 +303,45 @@ class LangChainChatAdapter implements IChatAdapter {
         }
 
         // 有工具调用 → 将 AI 消息（含 toolCalls）加入历史
+        // 修复：流式模式下 AIChatMessage.concat() 只累积 argumentsRaw（字符串拼接），
+        // arguments Map 始终为 {}（因为每个 InputJsonBlockDelta 块的 arguments 都是 const {}）。
+        // 如果直接存储 arguments={}, 下次发送给 Claude 时 tool_use block 的 input 为空，
+        // Claude 会看到自己之前用空参数调用了工具，导致后续调用参数混乱。
+        final fixedAiMessage = _fixToolCallArguments(aiMessage);
         memoryManager.addMessage(
           currentEmployeeUuid!,
           deviceId ?? 'default',
-          aiMessage,
+          fixedAiMessage,
         );
+
+        // 重复工具调用检测：生成当前工具调用的签名并比较
+        final currentSignature = toolCalls.map((tc) {
+          final args = tc.argumentsRaw.isNotEmpty ? tc.argumentsRaw : jsonEncode(tc.arguments);
+          return '${tc.name}:$args';
+        }).join('|');
+
+        if (currentSignature == lastToolCallsSignature) {
+          consecutiveDuplicateCount++;
+          print(
+            '[LangChainChatAdapter] 检测到重复工具调用 (第 $consecutiveDuplicateCount 次): '
+            '$currentSignature',
+          );
+          if (consecutiveDuplicateCount >= maxConsecutiveDuplicateRounds) {
+            print(
+              '[LangChainChatAdapter] 连续 $maxConsecutiveDuplicateRounds 轮重复工具调用，'
+              '强制终止循环',
+            );
+            yield StreamResponse.error(
+              '检测到工具调用死循环：LLM 连续 '
+              '$maxConsecutiveDuplicateRounds 轮发出相同的工具调用。'
+              '请尝试修改您的需求或手动提供相关信息。',
+            );
+            return;
+          }
+        } else {
+          consecutiveDuplicateCount = 0;
+        }
+        lastToolCallsSignature = currentSignature;
 
         // 逐个执行工具调用
         for (final toolCall in toolCalls) {
@@ -345,7 +387,7 @@ class LangChainChatAdapter implements IChatAdapter {
             memoryManager.addMessage(
               currentEmployeeUuid!,
               deviceId ?? 'default',
-              ToolChatMessage(toolCallId: toolCallId, content: errorResult),
+              ErrorToolChatMessage(toolCallId: toolCallId, content: errorResult, isError: true),
               metadata: {'toolName': toolName},
             );
             yield StreamResponse.toolCallResult(
@@ -381,7 +423,7 @@ class LangChainChatAdapter implements IChatAdapter {
               memoryManager.addMessage(
                 currentEmployeeUuid!,
                 deviceId ?? 'default',
-                ToolChatMessage(toolCallId: toolCallId, content: denyResult),
+                ErrorToolChatMessage(toolCallId: toolCallId, content: denyResult, isError: true),
                 metadata: {
                   'toolName': toolName,
                   'denyReason': _permissionManager!.lastDenyMessage != null
@@ -432,17 +474,20 @@ class LangChainChatAdapter implements IChatAdapter {
             _currentTool = null; // 清除当前工具
           }
           stopwatch.stop();
+          final resultPreview = result.content.length > 100
+              ? '${result.content.substring(0, 100)}...(truncated, total ${result.content.length} chars)'
+              : result.content;
           print(
             '[LangChainChatAdapter] 工具执行完成: $toolName, isError=${result.isError}, '
-            'duration=${stopwatch.elapsedMilliseconds}ms, result=${result.content}',
+            'duration=${stopwatch.elapsedMilliseconds}ms, result=$resultPreview',
           );
 
           // 将工具结果加入历史
           memoryManager.addMessage(
             currentEmployeeUuid!,
             deviceId ?? 'default',
-            ToolChatMessage(toolCallId: toolCallId, content: result.content),
-            metadata: {'toolName': toolName},
+            ErrorToolChatMessage(toolCallId: toolCallId, content: result.content, isError: result.isError),
+          metadata: {'toolName': toolName},
           );
 
           // 广播工具调用结果事件
@@ -518,6 +563,8 @@ class LangChainChatAdapter implements IChatAdapter {
   Future<void> clearCurrentSession() async {
     if (currentEmployeeUuid != null) {
       memoryManager.clearSession(currentEmployeeUuid!);
+      // 同步清除上下文压缩器的缓存，防止旧摘要泄露到新会话
+      _compressor?.clearCache(currentEmployeeUuid!);
     }
   }
 
@@ -653,6 +700,45 @@ class LangChainChatAdapter implements IChatAdapter {
   }
 
   // ===== 内部方法 =====
+
+  /// 修复流式累积导致的 toolCall.arguments 丢失问题
+  ///
+  /// langchain_anthropic 的 MessageStreamEventTransformer 在处理
+  /// InputJsonBlockDelta 事件时，每个 chunk 的 arguments 都是 const {}，
+  /// 实际数据只累积在 argumentsRaw（字符串拼接）。
+  /// AIChatMessage.concat() 合并 Map 时 {...?, ...?} 不会填充数据，
+  /// 导致最终 arguments 仍为空 Map。
+  ///
+  /// 如果将空 arguments 的 AI 消息存入历史，下次发送给 Claude 时
+  /// tool_use block 的 input 为空，Claude 会误认为自己之前用空参数调用了工具。
+  static AIChatMessage _fixToolCallArguments(AIChatMessage msg) {
+    final needsFix = msg.toolCalls.any(
+      (tc) => tc.arguments.isEmpty && tc.argumentsRaw.isNotEmpty,
+    );
+    if (!needsFix) return msg;
+
+    return AIChatMessage(
+      content: msg.content,
+      toolCalls: msg.toolCalls.map((tc) {
+        if (tc.arguments.isEmpty && tc.argumentsRaw.isNotEmpty) {
+          try {
+            final parsed =
+                jsonDecode(tc.argumentsRaw) as Map<String, dynamic>;
+            return AIChatMessageToolCall(
+              id: tc.id,
+              name: tc.name,
+              argumentsRaw: tc.argumentsRaw,
+              arguments: parsed,
+            );
+          } catch (e) {
+            // JSON 解析失败保留原对象
+            print(e);
+          }
+        }
+        return tc;
+      }).toList(),
+    );
+  }
 
   /// 构建系统提示词
   ///

@@ -1,6 +1,7 @@
 import 'package:langchain_core/chat_models.dart';
 
 import 'context_compression_config.dart';
+import 'error_tool_chat_message.dart';
 import 'session_memory_manager.dart';
 import 'token_estimator.dart';
 
@@ -311,6 +312,14 @@ class ContextCompressor {
         '${content.substring(0, maxChars)}'
         '\n...[truncated, ${content.length} chars total]';
 
+    // 保留 ErrorToolChatMessage 类型及其 isError 标记
+    if (message is ErrorToolChatMessage) {
+      return ErrorToolChatMessage(
+        toolCallId: message.toolCallId,
+        content: truncated,
+        isError: message.isError,
+      );
+    }
     return ToolChatMessage(toolCallId: message.toolCallId, content: truncated);
   }
 
