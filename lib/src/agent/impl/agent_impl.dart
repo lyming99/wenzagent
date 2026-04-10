@@ -114,26 +114,28 @@ class AgentImpl implements IAgent {
 
   // ===== IAgent: 生命周期 =====
 
+  /// 延迟加载锁（防止重复 warmup）
+  ///
+  /// warmup 期间 sendMessage 通过此 Completer 排队等待。
+  Completer<void>? _warmupCompleter;
+
   @override
   Future<void> initialize({
     String? employeeId,
     bool enableBuiltinTools = true,
     bool enableSkills = true,
   }) async {
-    // 初始化适配器
-    await _chatAdapter.initSession(
-      employeeId: employeeId ?? this.employeeId,
-    );
+    final eid = employeeId ?? this.employeeId;
+
+    // 初始化适配器：恢复 session 配置 + 加载最近 10 条消息（快速）
+    await _chatAdapter.initSession(employeeId: eid, recentLimit: 10);
 
     // 注册内置工具（可选）
     if (enableBuiltinTools) {
       _toolRegistry.registerTools(BuiltinTools.all());
     }
 
-    // 初始化技能系统（在工具注册器和适配器设置之后）
-    if (enableSkills) {
-      await _initSkillSystem(employeeId ?? this.employeeId);
-    }
+    // 技能系统由 warmup 后台加载，不在 initialize 中阻塞
 
     // 设置工具注册器和权限管理器到适配器
     _chatAdapter.setToolRegistry(_toolRegistry);
@@ -227,6 +229,26 @@ class AgentImpl implements IAgent {
 
     _touch();
     _setStatus(AgentStatus.idle);
+  }
+
+  @override
+  Future<void> warmup() async {
+    // 双重锁：防止并发重复加载
+    if (_warmupCompleter != null) return _warmupCompleter!.future;
+
+    _warmupCompleter = Completer<void>();
+    try {
+      // 1. 加载全部历史消息（替换 initialize 中的最近 10 条）
+      await _chatAdapter.loadRemainingMessages();
+
+      // 2. 初始化技能系统（MCP / 持久化技能 / 文件夹技能）
+      await _initSkillSystem(employeeId);
+    } catch (e) {
+      print('[AgentImpl] warmup 失败: $e');
+    } finally {
+      _warmupCompleter!.complete();
+      _warmupCompleter = null;
+    }
   }
 
   @override
@@ -421,6 +443,12 @@ class AgentImpl implements IAgent {
   @override
   Future<String> sendMessage(MessageInput input) async {
     _touch();
+
+    // 等待 warmup 完成：确保全部历史消息已加载，LLM 有完整上下文
+    if (_warmupCompleter != null) {
+      await _warmupCompleter!.future;
+    }
+
     print('[AgentImpl] sendMessage: ${input.content.substring(0, input.content.length.clamp(0, 50))}');
 
     return await _withLock(() async {

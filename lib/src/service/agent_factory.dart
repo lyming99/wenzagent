@@ -315,8 +315,8 @@ class AgentFactoryImpl implements AgentFactory {
     };
 
     // 加载消息回调
-    adapter.loadMessages = (employeeId) async {
-      final messages = await _messageStore.getMessages(employeeId);
+    adapter.loadMessages = (employeeId, {int? limit}) async {
+      final messages = await _messageStore.getMessages(employeeId, limit: limit);
       // 优先从 jsonData 无损还原完整消息数据
       return messages.map((m) => m.toMessageMap()).toList();
     };

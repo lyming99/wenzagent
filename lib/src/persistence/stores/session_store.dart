@@ -5,7 +5,8 @@ import '../entities/session_entity.dart';
 
 /// 会话数据存储
 ///
-/// 使用employeeId作为主键：一个员工只有一个会话
+/// 使用employeeId作为主键：一个员工只有一个会话。
+/// 使用 LazyBox 实现异步读取，避免主线程阻塞。
 class SessionStore {
   final HiveManager _hiveManager;
 
@@ -32,7 +33,7 @@ class SessionStore {
   Future<AiEmployeeSessionEntity?> find(String employeeId) async {
     final box = _hiveManager.sessionBox;
     final key = _buildKey(employeeId);
-    return _decodeEntity(box.get(key));
+    return _decodeEntity(await box.get(key));
   }
 
   /// 获取或创建Session
@@ -41,7 +42,6 @@ class SessionStore {
   Future<AiEmployeeSessionEntity> getOrCreate(String employeeId) async {
     var session = await find(employeeId);
     if (session != null) {
-      // 已删除的会话自动复活（删除后收到新消息等场景）
       if (session.deleted == 1) {
         session = session.copyWith(
           deleted: 0,
@@ -77,11 +77,11 @@ class SessionStore {
     bool includeDeleted = false,
   }) async {
     final box = _hiveManager.sessionBox;
+
     var sessions = <AiEmployeeSessionEntity>[];
     for (final key in box.keys) {
-      final entity = _decodeEntity(box.get(key));
+      final entity = _decodeEntity(await box.get(key));
       if (entity == null) continue;
-      // 已删除且未被复活（deleteTime 存在且 deleteTime >= updateTime）则过滤
       if (!includeDeleted && entity.isEffectivelyDeleted()) continue;
       if (!includeArchived && entity.isArchived == 1) continue;
       sessions.add(entity);

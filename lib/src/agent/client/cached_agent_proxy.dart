@@ -73,6 +73,15 @@ class CachedAgentProxy {
   /// 同步锁
   Completer<void>? _syncCompleter;
 
+  /// 初始化锁（防止重复初始化）
+  Completer<void>? _initCompleter;
+
+  /// 同步去抖定时器（避免短时间内重复触发远程消息同步）
+  Timer? _syncDebounceTimer;
+
+  /// 消息变更通知去抖定时器（避免高频事件下短时间内多次通知 UI）
+  Timer? _notifyDebounceTimer;
+
   /// 权限请求缓存（远程模式使用）
   final Map<String, AgentPermissionRequest> _pendingPermissionRequests = {};
 
@@ -101,45 +110,81 @@ class CachedAgentProxy {
   // ===== 核心方法 =====
   
   /// 初始化
+  ///
+  /// 仅加载本地缓存，完成后通过 [_notifyMessagesChanged] 通知 UI 刷新。
+  /// 需要调用方在合适时机触发 [syncFromRemote] 来同步远程数据。
+  /// 双重锁：防止并发重复初始化，重复调用直接复用首次的 Future。
   Future<void> initialize() async {
     if (_isDisposed) return;
 
-    // 初始化事件监听（本地和远程模式都需要）
-    _initializeEventListeners();
-    
-    // 本地模式：只加载本地缓存
-    if (!_needCache) {
-      await _loadLocalMessagesByUserCount();
-      return;
-    }
+    // 双重锁：快速判断 + Completer 复用
+    if (_initCompleter != null) return _initCompleter!.future;
 
-    // 远程模式：加载本地缓存 + 同步远程消息
-    _updateCacheState(CacheState.loading);
+    _initCompleter = Completer<void>();
+    try {
+      // 初始化事件监听（本地和远程模式都需要）
+      _initializeEventListeners();
+      
+      // 本地模式：只加载本地缓存
+      if (!_needCache) {
+        await _loadLocalMessagesByUserCount();
+        _notifyMessagesChanged();
+        return;
+      }
+
+      // 远程模式：只加载本地缓存
+      _updateCacheState(CacheState.loading);
+
+      try {
+        await _loadLocalMessagesByUserCount();
+      } catch (e) {
+        print('[CachedAgentProxy] 加载本地缓存失败: $e');
+      }
+
+      _updateCacheState(CacheState.idle);
+      // 通知 UI 本地缓存已就绪
+      _notifyMessagesChanged();
+    } finally {
+      _initCompleter!.complete();
+      _initCompleter = null;
+    }
+  }
+
+  /// 从远程同步消息和状态（后台调用）
+  ///
+  /// 在 [initialize] 之后调用，同步远程未接收消息、远程会话状态和权限请求。
+  /// 同步完成后自动通过 [_notifyMessagesChanged] 通知 UI 刷新。
+  /// 双重锁：防止并发同步，重复调用直接复用首次的 Future。
+  Future<void> syncFromRemote() async {
+    if (_isDisposed || !_needCache) return;
+
+    // 双重锁：快速判断 + Completer 复用
+    if (_syncCompleter != null) return _syncCompleter!.future;
+
+    _syncCompleter = Completer<void>();
 
     try {
-      // 1. 从本地缓存加载消息（按用户消息计数统计）
-      await _loadLocalMessagesByUserCount();
-
-      // 2. 同步远程消息
+      // 同步远程消息
       if (_cachedMessages.isEmpty) {
-        // 本地缓存为空，使用基础同步方法获取初始消息
         print('[CachedAgentProxy] 本地缓存为空，使用基础同步方法');
         await _syncMessagesFromRemoteBasic();
       } else {
-        // 本地缓存不为空，使用未接收消息机制
         print('[CachedAgentProxy] 本地缓存不为空，尝试同步未接收消息');
         await _syncMessagesFromRemote();
       }
-
-      // 3. 查询远程会话状态和权限请求
-      await _syncRemoteStateAndPermission();
-
-      _updateCacheState(CacheState.idle);
     } catch (e) {
-      _updateCacheState(CacheState.error);
-      // 同步失败不影响本地缓存使用
-      print('初始化同步失败: $e');
+      print('[CachedAgentProxy] 同步远程消息失败: $e');
     }
+
+    // 同步远程状态和权限请求
+    try {
+      await _syncRemoteStateAndPermission();
+    } catch (e) {
+      print('[CachedAgentProxy] 同步远程状态失败: $e');
+    }
+
+    _syncCompleter!.complete();
+    _syncCompleter = null;
   }
 
   /// 从本地缓存加载消息（按用户消息计数统计）
@@ -359,10 +404,8 @@ class CachedAgentProxy {
     
     // 如果是完成或失败状态，触发消息列表查询
     if (status == 'completed' || status == 'failed' || status == 'interrupted') {
-      // 延迟查询，确保远程消息已持久化
-      Future.delayed(const Duration(milliseconds: 500), () {
-        _syncMessagesFromRemote();
-      });
+      // 使用 debounce 统一触发，避免与 idle/toolCallResult 等重复
+      _debouncedSyncMessages();
     }
   }
   
@@ -405,8 +448,8 @@ class CachedAgentProxy {
     
     // 如果是空闲状态，可能意味着消息处理完成
     if (status == 'idle') {
-      // 触发消息同步
-      _syncMessagesFromRemote();
+      // 使用 debounce 避免与 completed/failed 状态的同步重复
+      _debouncedSyncMessages();
     }
   }
   
@@ -421,10 +464,8 @@ class CachedAgentProxy {
       // 工具调用完成：更新工具消息
       _updateToolCallMessage(data);
       
-      // 延迟同步消息
-      Future.delayed(const Duration(milliseconds: 300), () {
-        _syncMessagesFromRemote();
-      });
+      // 使用 debounce 同步消息，避免与 completed/idle 重复
+      _debouncedSyncMessages();
     }
   }
   
@@ -603,10 +644,8 @@ class CachedAgentProxy {
       _updateMessageInDatabase(updatedMessage);
     }
     
-    // 同步消息列表以获取最新的回复内容
-    Future.delayed(const Duration(milliseconds: 300), () {
-      _syncMessagesFromRemote();
-    });
+    // 同步消息列表以获取最新的回复内容（使用 debounce 避免重复）
+    _debouncedSyncMessages();
   }
   
   /// 处理队列中消息事件
@@ -654,8 +693,8 @@ class CachedAgentProxy {
     
     // 根据状态决定是否触发消息同步
     if (state.status == AgentStatus.idle) {
-      // Agent空闲时，同步消息
-      _syncMessagesFromRemote();
+      // Agent空闲时，使用 debounce 同步消息（避免与 agentStatusChanged 重复）
+      _debouncedSyncMessages();
     } else if (state.status == AgentStatus.waitingPermission) {
       // Agent等待权限时，查询权限请求
       _queryPendingPermission();
@@ -682,6 +721,14 @@ class CachedAgentProxy {
     }
   }
   
+  /// 去抖同步远程消息（500ms 内只触发一次，避免短时间内多次调用）
+  void _debouncedSyncMessages() {
+    _syncDebounceTimer?.cancel();
+    _syncDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _syncMessagesFromRemote();
+    });
+  }
+
   /// 从远程同步消息（未接收消息机制）
   Future<void> _syncMessagesFromRemote() async {
     if (_isDisposed || !_needCache) return;
@@ -1060,11 +1107,14 @@ class CachedAgentProxy {
     _cacheStateController.add(state);
   }
   
-  /// 通知消息变更
+  /// 通知消息变更（带 16ms 去抖，合并同一帧内的多次变更）
   void _notifyMessagesChanged() {
     if (_isDisposed) return;
-    
-    _messagesController.add(List.unmodifiable(_cachedMessages));
+    _notifyDebounceTimer?.cancel();
+    _notifyDebounceTimer = Timer(const Duration(milliseconds: 16), () {
+      if (_isDisposed) return;
+      _messagesController.add(List.unmodifiable(_cachedMessages));
+    });
   }
   
   // ===== 转换方法 =====
@@ -1490,6 +1540,10 @@ class CachedAgentProxy {
   /// 释放资源
   Future<void> dispose() async {
     _isDisposed = true;
+    
+    // 取消去抖定时器
+    _syncDebounceTimer?.cancel();
+    _notifyDebounceTimer?.cancel();
     
     // 取消事件订阅
     await _eventSubscription?.cancel();

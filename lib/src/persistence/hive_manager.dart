@@ -2,7 +2,8 @@ import 'package:hive/hive.dart';
 
 /// Hive管理器
 ///
-/// 负责Hive初始化、Box管理和数据清理
+/// 负责Hive初始化、LazyBox管理和数据清理。
+/// 使用 LazyBox 实现异步读取，避免主线程阻塞。
 class HiveManager {
   static HiveManager? _instance;
 
@@ -34,32 +35,32 @@ class HiveManager {
       Hive.init(storagePath);
     }
 
-    // 打开Box
+    // 打开LazyBox
     await _openBoxes();
 
     _initialized = true;
   }
 
-  /// 打开所有Box（容错：遇到旧二进制数据自动删除重建）
+  /// 打开所有LazyBox（容错：遇到旧二进制数据自动删除重建）
   Future<void> _openBoxes() async {
     await Future.wait([
-      _openBoxSafe(employeeBoxName),
-      _openBoxSafe(sessionBoxName),
-      _openBoxSafe(messageBoxName),
-      _openBoxSafe(skillBoxName),
-      _openBoxSafe(sessionMessagesBoxName),
-      _openBoxSafe(employeeSessionsBoxName),
-      _openBoxSafe(deviceConfigBoxName),
-      _openBoxSafe(scheduledTaskBoxName),
+      _openLazyBoxSafe(employeeBoxName),
+      _openLazyBoxSafe(sessionBoxName),
+      _openLazyBoxSafe(messageBoxName),
+      _openLazyBoxSafe(skillBoxName),
+      _openLazyBoxSafe(sessionMessagesBoxName),
+      _openLazyBoxSafe(employeeSessionsBoxName),
+      _openLazyBoxSafe(deviceConfigBoxName),
+      _openLazyBoxSafe(scheduledTaskBoxName),
     ]);
   }
 
-  /// 安全打开单个 Box，遇到旧二进制数据时删除旧文件重建
-  Future<Box> _openBoxSafe(String name) async {
+  /// 安全打开单个 LazyBox，遇到旧二进制数据时删除旧文件重建
+  Future<LazyBox> _openLazyBoxSafe(String name) async {
     try {
-      return await Hive.openBox(name);
+      return await Hive.openLazyBox(name);
     } catch (e) {
-      print('[HiveManager] 打开 $name 失败: $e, 删除旧数据重建...');
+      print('[HiveManager] 打开 LazyBox $name 失败: $e, 删除旧数据重建...');
       try {
         if (Hive.isBoxOpen(name)) {
           await Hive.box(name).close();
@@ -68,33 +69,33 @@ class HiveManager {
       try {
         await Hive.deleteBoxFromDisk(name);
       } catch (_) {}
-      return await Hive.openBox(name);
+      return await Hive.openLazyBox(name);
     }
   }
 
-  /// 获取员工Box
-  Box get employeeBox => Hive.box(employeeBoxName);
+  /// 获取员工LazyBox
+  LazyBox get employeeBox => Hive.lazyBox(employeeBoxName);
 
-  /// 获取会话Box
-  Box get sessionBox => Hive.box(sessionBoxName);
+  /// 获取会话LazyBox
+  LazyBox get sessionBox => Hive.lazyBox(sessionBoxName);
 
-  /// 获取消息Box（untyped，使用 jsonEncode/jsonDecode 读写 JSON 字符串）
-  Box get messageBox => Hive.box(messageBoxName);
+  /// 获取消息LazyBox（untyped，使用 jsonEncode/jsonDecode 读写 JSON 字符串）
+  LazyBox get messageBox => Hive.lazyBox(messageBoxName);
 
-  /// 获取技能Box
-  Box get skillBox => Hive.box(skillBoxName);
+  /// 获取技能LazyBox
+  LazyBox get skillBox => Hive.lazyBox(skillBoxName);
 
-  /// 获取会话消息索引Box
-  Box get sessionMessagesBox => Hive.box(sessionMessagesBoxName);
+  /// 获取会话消息索引LazyBox
+  LazyBox get sessionMessagesBox => Hive.lazyBox(sessionMessagesBoxName);
 
-  /// 获取员工会话索引Box
-  Box get employeeSessionsBox => Hive.box(employeeSessionsBoxName);
+  /// 获取员工会话索引LazyBox
+  LazyBox get employeeSessionsBox => Hive.lazyBox(employeeSessionsBoxName);
 
-  /// 获取设备配置Box
-  Box get deviceConfigBox => Hive.box(deviceConfigBoxName);
+  /// 获取设备配置LazyBox
+  LazyBox get deviceConfigBox => Hive.lazyBox(deviceConfigBoxName);
 
-  /// 获取指定Box
-  Box getBox(String name) => Hive.box(name);
+  /// 获取指定LazyBox
+  LazyBox getBox(String name) => Hive.lazyBox(name);
 
   /// 构建员工key（wenz_ 前缀避免与旧二进制数据冲突）
   String buildEmployeeKey(String? deviceId, String uuid) {

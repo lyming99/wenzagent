@@ -91,9 +91,14 @@ class LangChainChatAdapter implements IChatAdapter {
   // ===== IChatAdapter 方法实现 =====
 
   @override
-  Future<void> initSession({required String employeeId}) async {
+  Future<void> initSession({required String employeeId, int? recentLimit}) async {
     currentEmployeeUuid = employeeId;
     memoryManager.getOrCreateSession(employeeId);
+  }
+
+  @override
+  Future<void> loadRemainingMessages() async {
+    // 基类无持久化，无需加载
   }
 
   @override

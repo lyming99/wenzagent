@@ -89,6 +89,9 @@ class DeviceClientImpl implements DeviceClient {
   /// 远程 AgentProxy 缓存（已包装为 CachedAgentProxy）
   final Map<String, CachedAgentProxy> _remoteProxies = {};
 
+  /// 正在后台同步的远程代理 key 集合（防止重复后台同步）
+  final Set<String> _syncingRemoteKeys = {};
+
   /// Agent 事件订阅
   final Map<String, StreamSubscription<Map<String, dynamic>>>
   _agentEventSubscriptions = {};
@@ -983,12 +986,19 @@ class DeviceClientImpl implements DeviceClient {
   Future<CachedAgentProxy> getOrCreateAgentProxy({
     required String employeeId,
     String? deviceId,
+    AiEmployeeEntity? employee,
   }) async {
-    // 1. 确保Session存在（只需要employeeId）
-    final session = await _sessionManager.getOrCreateSession(employeeId);
-
-    // 2. 获取员工配置
-    final employee = await _employeeManager.getEmployee(employeeId);
+    final sw = Stopwatch()..start();
+    // 1 & 2. 并行获取 Session 和 Employee（减少串行等待时间）
+    final results = await Future.wait<dynamic>([
+      _sessionManager.getOrCreateSession(employeeId),
+      employee != null
+          ? Future.value(employee)
+          : _employeeManager.getEmployee(employeeId),
+    ]);
+    print('[DeviceClient] Future.wait (session+employee): ${sw.elapsedMilliseconds}ms');
+    final session = results[0] as AiEmployeeSessionEntity;
+    employee = results[1] as AiEmployeeEntity?;
     if (employee == null) {
       throw StateError('Employee not found: $employeeId');
     }
@@ -1014,11 +1024,13 @@ class DeviceClientImpl implements DeviceClient {
       if (cachedProxy != null) return cachedProxy;
 
       // 创建本地 Agent 和 Proxy
+      sw.reset();
       final agent = await _getOrCreateLocalAgent(
         employeeId,
         employee,
         session,
       );
+      print('[DeviceClient] _getOrCreateLocalAgent: ${sw.elapsedMilliseconds}ms');
       final proxy = AgentProxy.local(
         employeeId: employeeId,
         deviceId: targetDeviceId,
@@ -1039,12 +1051,16 @@ class DeviceClientImpl implements DeviceClient {
         shouldSaveAsReadCallback: () => isSessionOpen(employeeId: employeeId),
       );
 
-      await cachedProxy.initialize();
-      proxy.attach();
+      // 立即注册，不等待 initialize 完成
       _localProxies[employeeId] = cachedProxy;
+      proxy.attach();
 
       // 订阅 Agent 事件
       _subscribeAgentEvents(employeeId, agent);
+
+      // 后台加载本地缓存 + 恢复 Agent 历史消息/技能，完成后通过 stream 通知 UI
+      cachedProxy.initialize();
+      agent.warmup(); // fire-and-forget: 加载历史消息 + 技能系统
 
       return cachedProxy;
     }
@@ -1052,11 +1068,13 @@ class DeviceClientImpl implements DeviceClient {
     // ===== 远程会话 =====
     final key = '$targetDeviceId:$employeeId';
     var cachedProxy = _remoteProxies[key];
-    if (cachedProxy != null) return cachedProxy;
+    if (cachedProxy != null) {
+      print('[DeviceClient] remote proxy cache HIT');
+      return cachedProxy;
+    }
 
-    // 将员工信息同步到目标设备（确保目标设备的 RPC 处理器能找到员工）
-    await syncEmployeeToDevice(employeeId: employeeId, targetDeviceId: targetDeviceId);
-
+    print('[DeviceClient] remote proxy cache MISS, creating...');
+    sw.reset();
     final proxy = AgentProxy.remote(
       employeeId: employeeId,
       deviceId: targetDeviceId,
@@ -1064,6 +1082,7 @@ class DeviceClientImpl implements DeviceClient {
           _invokeRemote(targetDeviceId, method, params),
       remoteEventStream: _eventController.stream,
     );
+    print('[DeviceClient] AgentProxy.remote created: ${sw.elapsedMilliseconds}ms');
     
     // 包装为 CachedAgentProxy（远程模式启用缓存）
     cachedProxy = CachedAgentProxy(
@@ -1079,9 +1098,44 @@ class DeviceClientImpl implements DeviceClient {
       shouldSaveAsReadCallback: () => isSessionOpen(employeeId: employeeId),
       );
     
-      await cachedProxy.initialize();
-      _remoteProxies[key] = cachedProxy;
+    // 立即注册，不等待 initialize 完成
+    _remoteProxies[key] = cachedProxy;
+
+    // 后台初始化：加载本地缓存，完成后通过 stream 通知 UI
+    final remoteProxy = cachedProxy;
+    cachedProxy.initialize().then((_) {
+      // 后台同步：员工信息 + 远程消息 + 远程状态
+      _backgroundSyncRemoteProxy(key, employeeId, targetDeviceId, remoteProxy);
+    });
+
     return cachedProxy;
+  }
+
+  /// 后台同步远程代理：同步员工信息到目标设备，然后触发远程消息和状态同步
+  ///
+  /// syncEmployeeToDevice 必须在 _invokeRemote RPC 调用之前完成，
+  /// 但不影响本地缓存的消息读取，因此可以放后台执行。
+  /// 双重锁：同一 key 不会并发同步。
+  Future<void> _backgroundSyncRemoteProxy(
+    String cacheKey,
+    String employeeId,
+    String targetDeviceId,
+    CachedAgentProxy cachedProxy,
+  ) async {
+    // 双重锁：防止同一 proxy 重复触发后台同步
+    if (_syncingRemoteKeys.contains(cacheKey)) return;
+    _syncingRemoteKeys.add(cacheKey);
+
+    try {
+      // 同步员工信息到目标设备（确保后续 RPC 调用能找到员工）
+      await syncEmployeeToDevice(employeeId: employeeId, targetDeviceId: targetDeviceId);
+      // 触发远程消息同步 + 远程状态同步（同步完成后自动通知 UI 刷新）
+      await cachedProxy.syncFromRemote();
+    } catch (e) {
+      print('[DeviceClient] 后台同步远程代理失败: $e');
+    } finally {
+      _syncingRemoteKeys.remove(cacheKey);
+    }
   }
 
   /// 确保 RPC 调用所需的本地 Agent 存在（懒加载）
@@ -1116,6 +1170,9 @@ class DeviceClientImpl implements DeviceClient {
     final session = await _sessionManager.getOrCreateSession(employeeId);
     agent = await _getOrCreateLocalAgent(employeeId, employee, session);
 
+    // RPC 路径创建的 Agent 也需要 warmup（后台加载完整历史+技能）
+    agent.warmup();
+
     // 订阅 Agent 事件（确保 RPC 路径也能广播事件和更新缓存）
     if (!_agentEventSubscriptions.containsKey(employeeId)) {
       _subscribeAgentEvents(employeeId, agent);
@@ -1137,9 +1194,9 @@ class DeviceClientImpl implements DeviceClient {
     final chatAdapter = PersistentChatAdapter();
     _setupPersistCallbacks(chatAdapter, employeeId);
 
-    // 创建 Agent
+    // 创建 Agent（快速初始化：仅加载最近 10 条消息）
     agent = AgentImpl(employeeId: employeeId, chatAdapter: chatAdapter);
-    await agent.initialize(employeeId: employeeId); // 传递 employeeId 以加载历史消息
+    await agent.initialize(employeeId: employeeId);
 
     // 注入 ScheduleTaskTool 回调
     _injectScheduleTaskCallbacks(agent, employeeId);
@@ -1396,7 +1453,7 @@ class DeviceClientImpl implements DeviceClient {
       };
     };
 
-    adapter.loadMessages = (employeeId) async {
+    adapter.loadMessages = (employeeId, {int? limit}) async {
       // 优先从 employee.currentDeviceId 获取消息，如果没有则使用当前设备
       final employee = await _employeeManager.getEmployee(employeeId);
       final messageDeviceId = (employee?.currentDeviceId != null && employee!.currentDeviceId!.isNotEmpty)
@@ -1406,6 +1463,7 @@ class DeviceClientImpl implements DeviceClient {
       final messages = await _messageStoreService.getMessagesWithDeviceId(
         messageDeviceId,
         employeeId,
+        limit: limit,
       );
       // 优先从 jsonData 无损还原完整消息数据
       return messages.map((m) => m.toMessageMap()).toList();
@@ -1533,9 +1591,9 @@ class DeviceClientImpl implements DeviceClient {
         }
       }
 
-      // completed：异步获取最新 AI 回复并推送
+      // completed：获取最后一轮 AI 回复并推送（避免全量加载历史消息）
       if (status == 'completed') {
-        agent.getSessionMessages().then((messages) {
+        agent.getSessionMessagesByUserCount(userMessageLimit: 1).then((messages) {
           if (messages.isEmpty) return;
           final lastAssistant = messages.lastWhere(
             (m) => m.role == 'assistant',
@@ -1738,14 +1796,18 @@ class DeviceClientImpl implements DeviceClient {
   @override
   Future<List<DeviceWithEmployeesInfo>> getOnlineDevicesWithEmployees() async {
     final devices = await getOnlineDevices();
-    final result = <DeviceWithEmployeesInfo>[];
+    // 一次性查询所有员工，然后按设备分组，避免循环内重复查询
+    final allEmployees = await _employeeManager.getEmployees();
+    final employeesByDevice = <String, List<AiEmployeeEntity>>{};
+    for (final emp in allEmployees) {
+      if (emp.deviceId != null && emp.deviceId!.isNotEmpty) {
+        employeesByDevice.putIfAbsent(emp.deviceId!, () => []).add(emp);
+      }
+    }
 
+    final result = <DeviceWithEmployeesInfo>[];
     for (final device in devices) {
-      // 使用employeeManager获取员工，然后按设备过滤
-      final allEmployees = await _employeeManager.getEmployees();
-      final employees = allEmployees
-          .where((e) => e.deviceId == device.id)
-          .toList();
+      final employees = employeesByDevice[device.id] ?? [];
       result.add(
         DeviceWithEmployeesInfo(
           deviceId: device.id,
@@ -1938,7 +2000,7 @@ class DeviceClientImpl implements DeviceClient {
     ).catchError((_) {});
   }
 
-  /// 异步更新数据库消息为已读
+  /// 异步更新数据库消息为已读（批量更新，减少逐条 await 的开销）
   ///
   /// 使用 [fromDeviceId] 查询和更新，确保读写使用同一个 Hive key。
   /// 当 [fromDeviceId] 为空时回退到本机 deviceId（与消息存储逻辑一致）。
@@ -1948,13 +2010,12 @@ class DeviceClientImpl implements DeviceClient {
         : deviceId;
     try {
       final messages = await _messageStoreService.getMessagesWithDeviceId(effectiveDeviceId, employeeId);
-      for (final m in messages) {
-        if (m.role == 'assistant' && m.isRead == 0) {
-          await _messageStoreService.updateMessage(
-            m.copyWith(isRead: 1, jsonData: null),
-            deviceId: effectiveDeviceId,
-          );
-        }
+      final toUpdate = messages
+          .where((m) => m.role == 'assistant' && m.isRead == 0)
+          .map((m) => m.copyWith(isRead: 1, jsonData: null))
+          .toList();
+      if (toUpdate.isNotEmpty) {
+        await _messageStoreService.batchUpdateMessages(toUpdate, deviceId: effectiveDeviceId);
       }
     } catch (_) {}
   }
@@ -2015,11 +2076,19 @@ class DeviceClientImpl implements DeviceClient {
   @override
   Future<void> restoreUnreadStatus() async {
     try {
-      // 获取所有会话
+      // 批量查询：一次性获取所有会话和所有员工
       final sessions = await _sessionManager.getAllSessions();
+      final allEmployees = await _employeeManager.getEmployees();
+
+      // 构建 employeeId -> employee 的映射，避免逐个查询
+      final employeeMap = <String, AiEmployeeEntity>{};
+      for (final emp in allEmployees) {
+        employeeMap[emp.uuid] = emp;
+      }
+
       for (final session in sessions) {
         final employeeId = session.employeeId;
-        // 查询该会话的所有消息，统计未读的助手消息数量
+        // 查询该会话的消息，统计未读的助手消息数量
         final messages = await _messageStoreService.getMessages(employeeId);
         final unreadCount = messages
             .where((m) => m.role == 'assistant' && m.isRead == 0)
@@ -2032,10 +2101,9 @@ class DeviceClientImpl implements DeviceClient {
           );
         }
 
-        // 恢复最新消息缓存（从 DB 加载最新消息到内存缓存，并通知 UI）
+        // 恢复最新消息缓存（从缓存 map 获取员工实体，避免逐个查询）
         if (messages.isNotEmpty) {
-          // 获取员工实体以确定消息所属设备
-          final employee = await _employeeManager.getEmployee(employeeId);
+          final employee = employeeMap[employeeId];
           final rawDeviceId = (employee?.currentDeviceId != null &&
                   employee!.currentDeviceId!.isNotEmpty)
               ? employee.currentDeviceId!
@@ -2456,7 +2524,7 @@ class DeviceClientImpl implements DeviceClient {
   void _startEmployeeOnlineMonitor() {
     _stopEmployeeOnlineMonitor();
     _doPingAllEmployees(); // 立即 ping 一次
-    _employeePingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+    _employeePingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (_disposed) {
         _stopEmployeeOnlineMonitor();
         return;
@@ -2471,48 +2539,52 @@ class DeviceClientImpl implements DeviceClient {
     _employeePingTimer = null;
   }
 
-  /// Ping 所有已知员工并更新在线状态
+  /// Ping 所有已知员工并更新在线状态（并行执行，避免串行阻塞）
   Future<void> _doPingAllEmployees() async {
     try {
       final employees = await _employeeManager.getEmployees();
-      for (final employee in employees) {
-        final empId = employee.uuid;
-        final devId = employee.currentDeviceId;
 
-        // 更新员工-设备映射缓存
-        if (devId != null && devId.isNotEmpty) {
-          _employeeDeviceMap[empId] = devId;
-        }
+      // 并行 ping 所有员工
+      await Future.wait(
+        employees.map((employee) async {
+          final empId = employee.uuid;
+          final devId = employee.currentDeviceId;
 
-        bool online = false;
+          // 更新员工-设备映射缓存
+          if (devId != null && devId.isNotEmpty) {
+            _employeeDeviceMap[empId] = devId;
+          }
 
-        if (devId != null && devId.isNotEmpty) {
-          if (devId == deviceId) {
-            // 本设备员工：检查本地 Agent
-            online = _localAgents[empId]?.isAlive ?? false;
-          } else {
-            // 远程员工：先检查设备是否在缓存中
-            if (!_deviceCache.containsKey(devId) || _rpcManager == null || !isConnected) {
-              online = false;
+          bool online = false;
+
+          if (devId != null && devId.isNotEmpty) {
+            if (devId == deviceId) {
+              // 本设备员工：检查本地 Agent
+              online = _localAgents[empId]?.isAlive ?? false;
             } else {
-              // 设备在线，进一步 RPC ping
-              try {
-                final result = await _rpcManager!.invoke(
-                  AgentRpcConfig.methodPing,
-                  PingRequest(employeeId: empId).toMap(),
-                  toDeviceId: devId,
-                  timeout: 2000,
-                );
-                online = result['alive'] == true;
-              } catch (_) {
+              // 远程员工：先检查设备是否在缓存中
+              if (!_deviceCache.containsKey(devId) || _rpcManager == null || !isConnected) {
                 online = false;
+              } else {
+                // 设备在线，进一步 RPC ping
+                try {
+                  final result = await _rpcManager!.invoke(
+                    AgentRpcConfig.methodPing,
+                    PingRequest(employeeId: empId).toMap(),
+                    toDeviceId: devId,
+                    timeout: 2000,
+                  );
+                  online = result['alive'] == true;
+                } catch (_) {
+                  online = false;
+                }
               }
             }
           }
-        }
 
-        _updateEmployeeOnlineState(empId, online, devId);
-      }
+          _updateEmployeeOnlineState(empId, online, devId);
+        }),
+      );
     } catch (_) {}
   }
 

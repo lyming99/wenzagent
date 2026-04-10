@@ -71,6 +71,15 @@ abstract class MessageStoreService {
     String? error,
   });
 
+  /// 批量更新消息（减少逐条 await 的开销）
+  ///
+  /// 适用于 markAllAsRead 等场景，内部逐条更新但不逐条广播变更事件，
+  /// 只在最后发送一次聚合通知。
+  Future<void> batchUpdateMessages(
+    List<AiEmployeeMessageEntity> messages, {
+    String? deviceId,
+  });
+
   /// 删除会话的所有消息
   ///
   /// [deviceId] 设备ID，为null时使用实例默认deviceId
@@ -174,6 +183,20 @@ class MessageStoreServiceImpl implements MessageStoreService {
     final message = await getMessage(uuid);
     if (message != null) {
       _notifyChange(MessageChangeType.updated, message);
+    }
+  }
+
+  @override
+  Future<void> batchUpdateMessages(
+    List<AiEmployeeMessageEntity> messages, {
+    String? deviceId,
+  }) async {
+    final now = DateTime.now();
+    final updated = messages.map((m) => m.copyWith(updateTime: now)).toList();
+    await _store.batchUpdateWithDeviceId(deviceId ?? _deviceId, updated);
+    // 只广播一次聚合事件，而非逐条广播
+    if (updated.isNotEmpty) {
+      _notifyChange(MessageChangeType.updated, updated.last);
     }
   }
 

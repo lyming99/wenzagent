@@ -111,7 +111,16 @@ abstract class IChatAdapter {
   bool get isStreaming;
 
   /// 初始化会话
-  Future<void> initSession({required String employeeId});
+  ///
+  /// [recentLimit] 为 null 时加载全部历史消息；
+  /// 指定数量时仅加载最新 N 条（用于快速初始化场景）。
+  Future<void> initSession({required String employeeId, int? recentLimit});
+
+  /// 加载全部历史消息（替换内存中的消息）
+  ///
+  /// 在 [initSession] 使用 [recentLimit] 快速初始化后，
+  /// 调用此方法在后台加载完整历史。
+  Future<void> loadRemainingMessages();
 
   /// 流式发送消息
   Stream<StreamResponse> streamMessage(

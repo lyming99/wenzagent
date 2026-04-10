@@ -35,8 +35,11 @@ class AgentNotificationHub {
   /// 按来源设备的未读计数：employeeId:fromDeviceId -> count
   final Map<String, int> _unreadCountByDevice = {};
 
-  /// 已处理的消息 ID 集合（避免重复通知）
+  /// 已处理的消息 ID 集合（避免重复通知，使用 Queue 实现 LRU 驱逐）
   final Set<String> _processedMessageIds = {};
+
+  /// 已处理消息的插入顺序（用于 LRU 驱逐）
+  final List<String> _processedIdOrder = [];
 
   /// 最大缓存已处理消息 ID 数量（防止内存泄漏）
   static const int _maxProcessedIds = 10000;
@@ -295,6 +298,7 @@ class AgentNotificationHub {
   /// 标记来自指定设备的所有消息为已读
   ///
   /// [fromDeviceId] 来源设备 ID，为 null 则标记该员工所有设备的未读消息
+  /// 改为发送一次聚合事件，而非逐条发送 AgentMessageReadStatusChangedEvent
   void markAllAsRead({
     required String employeeId,
     String? fromDeviceId,
@@ -306,12 +310,6 @@ class AgentNotificationHub {
       for (final entry in unreadMap.entries) {
         if (fromDeviceId == null || entry.value.fromDeviceId == fromDeviceId) {
           idsToRemove.add(entry.key);
-          _controller.add(AgentMessageReadStatusChangedEvent(
-            messageId: entry.key,
-            employeeId: employeeId,
-            isRead: true,
-            fromDeviceId: entry.value.fromDeviceId,
-          ));
         }
       }
 
@@ -494,9 +492,16 @@ class AgentNotificationHub {
   }
 
   void _addProcessedId(String messageId) {
+    if (_processedMessageIds.contains(messageId)) return;
     _processedMessageIds.add(messageId);
+    _processedIdOrder.add(messageId);
+    // LRU 驱逐：超过上限时移除最早的一半，而非全部清空
     if (_processedMessageIds.length > _maxProcessedIds) {
-      _processedMessageIds.clear();
+      final removeCount = _maxProcessedIds ~/ 2;
+      for (int i = 0; i < removeCount; i++) {
+        _processedMessageIds.remove(_processedIdOrder[i]);
+      }
+      _processedIdOrder.removeRange(0, removeCount);
     }
   }
 
@@ -512,5 +517,6 @@ class AgentNotificationHub {
     _unreadCount.clear();
     _unreadCountByDevice.clear();
     _processedMessageIds.clear();
+    _processedIdOrder.clear();
   }
 }

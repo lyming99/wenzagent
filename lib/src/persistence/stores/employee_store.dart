@@ -4,6 +4,8 @@ import '../hive_manager.dart';
 import '../entities/employee_entity.dart';
 
 /// 员工数据存储
+///
+/// 使用 LazyBox 实现异步读取，避免主线程阻塞。
 class EmployeeStore {
   final HiveManager _hiveManager;
 
@@ -32,7 +34,7 @@ class EmployeeStore {
 
     var employees = <AiEmployeeEntity>[];
     for (final key in box.keys) {
-      final entity = _decodeEntity(box.get(key));
+      final entity = _decodeEntity(await box.get(key));
       if (entity == null) continue;
       final buildKey = _hiveManager.buildEmployeeKey(entity.spaceId, entity.uuid);
       if (!buildKey.contains(prefix)) continue;
@@ -63,7 +65,7 @@ class EmployeeStore {
   Future<AiEmployeeEntity?> find(String? spaceId, String uuid) async {
     final box = _hiveManager.employeeBox;
     final key = _hiveManager.buildEmployeeKey(spaceId, uuid);
-    return _decodeEntity(box.get(key));
+    return _decodeEntity(await box.get(key));
   }
 
   /// 保存员工
@@ -77,9 +79,8 @@ class EmployeeStore {
   Future<void> delete(String? spaceId, String uuid) async {
     final box = _hiveManager.employeeBox;
     final key = _hiveManager.buildEmployeeKey(spaceId, uuid);
-    final entity = _decodeEntity(box.get(key));
+    final entity = _decodeEntity(await box.get(key));
     if (entity != null) {
-      // 软删除时设置 deleted=1 和 deletedTime
       await box.put(
         key,
         jsonEncode(

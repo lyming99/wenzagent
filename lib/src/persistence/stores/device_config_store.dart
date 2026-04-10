@@ -5,7 +5,8 @@ import '../entities/device_config_entity.dart';
 
 /// 设备配置存储
 ///
-/// 使用deviceId作为主键：一个设备只有一个配置
+/// 使用deviceId作为主键：一个设备只有一个配置。
+/// 使用 LazyBox 实现异步读取，避免主线程阻塞。
 class DeviceConfigStore {
   final HiveManager _hiveManager;
 
@@ -32,7 +33,7 @@ class DeviceConfigStore {
   Future<DeviceConfigEntity?> find(String deviceId) async {
     final box = _hiveManager.deviceConfigBox;
     final key = _buildKey(deviceId);
-    return _decodeEntity(box.get(key));
+    return _decodeEntity(await box.get(key));
   }
 
   /// 获取或创建设备配置
@@ -137,9 +138,10 @@ class DeviceConfigStore {
   /// 获取所有设备配置
   Future<List<DeviceConfigEntity>> findAll() async {
     final box = _hiveManager.deviceConfigBox;
+
     var configs = <DeviceConfigEntity>[];
     for (final key in box.keys) {
-      final entity = _decodeEntity(box.get(key));
+      final entity = _decodeEntity(await box.get(key));
       if (entity != null) configs.add(entity);
     }
     return configs;

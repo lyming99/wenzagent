@@ -31,8 +31,22 @@ abstract class IAgent {
   /// 初始化 Agent
   ///
   /// [employeeId] 指定员工ID，为 null 则查找或创建新会话
+  /// [enableBuiltinTools] 是否注册内置工具
+  /// [enableSkills] 是否初始化技能系统（当前由 [warmup] 统一加载）
+  ///
+  /// 仅加载最近 10 条消息用于快速显示，完整历史由 [warmup] 后台加载。
   Future<void> initialize(
       {String? employeeId, bool enableBuiltinTools = true, bool enableSkills = true,});
+
+  /// 延迟加载完整历史消息和技能系统
+  ///
+  /// 在 [initialize] 之后后台调用，执行：
+  /// - 从数据库加载全部历史消息（替换 initialize 中的最近 10 条）
+  /// - 初始化技能系统（MCP / 持久化技能 / 文件夹技能）
+  ///
+  /// 加载期间 [sendMessage] 会自动排队等待，确保 LLM 拥有完整上下文。
+  /// 双重锁：重复调用直接复用首次 Future。
+  Future<void> warmup();
 
   /// 销毁 Agent，释放所有资源
   Future<void> dispose();

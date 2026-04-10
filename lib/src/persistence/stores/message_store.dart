@@ -5,8 +5,9 @@ import '../entities/message_entity.dart';
 
 /// 消息数据存储
 ///
-/// 使用 Hive putString/getString 读写 JSON 字符串，
+/// 使用 Hive LazyBox 读写 JSON 字符串，
 /// 所有 key 带 wenz_ 前缀避免与旧二进制数据冲突。
+/// LazyBox 的 get() 返回 Future，不阻塞主线程。
 class MessageStore {
   final HiveManager _hiveManager;
 
@@ -29,14 +30,11 @@ class MessageStore {
     final box = _hiveManager.messageBox;
     final indexBox = _hiveManager.sessionMessagesBox;
 
-    // 获取消息UUID列表
+    // 获取消息UUID列表（LazyBox get 是异步的）
     final indexKey = _hiveManager.buildSessionMessagesKey(deviceId, employeeId);
-    List<dynamic> messageUuids = indexBox.get(indexKey) ?? [];
+    List<dynamic> messageUuids = await indexBox.get(indexKey) ?? [];
 
     // 应用偏移和限制
-    // UUID 列表按添加顺序排列（旧的在前，新的在后）
-    // 当只有 limit 没有 offset 时（如会话列表预览），取最后 N 条（最新的消息）
-    // 当有 offset 时（如分页查询），从前往后取（保持分页语义）
     if (offset != null && offset > 0) {
       messageUuids = messageUuids.skip(offset).toList();
       if (limit != null && limit > 0) {
@@ -48,11 +46,11 @@ class MessageStore {
       }
     }
 
-    // 获取消息实体（从 JSON 字符串解码）
+    // 逐条获取消息实体（LazyBox get 是异步的）
     final messages = <AiEmployeeMessageEntity>[];
     for (final uuid in messageUuids) {
       final key = _hiveManager.buildMessageKey(deviceId, uuid as String);
-      final jsonString = box.get(key);
+      final jsonString = await box.get(key);
       if (jsonString is String && jsonString.isNotEmpty) {
         try {
           final entity = _decodeEntity(jsonString);
@@ -79,7 +77,7 @@ class MessageStore {
   Future<AiEmployeeMessageEntity?> find(String? deviceId, String uuid) async {
     final box = _hiveManager.messageBox;
     final key = _hiveManager.buildMessageKey(deviceId, uuid);
-    final jsonString = box.get(key);
+    final jsonString = await box.get(key);
     if (jsonString is String && jsonString.isNotEmpty) {
       try {
         return _decodeEntity(jsonString);
@@ -95,7 +93,6 @@ class MessageStore {
       entity.employeeId.split('-').first,
       entity.uuid,
     );
-    // 从employeeId推断deviceId，实际使用时应该传入
     await box.put(key, jsonEncode(entity.toMessageMap()));
 
     // 更新会话消息索引
@@ -119,7 +116,6 @@ class MessageStore {
   Future<void> _updateSessionMessagesIndex(
     AiEmployeeMessageEntity entity,
   ) async {
-    // 从employeeId推断deviceId（简化处理）
     final parts = entity.employeeId.split('-');
     final deviceId = parts.isNotEmpty ? parts.first : null;
     await _updateSessionMessagesIndexWithDeviceId(deviceId, entity);
@@ -136,7 +132,7 @@ class MessageStore {
       entity.employeeId,
     );
 
-    List<dynamic> messageUuids = indexBox.get(indexKey) ?? [];
+    List<dynamic> messageUuids = await indexBox.get(indexKey) ?? [];
     if (!messageUuids.contains(entity.uuid)) {
       messageUuids = [...messageUuids, entity.uuid];
       await indexBox.put(indexKey, messageUuids);
@@ -187,7 +183,7 @@ class MessageStore {
     final box = _hiveManager.messageBox;
 
     final indexKey = _hiveManager.buildSessionMessagesKey(deviceId, employeeId);
-    List<dynamic> messageUuids = indexBox.get(indexKey) ?? [];
+    List<dynamic> messageUuids = await indexBox.get(indexKey) ?? [];
 
     for (final uuid in messageUuids) {
       final key = _hiveManager.buildMessageKey(deviceId, uuid as String);
@@ -196,13 +192,11 @@ class MessageStore {
 
     await indexBox.delete(indexKey);
   }
-  
+
   /// 删除单条消息（硬删除）
   Future<void> delete(String? deviceId, String uuid) async {
     final box = _hiveManager.messageBox;
     final key = _hiveManager.buildMessageKey(deviceId, uuid);
-    
-    // 从消息存储中删除
     await box.delete(key);
   }
 
@@ -220,7 +214,21 @@ class MessageStore {
   Future<int> count(String? deviceId, String employeeId) async {
     final indexBox = _hiveManager.sessionMessagesBox;
     final indexKey = _hiveManager.buildSessionMessagesKey(deviceId, employeeId);
-    List<dynamic> messageUuids = indexBox.get(indexKey) ?? [];
+    List<dynamic> messageUuids = await indexBox.get(indexKey) ?? [];
     return messageUuids.length;
+  }
+
+  /// 批量更新消息（逐条 put，但不逐条通知上层）
+  ///
+  /// 适用于 markAllAsRead 等场景，减少逐条 await 的开销。
+  Future<void> batchUpdateWithDeviceId(
+    String? deviceId,
+    List<AiEmployeeMessageEntity> entities,
+  ) async {
+    final box = _hiveManager.messageBox;
+    for (final entity in entities) {
+      final key = _hiveManager.buildMessageKey(deviceId, entity.uuid);
+      await box.put(key, jsonEncode(entity.toMessageMap()));
+    }
   }
 }

@@ -20,7 +20,7 @@ typedef PersistSessionFunc =
 typedef LoadSessionFunc =
     Future<Map<String, dynamic>?> Function(String employeeId);
 typedef LoadMessagesFunc =
-    Future<List<Map<String, dynamic>>> Function(String employeeId);
+    Future<List<Map<String, dynamic>>> Function(String employeeId, {int? limit});
 typedef UpdateMessageStatusFunc =
     Future<void> Function(
       String messageId,
@@ -81,8 +81,8 @@ class PersistentChatAdapter extends LangChainChatAdapter {
   }
 
   @override
-  Future<void> initSession({required String employeeId}) async {
-    await super.initSession(employeeId: employeeId);
+  Future<void> initSession({required String employeeId, int? recentLimit}) async {
+    await super.initSession(employeeId: employeeId, recentLimit: recentLimit);
 
     // 如果提供了会话UUID且存在加载回调，尝试从数据库加载
     if (loadSession != null) {
@@ -124,81 +124,90 @@ class PersistentChatAdapter extends LangChainChatAdapter {
       }
     }
 
-    // 从数据库加载消息历史到内存（如果有加载回调）
-    if (loadMessages != null) {
-      final session = memoryManager.getSession(employeeId);
-      if (session != null) {
-        try {
-          final messagesData = await loadMessages!(employeeId);
-          if (messagesData.isNotEmpty) {
-            // 加载历史消息
-            for (final msgData in messagesData) {
-              final chatMessage = _mapToChatMessage(msgData);
-              if (chatMessage != null) {
-                // 获取设备ID，如果没有则使用默认设备
-                final msgDeviceId = msgData['deviceId'] as String? ?? 'default';
-
-                // ✅ 创建 MessageWrapper，使用数据库中的稳定 UUID
-                // 注意：数据库中使用 'uuid' 字段，而不是 'id'
-                final msgId = (msgData['uuid'] ?? msgData['id']) as String?;
-
-                // 兼容 createTime 和 createdAt 两种字段名
-                // 数据库实体 toMap() 使用 createTime，内存消息使用 createdAt
-                dynamic msgCreateTimeValue =
-                    msgData['createTime'] ?? msgData['createdAt'];
-                DateTime msgCreatedAt;
-                if (msgCreateTimeValue is String) {
-                  msgCreatedAt = DateTime.parse(msgCreateTimeValue);
-                } else if (msgCreateTimeValue is int) {
-                  msgCreatedAt = DateTime.fromMillisecondsSinceEpoch(
-                    msgCreateTimeValue,
-                  );
-                } else if (msgCreateTimeValue is DateTime) {
-                  msgCreatedAt = msgCreateTimeValue;
-                } else {
-                  msgCreatedAt = DateTime.now();
-                }
-
-                if (msgId != null) {
-                  // 构建 metadata：保留 toolName（工具结果消息需要）和 processingStatus
-                  Map<String, dynamic>? wrapperMetadata;
-                  final toolName = msgData['toolName'] as String?;
-                  if (toolName != null) {
-                    wrapperMetadata = {'toolName': toolName};
-                  }
-                  final processingStatus = msgData['processingStatus'] as String?;
-                  if (processingStatus != null) {
-                    wrapperMetadata = {
-                      ...?wrapperMetadata,
-                      'status': processingStatus,
-                    };
-                  }
-
-                  final wrapper = MessageWrapper(
-                    uuid: msgId,
-                    message: chatMessage,
-                    createdAt: msgCreatedAt,
-                    metadata: wrapperMetadata,
-                  );
-                  session.addMessageWrapper(msgDeviceId, wrapper);
-
-                  // 记录已持久化的消息 ID，避免重复持久化
-                  _persistedMessageIds.add(msgId);
-                }
-              }
-            }
-            print(
-              '[PersistentChatAdapter] initSession: 已从数据库加载 ${messagesData.length} 条历史消息',
-            );
-          }
-        } catch (e) {
-          print('[PersistentChatAdapter] initSession: 加载历史消息失败: $e');
-        }
-      }
-    }
+    // 从数据库加载消息历史到内存
+    await _loadMessagesIntoMemory(employeeId, limit: recentLimit);
 
     // 持久化会话
     _notifyPersistSession();
+  }
+
+  /// 将数据库消息加载到内存
+  ///
+  /// [limit] 为 null 时加载全部消息；指定时仅加载最新 N 条。
+  Future<void> _loadMessagesIntoMemory(String employeeId, {int? limit}) async {
+    if (loadMessages == null) return;
+
+    final session = memoryManager.getSession(employeeId);
+    if (session == null) return;
+
+    try {
+      final messagesData = await loadMessages!(employeeId, limit: limit);
+      if (messagesData.isEmpty) return;
+
+      for (final msgData in messagesData) {
+        final chatMessage = _mapToChatMessage(msgData);
+        if (chatMessage != null) {
+          final msgDeviceId = msgData['deviceId'] as String? ?? 'default';
+          final msgId = (msgData['uuid'] ?? msgData['id']) as String?;
+
+          dynamic msgCreateTimeValue =
+              msgData['createTime'] ?? msgData['createdAt'];
+          DateTime msgCreatedAt;
+          if (msgCreateTimeValue is String) {
+            msgCreatedAt = DateTime.parse(msgCreateTimeValue);
+          } else if (msgCreateTimeValue is int) {
+            msgCreatedAt = DateTime.fromMillisecondsSinceEpoch(msgCreateTimeValue);
+          } else if (msgCreateTimeValue is DateTime) {
+            msgCreatedAt = msgCreateTimeValue;
+          } else {
+            msgCreatedAt = DateTime.now();
+          }
+
+          if (msgId != null) {
+            Map<String, dynamic>? wrapperMetadata;
+            final toolName = msgData['toolName'] as String?;
+            if (toolName != null) {
+              wrapperMetadata = {'toolName': toolName};
+            }
+            final processingStatus = msgData['processingStatus'] as String?;
+            if (processingStatus != null) {
+              wrapperMetadata = {
+                ...?wrapperMetadata,
+                'status': processingStatus,
+              };
+            }
+
+            final wrapper = MessageWrapper(
+              uuid: msgId,
+              message: chatMessage,
+              createdAt: msgCreatedAt,
+              metadata: wrapperMetadata,
+            );
+            session.addMessageWrapper(msgDeviceId, wrapper);
+            _persistedMessageIds.add(msgId);
+          }
+        }
+      }
+      print(
+        '[PersistentChatAdapter] _loadMessagesIntoMemory: '
+        '已加载 ${messagesData.length} 条历史消息${limit != null ? ' (recentLimit=$limit)' : ''}',
+      );
+    } catch (e) {
+      print('[PersistentChatAdapter] _loadMessagesIntoMemory: 加载失败: $e');
+    }
+  }
+
+  @override
+  Future<void> loadRemainingMessages() async {
+    final employeeId = currentEmployeeUuid;
+    if (employeeId == null) return;
+
+    final session = memoryManager.getSession(employeeId);
+    if (session == null) return;
+
+    // 清空已有消息（保留 conversationSummary），重新从数据库加载全部
+    session.messagesMap.clear();
+    await _loadMessagesIntoMemory(employeeId);
   }
 
   @override

@@ -2,10 +2,12 @@
 
 import '../agent/client/cached_agent_proxy.dart';
 import '../agent/entity/agent_message.dart';
+import '../agent/entity/entity.dart';
 import '../agent/notification/agent_notification_hub.dart';
 import '../entity/lan_device_info.dart';
 import '../entity/lan_message.dart';
 import '../persistence/entities/device_config_entity.dart';
+import '../persistence/entities/employee_entity.dart';
 import '../persistence/entities/message_entity.dart';
 import '../service/service.dart';
 
@@ -179,6 +181,7 @@ abstract class DeviceClient {
   Future<CachedAgentProxy> getOrCreateAgentProxy({
     required String employeeId,
     String? deviceId,
+    AiEmployeeEntity? employee,
   });
 
   /// 销毁 AgentProxy

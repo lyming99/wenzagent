@@ -4,6 +4,8 @@ import '../hive_manager.dart';
 import '../entities/skill_entity.dart';
 
 /// 技能数据存储
+///
+/// 使用 LazyBox 实现异步读取，避免主线程阻塞。
 class SkillStore {
   final HiveManager _hiveManager;
 
@@ -31,7 +33,7 @@ class SkillStore {
 
     var skills = <AiEmployeeSkillEntity>[];
     for (final key in box.keys) {
-      final entity = _decodeEntity(box.get(key));
+      final entity = _decodeEntity(await box.get(key));
       if (entity == null) continue;
       final buildKey = _hiveManager.buildSkillKey(
         entity.employeeId.split('-').first,
@@ -58,7 +60,7 @@ class SkillStore {
 
     var skills = <AiEmployeeSkillEntity>[];
     for (final key in box.keys) {
-      final entity = _decodeEntity(box.get(key));
+      final entity = _decodeEntity(await box.get(key));
       if (entity == null) continue;
       if (entity.deleted == 1) continue;
       if (entity.employeeId != employeeId) continue;
@@ -75,7 +77,7 @@ class SkillStore {
   Future<AiEmployeeSkillEntity?> find(String? deviceId, String uuid) async {
     final box = _hiveManager.skillBox;
     final key = _hiveManager.buildSkillKey(deviceId, uuid);
-    return _decodeEntity(box.get(key));
+    return _decodeEntity(await box.get(key));
   }
 
   /// 保存技能
@@ -102,7 +104,7 @@ class SkillStore {
   Future<void> delete(String? deviceId, String uuid) async {
     final box = _hiveManager.skillBox;
     final key = _hiveManager.buildSkillKey(deviceId, uuid);
-    final entity = _decodeEntity(box.get(key));
+    final entity = _decodeEntity(await box.get(key));
     if (entity != null) {
       await box.put(key, jsonEncode(entity.copyWith(deleted: 1).toMap()));
     }

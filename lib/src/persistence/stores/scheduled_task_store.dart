@@ -4,6 +4,8 @@ import '../hive_manager.dart';
 import '../entities/scheduled_task_entity.dart';
 
 /// 定时任务数据存储
+///
+/// 使用 LazyBox 实现异步读取，避免主线程阻塞。
 class ScheduledTaskStore {
   final HiveManager _hiveManager;
   static const String _boxKey = 'scheduled_task_box';
@@ -24,9 +26,10 @@ class ScheduledTaskStore {
   /// 获取所有未删除的任务
   Future<List<AiScheduledTaskEntity>> findAll() async {
     final box = _hiveManager.getBox(_boxKey);
+
     final tasks = <AiScheduledTaskEntity>[];
     for (final key in box.keys) {
-      final entity = _decodeEntity(box.get(key));
+      final entity = _decodeEntity(await box.get(key));
       if (entity != null && entity.deleted == 0) {
         tasks.add(entity);
       }
@@ -46,7 +49,7 @@ class ScheduledTaskStore {
   Future<AiScheduledTaskEntity?> find(String uuid) async {
     final box = _hiveManager.getBox(_boxKey);
     final key = _buildKey(uuid);
-    return _decodeEntity(box.get(key));
+    return _decodeEntity(await box.get(key));
   }
 
   /// 保存任务
