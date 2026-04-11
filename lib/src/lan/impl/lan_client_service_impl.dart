@@ -69,7 +69,6 @@ class LanClientServiceImpl implements LanClientService {
 
   // 重连相关
   Timer? _reconnectTimer;
-  Timer? _heartbeatTimer;
   static const int _reconnectDelay = 5;
 
   final LanChunkService _chunkService = LanChunkService();
@@ -139,6 +138,19 @@ class LanClientServiceImpl implements LanClientService {
           
           _messageController.add(msg);
 
+          // 收到 Host 的 ping，自动回复 pong
+          if (msg.type == LanMessageType.ping) {
+            try {
+              final pong = LanMessage(
+                id: _uuid.v4(),
+                type: LanMessageType.pong,
+                fromId: _myId,
+                timestamp: DateTime.now(),
+              );
+              _channel?.sink.add(jsonEncode(pong.toJson()));
+            } catch (_) {}
+          }
+
           if (msg.type == LanMessageType.file && msg.fileId != null) {
             _autoDownloadFile(msg);
           }
@@ -147,7 +159,6 @@ class LanClientServiceImpl implements LanClientService {
       onDone: () {
         _isConnected = false;
         _isConnecting = false;
-        _stopHeartbeat();
         if (_manualDisconnect) return;
         if (_kickedOffline) {
           _addSystemMessage('已被踢下线，不再重连');
@@ -159,7 +170,6 @@ class LanClientServiceImpl implements LanClientService {
       onError: (_) {
         _isConnected = false;
         _isConnecting = false;
-        _stopHeartbeat();
         if (_manualDisconnect) return;
         if (_kickedOffline) return;
         _addSystemMessage('连接出错');
@@ -174,7 +184,6 @@ class LanClientServiceImpl implements LanClientService {
     _addSystemMessage('已加入局域网 $hostIp:$port');
 
     _sendClientInfo();
-    _startHeartbeat();
   }
 
   @override
@@ -187,7 +196,6 @@ class LanClientServiceImpl implements LanClientService {
     _manualDisconnect = true;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
-    _stopHeartbeat();
 
     try {
       await _channel?.sink.close();
@@ -289,32 +297,6 @@ class LanClientServiceImpl implements LanClientService {
         _scheduleReconnect();
       }
     });
-  }
-
-  void _startHeartbeat() {
-    _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (_isConnected) {
-        try {
-          final msg = LanMessage(
-            id: _uuid.v4(),
-            type: LanMessageType.clientInfo,
-            fromId: _myId,
-            content: 'heartbeat',
-          );
-          _channel?.sink.add(jsonEncode(msg.toJson()));
-        } catch (_) {
-          _isConnected = false;
-          _stopHeartbeat();
-          _scheduleReconnect();
-        }
-      }
-    });
-  }
-
-  void _stopHeartbeat() {
-    _heartbeatTimer?.cancel();
-    _heartbeatTimer = null;
   }
 
   Future<void> _autoDownloadFile(LanMessage msg) async {

@@ -113,11 +113,7 @@ class DeviceClientImpl implements DeviceClient {
   /// 员工在线状态缓存 (employeeId -> online)
   final Map<String, bool> _employeeOnlineState = {};
 
-  /// 员工在线状态 Ping 定时器（检测本地/远程 Agent 存活）
-  Timer? _employeePingTimer;
-
   /// 员工到设备的映射缓存 (employeeId -> deviceId)
-  /// 在 _doPingAllEmployees 中填充，供设备下线时同步查找使用
   final Map<String, String> _employeeDeviceMap = {};
 
   /// 设备缓存 (deviceId -> LanDeviceInfo)
@@ -258,7 +254,7 @@ class DeviceClientImpl implements DeviceClient {
       return localAgent.isAlive;
     }
 
-    // 远程员工：通过 RPC ping
+    // 远程员工：通过 deviceId 在线状态判断
     final employee = await _employeeManager.getEmployee(employeeId);
     if (employee == null) return false;
 
@@ -266,19 +262,9 @@ class DeviceClientImpl implements DeviceClient {
     if (targetDeviceId == null || targetDeviceId.isEmpty) return false;
     if (targetDeviceId == deviceId) return false; // 本设备但 _localAgents 中不存在
 
-    if (_rpcManager == null || !isConnected) return false;
-
-    try {
-      final result = await _rpcManager!.invoke(
-        AgentRpcConfig.methodPing,
-        PingRequest(employeeId: employeeId).toMap(),
-        toDeviceId: targetDeviceId,
-        timeout: timeout.inMilliseconds,
-      );
-      return result['alive'] == true;
-    } catch (_) {
-      return false;
-    }
+    // 检查 LAN 连接和设备在线缓存
+    if (!isConnected) return false;
+    return _deviceCache.containsKey(targetDeviceId);
   }
 
   @override
@@ -926,7 +912,6 @@ class DeviceClientImpl implements DeviceClient {
   /// 内部断开连接方法（无锁，供reconnect调用）
   Future<void> _disconnectInternal() async {
     _stopConnectionMonitor();
-    _stopEmployeeOnlineMonitor();
     await _messageSubscription?.cancel();
     _messageSubscription = null;
 
@@ -2498,11 +2483,10 @@ class DeviceClientImpl implements DeviceClient {
     _stateController.add(state);
 
     if (state == DeviceConnectionState.connected) {
-      // LAN 连接成功，启动员工在线监控
-      _startEmployeeOnlineMonitor();
+      // LAN 连接成功，基于设备缓存刷新员工在线状态
+      _refreshEmployeeOnlineStates();
     } else if (state == DeviceConnectionState.disconnected) {
-      // LAN 断开，停止监控并标记所有员工离线
-      _stopEmployeeOnlineMonitor();
+      // LAN 断开，标记所有员工离线
       _markAllRemoteEmployeesOffline();
     }
   }
@@ -2546,75 +2530,34 @@ class DeviceClientImpl implements DeviceClient {
     _connectionMonitorTimer = null;
   }
 
-  // ===== 员工在线状态监控 =====
+  // ===== 员工在线状态管理 =====
 
-  /// 启动员工在线状态监控
-  ///
-  /// 定期 ping 所有已知员工，检测其在线状态，通过 Stream 发布状态变化。
-  void _startEmployeeOnlineMonitor() {
-    _stopEmployeeOnlineMonitor();
-    _doPingAllEmployees(); // 立即 ping 一次
-    _employeePingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (_disposed) {
-        _stopEmployeeOnlineMonitor();
-        return;
-      }
-      _doPingAllEmployees();
-    });
-  }
-
-  /// 停止员工在线状态监控
-  void _stopEmployeeOnlineMonitor() {
-    _employeePingTimer?.cancel();
-    _employeePingTimer = null;
-  }
-
-  /// Ping 所有已知员工并更新在线状态（并行执行，避免串行阻塞）
-  Future<void> _doPingAllEmployees() async {
+  /// 刷新所有员工的在线状态（基于 _deviceCache 中的设备在线状态 + employee.currentDeviceId）
+  Future<void> _refreshEmployeeOnlineStates() async {
     try {
       final employees = await _employeeManager.getEmployees();
+      for (final employee in employees) {
+        final empId = employee.uuid;
+        final devId = employee.currentDeviceId;
 
-      // 并行 ping 所有员工
-      await Future.wait(
-        employees.map((employee) async {
-          final empId = employee.uuid;
-          final devId = employee.currentDeviceId;
+        // 更新员工-设备映射缓存
+        if (devId != null && devId.isNotEmpty) {
+          _employeeDeviceMap[empId] = devId;
+        }
 
-          // 更新员工-设备映射缓存
-          if (devId != null && devId.isNotEmpty) {
-            _employeeDeviceMap[empId] = devId;
+        bool online = false;
+        if (devId != null && devId.isNotEmpty) {
+          if (devId == deviceId) {
+            // 本设备员工：检查本地 Agent
+            online = _localAgents[empId]?.isAlive ?? false;
+          } else {
+            // 远程员工：检查设备是否在缓存中（在线）
+            online = _deviceCache.containsKey(devId);
           }
+        }
 
-          bool online = false;
-
-          if (devId != null && devId.isNotEmpty) {
-            if (devId == deviceId) {
-              // 本设备员工：检查本地 Agent
-              online = _localAgents[empId]?.isAlive ?? false;
-            } else {
-              // 远程员工：先检查设备是否在缓存中
-              if (!_deviceCache.containsKey(devId) || _rpcManager == null || !isConnected) {
-                online = false;
-              } else {
-                // 设备在线，进一步 RPC ping
-                try {
-                  final result = await _rpcManager!.invoke(
-                    AgentRpcConfig.methodPing,
-                    PingRequest(employeeId: empId).toMap(),
-                    toDeviceId: devId,
-                    timeout: 2000,
-                  );
-                  online = result['alive'] == true;
-                } catch (_) {
-                  online = false;
-                }
-              }
-            }
-          }
-
-          _updateEmployeeOnlineState(empId, online, devId);
-        }),
-      );
+        _updateEmployeeOnlineState(empId, online, devId);
+      }
     } catch (_) {}
   }
 
@@ -2633,8 +2576,9 @@ class DeviceClientImpl implements DeviceClient {
     }
   }
 
-  /// 局域网断开时，标记所有远程员工离线
+  /// 局域网断开时，标记所有员工离线并清空设备缓存
   void _markAllRemoteEmployeesOffline() {
+    _deviceCache.clear();
     for (final entry in Map<String, bool>.from(_employeeOnlineState).entries) {
       if (entry.value) {
         _employeeOnlineState[entry.key] = false;
@@ -2949,6 +2893,8 @@ class DeviceClientImpl implements DeviceClient {
         case LanMessageType.deviceOnline:
           eventType = DeviceEventType.online;
           _deviceCache[device.id] = device.copyWith(status: 'online');
+          // 设备上线，刷新该设备上员工的在线状态
+          _refreshEmployeeOnlineStates();
           break;
         case LanMessageType.deviceOffline:
           eventType = DeviceEventType.offline;

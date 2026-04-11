@@ -18,6 +18,9 @@ class LanClient {
   /// 连接时间
   DateTime? connectedAt;
 
+  /// 最后一次 pong 响应时间（Host 端用于判断 Client 存活）
+  DateTime? lastPongTime;
+
   LanClient({
     this.id,
     this.ip,
@@ -25,6 +28,7 @@ class LanClient {
     this.name,
     this.topic,
     this.connectedAt,
+    this.lastPongTime,
   });
 
   Map<String, dynamic> toJson() => {
@@ -54,6 +58,7 @@ class LanClient {
     String? name,
     String? topic,
     DateTime? connectedAt,
+    DateTime? lastPongTime,
   }) {
     return LanClient(
       id: id ?? this.id,
@@ -62,6 +67,7 @@ class LanClient {
       name: name ?? this.name,
       topic: topic ?? this.topic,
       connectedAt: connectedAt ?? this.connectedAt,
+      lastPongTime: lastPongTime ?? this.lastPongTime,
     );
   }
 

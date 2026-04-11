@@ -41,6 +41,12 @@ class LanHostServiceImpl implements LanHostService {
   final LanFileCacheService _cacheService = LanFileCacheService();
   final _uuid = const Uuid();
 
+  /// Ping 探测定时器
+  Timer? _pingTimer;
+  static const Duration _pingInterval = Duration(seconds: 5);
+  /// Pong 超时时间：超过此时间未收到 pong 则判定掉线
+  static const Duration _pongTimeout = Duration(seconds: 15);
+
   @override
   bool get isRunning => _isRunning;
 
@@ -75,6 +81,7 @@ class LanHostServiceImpl implements LanHostService {
     _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);
     _port = _server?.port ?? port; // 使用实际分配的端口
 
+    _startPingTimer();
     _addSystemMessage('服务端已启动，IP: $_localIp:$_port');
   }
 
@@ -83,6 +90,7 @@ class LanHostServiceImpl implements LanHostService {
     if (!_isRunning) return;
 
     _isRunning = false;
+    _stopPingTimer();
 
     final channels = List<WebSocketChannel>.from(_clientChannels);
     _clientChannels.clear();
@@ -332,6 +340,15 @@ class LanHostServiceImpl implements LanHostService {
   void _handleClientMessage(String clientId, LanMessage msg) {
     msg.fromId ??= clientId;
 
+    // 处理 Client 对 ping 的 pong 响应
+    if (msg.type == LanMessageType.pong) {
+      final idx = _clients.indexWhere((c) => c.id == clientId);
+      if (idx != -1) {
+        _clients[idx] = _clients[idx].copyWith(lastPongTime: DateTime.now());
+      }
+      return;
+    }
+
     if (msg.type == LanMessageType.clientInfo) {
       if (msg.content == 'heartbeat') {
         _messageController.add(msg);
@@ -548,6 +565,93 @@ class LanHostServiceImpl implements LanHostService {
         timestamp: DateTime.now(),
       ),
     );
+  }
+
+  // ===== Ping 探测机制 =====
+
+  /// 启动定时 ping
+  void _startPingTimer() {
+    _stopPingTimer();
+    _pingTimer = Timer.periodic(_pingInterval, (_) {
+      if (!_isRunning) {
+        _stopPingTimer();
+        return;
+      }
+      _doPingCheck();
+    });
+  }
+
+  /// 停止定时 ping
+  void _stopPingTimer() {
+    _pingTimer?.cancel();
+    _pingTimer = null;
+  }
+
+  /// 向所有已注册设备的 Client 发送 ping，并检查超时
+  void _doPingCheck() {
+    final now = DateTime.now();
+    final pingMsg = LanMessage(
+      id: _uuid.v4(),
+      type: LanMessageType.ping,
+      fromId: _myId,
+      fromName: 'Host',
+      timestamp: now,
+    );
+    final pingData = jsonEncode(pingMsg.toJson());
+
+    // 收集超时的 Client（从后往前遍历以便安全删除）
+    final timedOutIndices = <int>[];
+
+    for (int i = 0; i < _clients.length; i++) {
+      final client = _clients[i];
+      // 只对已注册 deviceId 的 Client 做 ping 检测
+      if (client.deviceId == null || client.deviceId!.isEmpty) continue;
+
+      // 发送 ping
+      try {
+        _clientChannels[i].sink.add(pingData);
+      } catch (_) {
+        timedOutIndices.add(i);
+        continue;
+      }
+
+      // 检查超时：从未响应过或超过超时时间
+      final lastPong = client.lastPongTime;
+      if (lastPong == null || now.difference(lastPong) > _pongTimeout) {
+        timedOutIndices.add(i);
+      }
+    }
+
+    // 从后往前移除超时的 Client
+    for (final idx in timedOutIndices.reversed) {
+      final client = _clients[idx];
+      final channel = _clientChannels[idx];
+
+      try {
+        channel.sink.close();
+      } catch (_) {}
+
+      final clientName = client.name;
+      final clientDeviceId = client.deviceId;
+
+      _clients.removeAt(idx);
+      _clientChannels.removeAt(idx);
+
+      _addSystemMessage('客户端 ${clientName ?? "unknown"} ping 超时，已断开');
+
+      // 广播设备下线
+      if (clientDeviceId != null && clientDeviceId.isNotEmpty) {
+        _broadcastDeviceOffline(
+          LanDeviceInfo(
+            id: clientDeviceId,
+            name: client.name ?? '',
+            ip: client.ip ?? '',
+            status: 'offline',
+            connectedAt: client.connectedAt,
+          ),
+        );
+      }
+    }
   }
 
   Future<String?> _getLocalIp() async {

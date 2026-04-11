@@ -122,6 +122,14 @@ enum LanMessageType {
 
   /// 设备信息响应
   deviceInfoResponse,
+
+  // ===== 心跳消息类型 =====
+
+  /// Host -> Client: ping 探测
+  ping,
+
+  /// Client -> Host: pong 响应
+  pong,
 }
 
 /// LAN 消息实体
