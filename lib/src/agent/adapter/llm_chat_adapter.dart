@@ -212,7 +212,6 @@ class LlmChatAdapter implements IChatAdapter {
         await _prepareCompression(systemPrompt);
 
         // Tool calling 循环
-        bool completedNormally = false;
         bool streamCancelled = false;
         cancelSubscription = cancellationToken?.onCancel.listen((_) {
           streamCancelled = true;
@@ -261,7 +260,6 @@ class LlmChatAdapter implements IChatAdapter {
                 ChatMsg.assistant(aiContent),
               );
             }
-            completedNormally = true;
             print('[LlmChatAdapter] tool use empty, stop tool calling loop');
             if (llmResult.isDone) {
               break;
@@ -337,18 +335,17 @@ class LlmChatAdapter implements IChatAdapter {
               );
             }
           }
-        }
-
-        if (!completedNormally) {
-          controller.add(
-            StreamResponse.error(
-              '已达到最大工具调用轮次（$_maxToolCallIterations 次），请尝试简化您的需求或拆分为多个问题',
-            ),
-          );
-          print(
-            '[LlmChatAdapter] ERROR: 已达到最大工具调用轮次（$_maxToolCallIterations 次），请尝试简化您的需求或拆分为多个问题',
-          );
-          return;
+          if (iteration == _maxToolCallIterations - 1) {
+            controller.add(
+              StreamResponse.error(
+                '已达到最大工具调用轮次（$_maxToolCallIterations 次），请尝试简化您的需求或拆分为多个问题',
+              ),
+            );
+            print(
+              '[LlmChatAdapter] ERROR: 已达到最大工具调用轮次（$_maxToolCallIterations 次），请尝试简化您的需求或拆分为多个问题',
+            );
+            return;
+          }
         }
 
         controller.add(StreamResponse.done());
@@ -614,12 +611,8 @@ class LlmChatAdapter implements IChatAdapter {
     } else {
       llmTools = null;
     }
-
     if (hasTools) {
       print('[LlmChatAdapter] 已注册工具列表 (${_toolRegistry!.length} 个):');
-      for (final toolName in _toolRegistry!.toolNames) {
-        print('[LlmChatAdapter]   - $toolName');
-      }
     }
     print(
       '[LlmChatAdapter] calling LLM, messages count: ${llmMessages.length}, hasTools: $hasTools',
