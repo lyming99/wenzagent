@@ -854,7 +854,13 @@ class AgentImpl implements IAgent {
   Future<void> setProvider(ProviderConfig providerConfig) async {
     _touch();
     await _withLock(() async {
-      await _chatAdapter.updateProvider(providerConfig.toMap());
+      // 如果是 PersistentChatAdapter，使用 saveProviderConfig 来同时持久化到 Session
+      if (_chatAdapter is PersistentChatAdapter) {
+        await (_chatAdapter as PersistentChatAdapter)
+            .saveProviderConfig(providerConfig);
+      } else {
+        await _chatAdapter.updateProvider(providerConfig.toMap());
+      }
     });
   }
 

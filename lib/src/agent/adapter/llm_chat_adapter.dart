@@ -238,7 +238,7 @@ class LlmChatAdapter implements IChatAdapter {
         String? lastToolCallsSignature;
         int consecutiveDuplicateCount = 0;
         var notReplyRecord = _NotReplyRecord(maxNotReplyCount: 5);
-
+        var alreadyCallsSet = <String>{};
         for (
           var iteration = 0;
           iteration < _maxToolCallIterations;
@@ -327,6 +327,7 @@ class LlmChatAdapter implements IChatAdapter {
           // 权限检查 + 并行执行工具
           final execResult = await _executeToolCalls(
             llmResult.toolCalls,
+            alreadyCallsSet: alreadyCallsSet,
             streamCancelled: streamCancelled,
             cancellationToken: cancellationToken,
           );
@@ -755,6 +756,7 @@ class LlmChatAdapter implements IChatAdapter {
   /// 返回执行结果列表。如果被取消，[cancelled] 为 true。
   Future<_ToolExecSummary> _executeToolCalls(
     List<llm.ToolCall> toolCalls, {
+    required Set<String> alreadyCallsSet,
     required bool streamCancelled,
     CancellationToken? cancellationToken,
   }) async {
@@ -767,6 +769,10 @@ class LlmChatAdapter implements IChatAdapter {
       if (streamCancelled || cancellationToken?.isCancelled == true) {
         return _ToolExecSummary(cancelled: true, results: []);
       }
+      if(alreadyCallsSet.contains(toolCall.id)){
+        continue;
+      }
+      alreadyCallsSet.add(toolCall.id);
 
       final toolName = toolCall.function.name;
       final toolCallId = toolCall.id;
