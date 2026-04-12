@@ -1102,6 +1102,61 @@ class CachedAgentProxy {
   // ===== 转换方法 =====
 
   AgentMessage _entityToMessage(AiEmployeeMessageEntity entity) {
+    // 从 entity.toMessageMap() 还原完整消息数据
+    // toMessageMap() 以 jsonData 为基础还原，确保 toolResults 等扩展字段不丢失
+    final messageMap = entity.toMessageMap();
+
+    // 解析 toolCalls（可能是 JSON 字符串或已解析的 List）
+    List<ToolCall>? toolCalls;
+    final rawToolCalls = messageMap['toolCalls'];
+    if (rawToolCalls != null) {
+      if (rawToolCalls is String && rawToolCalls.isNotEmpty) {
+        toolCalls = (jsonDecode(rawToolCalls) as List)
+            .map((tc) => ToolCall.fromMap(tc as Map<String, dynamic>))
+            .toList();
+      } else if (rawToolCalls is List) {
+        toolCalls = rawToolCalls
+            .map((tc) => ToolCall.fromMap(tc as Map<String, dynamic>))
+            .toList();
+      }
+    }
+
+    // 解析 toolArguments（可能是 JSON 字符串或已解析的 Map）
+    Map<String, dynamic>? toolArguments;
+    final rawToolArgs = messageMap['toolArguments'];
+    if (rawToolArgs != null) {
+      if (rawToolArgs is String && rawToolArgs.isNotEmpty) {
+        toolArguments = jsonDecode(rawToolArgs) as Map<String, dynamic>;
+      } else if (rawToolArgs is Map) {
+        toolArguments = Map<String, dynamic>.from(rawToolArgs);
+      }
+    }
+
+    // 构建 metadata：保留 toMessageMap() 中的 toolResults 等扩展字段
+    final metadata = <String, dynamic>{
+      'updateTime': entity.updateTime.toIso8601String(),
+    };
+
+    // 从 messageMap 中提取 toolResults 等扩展字段到 metadata
+    final mapMetadata = messageMap['metadata'] as Map<String, dynamic>?;
+    if (mapMetadata != null) {
+      metadata.addAll(mapMetadata);
+    }
+    // toMessageMap() 中 toolResults 可能是 JSON 字符串（来自 PersistentChatAdapter 的 jsonEncode）
+    if (messageMap['toolResults'] != null && !metadata.containsKey('toolResults')) {
+      final rawToolResults = messageMap['toolResults'];
+      if (rawToolResults is String && rawToolResults.isNotEmpty) {
+        try {
+          metadata['toolResults'] = jsonDecode(rawToolResults);
+        } catch (_) {
+          // 解析失败，保留原始值
+          metadata['toolResults'] = rawToolResults;
+        }
+      } else if (rawToolResults is List) {
+        metadata['toolResults'] = rawToolResults;
+      }
+    }
+
     return AgentMessage(
       id: entity.uuid,
       role: entity.role,
@@ -1110,17 +1165,11 @@ class CachedAgentProxy {
       createdAt: entity.createTime,
       toolCallId: entity.toolCallId,
       toolName: entity.toolName,
-      toolArguments: entity.toolArguments != null
-          ? jsonDecode(entity.toolArguments!) as Map<String, dynamic>
-          : null,
+      toolArguments: toolArguments,
       toolResult: entity.toolResult,
-      toolCalls: entity.toolCalls != null
-          ? (jsonDecode(entity.toolCalls!) as List)
-              .map((tc) => ToolCall.fromMap(tc as Map<String, dynamic>))
-              .toList()
-          : null,
+      toolCalls: toolCalls,
       status: entity.processingStatus,
-      metadata: {'updateTime': entity.updateTime.toIso8601String()},
+      metadata: metadata,
     );
   }
 

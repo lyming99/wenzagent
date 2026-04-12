@@ -19,6 +19,24 @@ import 'session_memory_manager.dart';
 /// Tool calling 循环最大迭代次数
 const int _maxToolCallIterations = 100;
 
+class _NotReplyRecord {
+  int lastMessageCount = 0;
+  int notReplyCount = 0;
+  int maxNotReplyCount = 3;
+
+  _NotReplyRecord({this.maxNotReplyCount = 3});
+
+  bool checkMaxNotReplyCount(int messageCount) {
+    lastMessageCount = messageCount;
+    if (messageCount > lastMessageCount) {
+      notReplyCount = 0;
+    } else {
+      notReplyCount++;
+    }
+    return notReplyCount >= maxNotReplyCount;
+  }
+}
+
 /// 并行工具执行结果（内部使用）
 class _ToolExecResult {
   final llm.ToolCall toolCall;
@@ -54,21 +72,23 @@ class _LlmStreamResult {
     this.error,
   });
 
-  factory _LlmStreamResult.cancelled() => _LlmStreamResult(
-    aiContentBuffer: StringBuffer(),
-    aiThinkingBuffer: StringBuffer(),
-    isDone: true,
-    toolCalls: const [],
-    cancelled: true,
-  );
+  factory _LlmStreamResult.cancelled() =>
+      _LlmStreamResult(
+        aiContentBuffer: StringBuffer(),
+        aiThinkingBuffer: StringBuffer(),
+        isDone: true,
+        toolCalls: const [],
+        cancelled: true,
+      );
 
-  factory _LlmStreamResult.error(String msg) => _LlmStreamResult(
-    aiContentBuffer: StringBuffer(),
-    aiThinkingBuffer: StringBuffer(),
-    isDone: true,
-    toolCalls: const [],
-    error: msg,
-  );
+  factory _LlmStreamResult.error(String msg) =>
+      _LlmStreamResult(
+        aiContentBuffer: StringBuffer(),
+        aiThinkingBuffer: StringBuffer(),
+        isDone: true,
+        toolCalls: const [],
+        error: msg,
+      );
 }
 
 /// 重复工具调用检测结果（内部使用）
@@ -178,8 +198,7 @@ class LlmChatAdapter implements IChatAdapter {
   }
 
   @override
-  Stream<StreamResponse> streamMessage(
-    MessageInput message, {
+  Stream<StreamResponse> streamMessage(MessageInput message, {
     CancellationToken? cancellationToken,
   }) {
     final controller = StreamController<StreamResponse>();
@@ -221,11 +240,12 @@ class LlmChatAdapter implements IChatAdapter {
         // 重复工具调用检测状态
         String? lastToolCallsSignature;
         int consecutiveDuplicateCount = 0;
+        var notReplayRecord = _NotReplyRecord(maxNotReplyCount: 3);
 
         for (
-          var iteration = 0;
-          iteration < _maxToolCallIterations;
-          iteration++
+        var iteration = 0;
+        iteration < _maxToolCallIterations;
+        iteration++
         ) {
           if (cancellationToken?.isCancelled == true) {
             controller.add(StreamResponse.error('Cancelled'));
@@ -264,6 +284,12 @@ class LlmChatAdapter implements IChatAdapter {
             if (llmResult.isDone) {
               break;
             } else {
+              if (notReplayRecord.checkMaxNotReplyCount(
+                currentMessages.length,
+              )) {
+                print('[LlmChatAdapter] ai not reply, too long no reply');
+                break;
+              }
               continue;
             }
           }
@@ -287,7 +313,7 @@ class LlmChatAdapter implements IChatAdapter {
               controller.add(
                 StreamResponse.error(
                   '检测到工具调用死循环：LLM 连续 $duplicateError.updatedCount 轮发出相同的工具调用。'
-                  '请尝试修改您的需求或手动提供相关信息。',
+                      '请尝试修改您的需求或手动提供相关信息。',
                 ),
               );
               return;
@@ -330,7 +356,9 @@ class LlmChatAdapter implements IChatAdapter {
             if (r.isError) {
               controller.add(
                 StreamResponse.chunk(
-                  '\n⚠️ 工具 ${r.name} 执行失败: ${r.content.split('\n').first}',
+                  '\n⚠️ 工具 ${r.name} 执行失败: ${r.content
+                      .split('\n')
+                      .first}',
                 ),
               );
             }
@@ -361,7 +389,8 @@ class LlmChatAdapter implements IChatAdapter {
         _runningTools.clear();
         await controller.close();
       }
-    }();
+    }
+    ();
 
     return controller.stream;
   }
@@ -429,7 +458,8 @@ class LlmChatAdapter implements IChatAdapter {
     print('[LlmChatAdapter] updateProvider called with: $providerConfig');
     final config = ProviderConfig.fromMap(providerConfig);
     print(
-      '[LlmChatAdapter] parsed config: provider=${config.provider}, model=${config.model}, baseUrl=${config.baseUrl}',
+      '[LlmChatAdapter] parsed config: provider=${config
+          .provider}, model=${config.model}, baseUrl=${config.baseUrl}',
     );
     config.validate();
     print('[LlmChatAdapter] config validated successfully');
@@ -462,8 +492,7 @@ class LlmChatAdapter implements IChatAdapter {
 
   @override
   Future<void> updateProjectContext(
-    Map<String, dynamic>? projectContext,
-  ) async {
+      Map<String, dynamic>? projectContext,) async {
     if (projectContext != null) {
       _context = {...?_context, ...projectContext};
     }
@@ -485,11 +514,10 @@ class LlmChatAdapter implements IChatAdapter {
   }
 
   @override
-  void updateMessageStatus(
-    String messageId,
-    AgentMessageStatus status, {
-    String? error,
-  }) {
+  void updateMessageStatus(String messageId,
+      AgentMessageStatus status, {
+        String? error,
+      }) {
     // 内存适配器不需要持久化，子类 PersistentChatAdapter 可重写此方法
   }
 
@@ -615,7 +643,8 @@ class LlmChatAdapter implements IChatAdapter {
       print('[LlmChatAdapter] 已注册工具列表 (${_toolRegistry!.length} 个):');
     }
     print(
-      '[LlmChatAdapter] calling LLM, messages count: ${llmMessages.length}, hasTools: $hasTools',
+      '[LlmChatAdapter] calling LLM, messages count: ${llmMessages
+          .length}, hasTools: $hasTools',
     );
 
     final aiContentBuffer = StringBuffer();
@@ -656,7 +685,8 @@ class LlmChatAdapter implements IChatAdapter {
             break;
           case llm.ErrorEvent():
             print('[LlmChatAdapter] LLM stream error event: ${event.error}');
-            return _LlmStreamResult.error('LLM 调用异常: ${event.error.message}');
+            return _LlmStreamResult.error(
+                'LLM 调用异常: ${event.error.message}');
         }
       }
     } catch (e) {
@@ -668,22 +698,22 @@ class LlmChatAdapter implements IChatAdapter {
       return _LlmStreamResult.cancelled();
     }
 
-    final toolCalls =
-        finalResponse?.toolCalls ?? toolCallAggregator.completedCalls;
-
+    var aToolCalls = toolCallAggregator.completedCalls;
+    var toolCalls = finalResponse?.toolCalls ?? <llm.ToolCall>[];
+    if (toolCalls.isEmpty) {
+      toolCalls = aToolCalls;
+    }
     return _LlmStreamResult(
       aiContentBuffer: aiContentBuffer,
       aiThinkingBuffer: thinkingContentBuffer,
-      isDone: finalResponse != null || aiContentBuffer.isNotEmpty,
+      isDone: aiContentBuffer.isNotEmpty,
       toolCalls: toolCalls,
     );
   }
 
   /// 记录 assistant 消息（含 toolCalls）到会话历史
-  void _recordAssistantToolCallMessage(
-    String aiContent,
-    List<llm.ToolCall> toolCalls,
-  ) {
+  void _recordAssistantToolCallMessage(String aiContent,
+      List<llm.ToolCall> toolCalls,) {
     final toolCallInfos = toolCalls
         .map((tc) => ToolCallInfo.fromLlmDart(tc))
         .toList();
@@ -697,11 +727,9 @@ class LlmChatAdapter implements IChatAdapter {
   /// 重复工具调用检测
   ///
   /// 返回 null 表示无重复；返回非 null 表示检测到重复，包含更新后的签名和计数。
-  _DuplicateCheckResult? _checkDuplicateToolCalls(
-    List<llm.ToolCall> toolCalls,
-    String? lastSignature,
-    int currentCount,
-  ) {
+  _DuplicateCheckResult? _checkDuplicateToolCalls(List<llm.ToolCall> toolCalls,
+      String? lastSignature,
+      int currentCount,) {
     const maxConsecutiveDuplicateRounds = 3;
 
     final currentSignature = toolCalls
@@ -710,7 +738,8 @@ class LlmChatAdapter implements IChatAdapter {
 
     if (currentSignature == lastSignature) {
       final newCount = currentCount + 1;
-      print('[LlmChatAdapter] 检测到重复工具调用 (第 $newCount 次): $currentSignature');
+      print(
+          '[LlmChatAdapter] 检测到重复工具调用 (第 $newCount 次): $currentSignature');
       return _DuplicateCheckResult(
         updatedSignature: currentSignature,
         updatedCount: newCount,
@@ -724,14 +753,13 @@ class LlmChatAdapter implements IChatAdapter {
   /// 工具权限检查 + 并行执行
   ///
   /// 返回执行结果列表。如果被取消，[cancelled] 为 true。
-  Future<_ToolExecSummary> _executeToolCalls(
-    List<llm.ToolCall> toolCalls, {
+  Future<_ToolExecSummary> _executeToolCalls(List<llm.ToolCall> toolCalls, {
     required bool streamCancelled,
     CancellationToken? cancellationToken,
   }) async {
     // Phase 1: 权限检查（串行）+ 收集待执行工具
     final pendingExecutions =
-        <({llm.ToolCall call, AgentTool tool, Map<String, dynamic> args})>[];
+    <({llm.ToolCall call, AgentTool tool, Map<String, dynamic> args})>[];
     final allToolResults = <ToolResultInfo>[];
 
     for (final toolCall in toolCalls) {
@@ -744,7 +772,7 @@ class LlmChatAdapter implements IChatAdapter {
       Map<String, dynamic> toolArguments;
       try {
         toolArguments =
-            jsonDecode(toolCall.function.arguments) as Map<String, dynamic>;
+        jsonDecode(toolCall.function.arguments) as Map<String, dynamic>;
       } catch (_) {
         toolArguments = {};
       }
@@ -790,7 +818,7 @@ class LlmChatAdapter implements IChatAdapter {
         if (decision == PermissionDecision.deny) {
           final denyResult =
               _permissionManager!.lastDenyMessage ??
-              '权限被拒绝: 用户拒绝了工具 "$toolName" 的执行';
+                  '权限被拒绝: 用户拒绝了工具 "$toolName" 的执行';
           allToolResults.add(
             ToolResultInfo(
               toolCallId: toolCallId,
@@ -824,7 +852,7 @@ class LlmChatAdapter implements IChatAdapter {
 
     final results = await Future.wait(
       pendingExecutions.map(
-        (exec) => _executeSingleTool(exec, cancellationToken),
+            (exec) => _executeSingleTool(exec, cancellationToken),
       ),
     );
 
@@ -868,10 +896,10 @@ class LlmChatAdapter implements IChatAdapter {
 
   /// 执行单个工具调用
   Future<_ToolExecResult> _executeSingleTool(
-    ({llm.ToolCall call, AgentTool tool, Map<String, dynamic> args}) exec,
-    CancellationToken? cancellationToken,
-  ) async {
-    final stopwatch = Stopwatch()..start();
+      ({llm.ToolCall call, AgentTool tool, Map<String, dynamic> args}) exec,
+      CancellationToken? cancellationToken,) async {
+    final stopwatch = Stopwatch()
+      ..start();
     final toolName = exec.tool.name;
     ToolResult result;
     bool wasCancelled = false;
@@ -888,11 +916,12 @@ class LlmChatAdapter implements IChatAdapter {
       stopwatch.stop();
     }
     final resultPreview = result.content.length > 100
-        ? '${result.content.substring(0, 100)}...(truncated, total ${result.content.length} chars)'
+        ? '${result.content.substring(0, 100)}...(truncated, total ${result
+        .content.length} chars)'
         : result.content;
     print(
       '[LlmChatAdapter] 工具执行完成: $toolName, isError=${result.isError}, '
-      'duration=${stopwatch.elapsedMilliseconds}ms, result=$resultPreview',
+          'duration=${stopwatch.elapsedMilliseconds}ms, result=$resultPreview',
     );
     return _ToolExecResult(
       toolCall: exec.call,
@@ -945,6 +974,8 @@ class LlmChatAdapter implements IChatAdapter {
 
     if (config.options.maxTokens != null) {
       builder.maxTokens(config.options.maxTokens!);
+    } else {
+      builder.maxTokens(320000);
     }
 
     if (config.options.topP != null) {
@@ -955,6 +986,7 @@ class LlmChatAdapter implements IChatAdapter {
       builder.stopSequences(config.options.stop!);
     }
     builder.enableLogging(true);
+    builder.timeout(Duration(minutes: 30));
     return await builder.build();
   }
 
@@ -975,8 +1007,8 @@ class LlmChatAdapter implements IChatAdapter {
 
     final hasProject =
         (projectName != null && projectName.isNotEmpty) ||
-        (projectUuid != null && projectUuid.isNotEmpty) ||
-        (workPath != null && workPath.isNotEmpty);
+            (projectUuid != null && projectUuid.isNotEmpty) ||
+            (workPath != null && workPath.isNotEmpty);
 
     if (hasProject) {
       final projectLines = <String>[];
@@ -993,10 +1025,12 @@ class LlmChatAdapter implements IChatAdapter {
 
       parts.add(
         '## 当前工作项目\n'
-        '${projectLines.join('\n')}\n\n'
-        '请基于以上项目信息进行工作。所有操作和回答都应围绕此项目展开，'
-        '如果用户没有特别指定，默认在当前项目范围内执行任务。'
-        '${workPath != null && workPath.isNotEmpty ? '\n读写文件时请优先使用工作路径 $workPath 作为根目录。' : ''}',
+            '${projectLines.join('\n')}\n\n'
+            '请基于以上项目信息进行工作。所有操作和回答都应围绕此项目展开，'
+            '如果用户没有特别指定，默认在当前项目范围内执行任务。'
+            '${workPath != null && workPath.isNotEmpty
+            ? '\n读写文件时请优先使用工作路径 $workPath 作为根目录。'
+            : ''}',
       );
     }
 
@@ -1034,17 +1068,27 @@ class LlmChatAdapter implements IChatAdapter {
       map['toolCalls'] = message.toolCalls!
           .map(
             (tc) => {'id': tc.id, 'name': tc.name, 'arguments': tc.arguments},
-          )
+      )
           .toList();
     }
 
     // tool 消息附加 toolCallId、toolName 和 type
     if (message.role == ChatMsgRole.tool) {
-      map['toolCallId'] = message.toolCallId;
       map['type'] = 'functionResult';
-      final toolName = wrapper.metadata?['toolName'] as String?;
-      if (toolName != null) {
-        map['toolName'] = toolName;
+      if (message.isToolResultGroup && message.toolResults != null) {
+        // 分组格式：将 toolResults 序列化到 map 顶层
+        // 前端 _loadMessages 通过 message.metadata['toolResults'] 解析分组数据
+        // 同时确保 AgentMessage.fromMap 能将 toolResults 转入 metadata
+        map['toolResults'] = message.toolResults!
+            .map((r) => r.toMap())
+            .toList();
+      } else {
+        // 单条格式（向后兼容）
+        map['toolCallId'] = message.toolCallId;
+        final toolName = wrapper.metadata?['toolName'] as String?;
+        if (toolName != null) {
+          map['toolName'] = toolName;
+        }
       }
       if (message.isError) {
         map['isError'] = true;
@@ -1054,6 +1098,16 @@ class LlmChatAdapter implements IChatAdapter {
     // 从 wrapper.metadata 读取 status
     if (wrapper.metadata != null && wrapper.metadata!['status'] != null) {
       map['status'] = wrapper.metadata!['status'];
+    }
+
+    // 将 wrapper.metadata 中的 toolNames 等额外信息合并到 map 的 metadata
+    if (wrapper.metadata != null && wrapper.metadata!.isNotEmpty) {
+      final existingMetadata = map['metadata'] as Map<String, dynamic>?;
+      if (existingMetadata != null) {
+        map['metadata'] = {...existingMetadata, ...wrapper.metadata!};
+      } else {
+        map['metadata'] = Map<String, dynamic>.from(wrapper.metadata!);
+      }
     }
 
     return map;

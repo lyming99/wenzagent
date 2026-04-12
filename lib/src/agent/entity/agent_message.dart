@@ -55,6 +55,13 @@ class AgentMessage {
 
   /// 从 Map 创建
   factory AgentMessage.fromMap(Map<String, dynamic> map) {
+    // 确保 metadata 不为 null，并将 map 顶层的 toolResults 合并到 metadata
+    Map<String, dynamic> metadata = (map['metadata'] as Map<String, dynamic>?) ?? {};
+    // 如果 map 顶层有 toolResults（分组 tool result），合并到 metadata 中
+    if (map['toolResults'] != null && !metadata.containsKey('toolResults')) {
+      metadata = {...metadata, 'toolResults': map['toolResults']};
+    }
+
     return AgentMessage(
       id: map['id'] as String,
       role: map['role'] as String? ?? 'user',
@@ -70,7 +77,7 @@ class AgentMessage {
               .map((tc) => ToolCall.fromMap(tc as Map<String, dynamic>))
               .toList()
           : null,
-      metadata: map['metadata'] as Map<String, dynamic>?,
+      metadata: metadata.isNotEmpty ? metadata : null,
       status: map['status'] as String?,
     );
   }
