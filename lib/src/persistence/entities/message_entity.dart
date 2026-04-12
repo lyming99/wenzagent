@@ -219,6 +219,7 @@ class AiEmployeeMessageEntity {
     baseMap['isRead'] = isRead;
     baseMap['deleted'] = deleted;
     baseMap['createTime'] = createTime.millisecondsSinceEpoch;
+    baseMap['createdAt'] = createTime.toIso8601String();
     baseMap['updateTime'] = updateTime.millisecondsSinceEpoch;
     baseMap.remove('jsonData');
     baseMap.remove('seq');
