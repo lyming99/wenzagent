@@ -17,6 +17,7 @@ void main() async {
   final adapter = LlmChatAdapter();
   final agent = AgentImpl(
     employeeId: 'test-employee-001',
+    deviceId: 'test-device-001',
     chatAdapter: adapter,
   );
 
@@ -54,10 +55,10 @@ void main() async {
     final data = event.data;
 
     switch (type) {
-      case 'toolCallStart':
+      case AgentEventType.toolCallStart:
         print('\n  [工具调用] ${data['toolName']}(${data['arguments']})');
         break;
-      case 'toolCallResult':
+      case AgentEventType.toolCallResult:
         final result = data['result'] as String? ?? '';
         final isError = data['isError'] as bool? ?? false;
         final duration = data['durationMs'] as int?;
@@ -66,7 +67,7 @@ void main() async {
             : result;
         print('  [工具结果] ${isError ? "错误: " : ""}$preview (${duration}ms)');
         break;
-      case 'toolPermissionRequest':
+      case AgentEventType.toolPermissionRequest:
         print('\n  [权限请求] ${data['description']}');
         // 在实际应用中，这里应该等待用户确认
         // 本示例自动同意
@@ -75,8 +76,10 @@ void main() async {
           agent.respondToPermission(requestId, PermissionDecision.allow);
         }
         break;
-      case 'agentStatusChanged':
+      case AgentEventType.agentStatusChanged:
         // 状态变更静默处理
+        break;
+      default:
         break;
     }
   });
@@ -106,7 +109,7 @@ Future<void> _sendAndWait(AgentImpl agent, String content) async {
   late StreamSubscription sub;
   sub = agent.onEvent.listen((event) {
     final type = event.type;
-    if (type == 'messageStatusChanged') {
+    if (type == AgentEventType.messageStatusChanged) {
       final status = event.data['status'] as String?;
       if (status == 'completed' || status == 'failed') {
         sub.cancel();

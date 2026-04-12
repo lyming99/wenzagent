@@ -454,7 +454,6 @@ class LlmChatAdapter implements IChatAdapter {
 
   @override
   Future<void> updateProvider(Map<String, dynamic> providerConfig) async {
-    print('[LlmChatAdapter] updateProvider called with: $providerConfig');
     final config = ProviderConfig.fromMap(providerConfig);
     print(
       '[LlmChatAdapter] parsed config: provider=${config.provider}, model=${config.model}, baseUrl=${config.baseUrl}',

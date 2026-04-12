@@ -66,21 +66,9 @@ class DeviceConnectionManager {
     );
   }
 
-  /// 创建并注册实例（带完整参数）
-  static DeviceConnectionManager create({
-    required String deviceId,
-    required String host,
-    required int port,
-    String? topic,
-  }) {
-    final instance = DeviceConnectionManager._(
-      deviceId: deviceId,
-      host: host,
-      port: port,
-      topic: topic,
-    );
-    _instances[deviceId] = instance;
-    return instance;
+  /// 初始化配置
+  void initialize({String? host, int? port, String? topic}) {
+    updateConfig(host: host, port: port, topic: topic);
   }
 
   static void removeInstance(String deviceId) {

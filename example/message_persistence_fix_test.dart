@@ -57,19 +57,17 @@ class MessagePersistenceFixTest {
     final tempDir = await Directory.systemTemp.createTemp('wenzagent_fix_test_');
     tempDirPath = tempDir.path;
     print('  临时目录: $tempDirPath');
-
-    await DatabaseManager.getInstance('test').initialize(storagePath: tempDirPath);
-    print('  ✓ Hive 初始化完成');
   }
 
   /// 创建设备和员工
   Future<void> _createDeviceAndEmployee() async {
-    device = DeviceClient.create(
-      deviceId: deviceId,
-      deviceName: 'Test Device',
+    device = DeviceClient.getInstance(deviceId);
+    await device.initialize(DeviceClientConfig(
+      dbPath: tempDirPath,
       host: 'localhost',
       port: 9090,
-    );
+      deviceName: 'Test Device',
+    ));
 
     employeeId = Uuid().v4();
 

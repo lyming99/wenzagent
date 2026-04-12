@@ -27,6 +27,7 @@ class RemoteSessionMessageTest {
   late LanHostServiceImpl host;
   late DeviceClient deviceA;
   late DeviceClient deviceB;
+  late String tempDirPath;
 
   final String deviceAId = 'device-alpha';
   final String deviceBId = 'device-beta';
@@ -87,9 +88,8 @@ class RemoteSessionMessageTest {
     final tempDir = await Directory.systemTemp.createTemp(
       'wenzagent_remote_message_',
     );
-    print('  临时目录: ${tempDir.path}');
-    await DatabaseManager.getInstance('test').initialize(storagePath: tempDir.path);
-    print('  ✓ Hive 初始化完成');
+    tempDirPath = tempDir.path;
+    print('  临时目录: $tempDirPath');
   }
 
   /// 启动 LAN Host
@@ -101,12 +101,13 @@ class RemoteSessionMessageTest {
 
   /// Device-A 连接并创建会话
   Future<void> _deviceAConnectAndCreateSession() async {
-    deviceA = DeviceClient.create(
-      deviceId: deviceAId,
-      deviceName: 'Device Alpha',
+    deviceA = DeviceClient.getInstance(deviceAId);
+    await deviceA.initialize(DeviceClientConfig(
+      dbPath: tempDirPath,
       host: host.localIp!,
       port: host.port,
-    );
+      deviceName: 'Device Alpha',
+    ));
 
     await deviceA.connect();
     print('  ✓ Device-A 已连接: $deviceAId');
@@ -176,12 +177,13 @@ class RemoteSessionMessageTest {
 
   /// Device-B 连接并同步数据
   Future<void> _deviceBConnectAndSync() async {
-    deviceB = DeviceClient.create(
-      deviceId: deviceBId,
-      deviceName: 'Device Beta',
+    deviceB = DeviceClient.getInstance(deviceBId);
+    await deviceB.initialize(DeviceClientConfig(
+      dbPath: tempDirPath,
       host: host.localIp!,
       port: host.port,
-    );
+      deviceName: 'Device Beta',
+    ));
 
     await deviceB.connect();
     print('  ✓ Device-B 已连接: $deviceBId');
@@ -332,7 +334,7 @@ class RemoteSessionMessageTest {
       final type = event.type;
       final data = event.data;
 
-      if (type == 'messageStatusChanged') {
+      if (type == AgentEventType.messageStatusChanged) {
         final msgId = data['messageId'] as String?;
         final status = data['status'] as String?;
 

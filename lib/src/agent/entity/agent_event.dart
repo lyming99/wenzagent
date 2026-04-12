@@ -1,22 +1,57 @@
+/// Agent 事件类型枚举
+enum AgentEventType {
+  /// Agent 状态变更
+  agentStatusChanged,
+
+  /// 消息状态变更（queued/processing/streaming/completed/failed/interrupted/revoked）
+  messageStatusChanged,
+
+  /// 消息已读状态变更
+  messageReadStatusChanged,
+
+  /// 工具调用开始
+  toolCallStart,
+
+  /// 工具调用结果
+  toolCallResult,
+
+  /// 工具权限请求
+  toolPermissionRequest,
+
+  /// 工具权限响应
+  toolPermissionResponse,
+
+  /// 消息被引用回复
+  messageReplied,
+
+  /// 消息入队
+  messageQueued,
+
+  /// 消息处理中（ChatAdapter 工具回调）
+  messageProcessing,
+
+  /// 未知类型（兼容旧数据或外部扩展）
+  unknown;
+
+  /// 序列化为字符串（用于 JSON / LAN 传输）
+  String get value => name;
+
+  /// 从字符串反序列化
+  static AgentEventType fromString(String value) {
+    return AgentEventType.values.firstWhere(
+      (e) => e.name == value,
+      orElse: () => AgentEventType.unknown,
+    );
+  }
+}
+
 /// Agent 事件实体
 ///
 /// 统一封装 Agent 运行过程中产生的各类事件，
 /// 用于事件流的类型安全传递。
-///
-/// 事件类型（[type]）包括：
-/// - `agentStatusChanged`：Agent 状态变更
-/// - `messageStatusChanged`：消息状态变更（queued/processing/streaming/completed/failed/interrupted/revoked）
-/// - `messageReadStatusChanged`：消息已读状态变更
-/// - `toolCallStart`：工具调用开始
-/// - `toolCallResult`：工具调用结果
-/// - `toolPermissionRequest`：工具权限请求
-/// - `toolPermissionResponse`：工具权限响应
-/// - `messageReplied`：消息被引用回复
-/// - `messageQueued`：消息入队
-/// - 其他由 ChatAdapter 工具回调产生的事件
 class AgentEvent {
   /// 事件类型
-  final String type;
+  final AgentEventType type;
 
   /// 事件携带的数据
   final Map<String, dynamic> data;
@@ -36,7 +71,7 @@ class AgentEvent {
 
   factory AgentEvent.fromMap(Map<String, dynamic> map) {
     return AgentEvent(
-      type: map['type'] as String? ?? '',
+      type: AgentEventType.fromString(map['type'] as String? ?? ''),
       data: map['data'] as Map<String, dynamic>? ?? {},
       employeeId: map['employeeId'] as String?,
       fromDeviceId:
@@ -47,7 +82,7 @@ class AgentEvent {
   /// 转为 Map（用于序列化 / LAN 传输）
   Map<String, dynamic> toMap() {
     return {
-      'type': type,
+      'type': type.value,
       'data': data,
       if (employeeId != null) 'employeeId': employeeId,
       if (fromDeviceId != null) 'fromDeviceId': fromDeviceId,

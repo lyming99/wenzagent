@@ -20,15 +20,18 @@ class SessionChangeEvent {
 
 /// 会话管理器接口
 abstract class SessionManager {
-  static SessionManager? _instance;
+  static final Map<String, SessionManager> _instances = {};
 
-  /// 获取全局单例
-  static SessionManager getInstance() {
-    return _instance ??= SessionManagerImpl();
+  /// 获取单例实例
+  static SessionManager getInstance(String deviceId) {
+    return _instances.putIfAbsent(
+      deviceId,
+      () => SessionManagerImpl(deviceId: deviceId),
+    );
   }
 
-  /// 移除单例
-  static void removeInstance() => _instance = null;
+  /// 移除指定设备的实例
+  static void removeInstance(String deviceId) => _instances.remove(deviceId);
 
   /// 获取或创建Session（只需要employeeId）
   Future<AiEmployeeSessionEntity> getOrCreateSession(String employeeId);

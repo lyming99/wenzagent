@@ -5,10 +5,9 @@ import '../agent/entity/entity.dart';
 import '../agent/notification/agent_notification_hub.dart';
 import '../entity/lan_device_info.dart';
 import '../entity/lan_message.dart';
-import '../persistence/entities/device_config_entity.dart';
-import '../persistence/entities/employee_entity.dart';
-import '../persistence/entities/message_entity.dart';
+import '../persistence/persistence.dart';
 import '../service/service.dart';
+import 'impl/async_lock.dart';
 import 'impl/data_sync_manager.dart';
 import 'impl/device_agent_manager.dart';
 import 'impl/device_config_manager.dart';
@@ -20,6 +19,35 @@ import 'impl/device_rpc_handler.dart';
 import 'impl/device_state_holder.dart';
 import 'impl/employee_online_tracker.dart';
 
+/// DeviceClient 初始化配置
+///
+/// 包含数据库路径和连接参数等初始化所需的信息。
+/// host/port/topic 不传时，将从数据库配置表中自动读取。
+class DeviceClientConfig {
+  /// 数据库存储路径（必填）
+  final String dbPath;
+
+  /// 服务器地址（可选，不传则从数据库配置读取）
+  final String? host;
+
+  /// 服务器端口，默认 9090
+  final int port;
+
+  /// 分组主题（可选）
+  final String? topic;
+
+  /// 设备名称（可选）
+  final String? deviceName;
+
+  const DeviceClientConfig({
+    required this.dbPath,
+    this.host,
+    this.port = 9090,
+    this.topic,
+    this.deviceName,
+  });
+}
+
 /// 当前打开的会话状态
 class OpenSessionState {
   final String employeeId;
@@ -30,9 +58,9 @@ class OpenSessionState {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is OpenSessionState &&
-          employeeId == other.employeeId &&
-          fromDeviceId == other.fromDeviceId;
+          other is OpenSessionState &&
+              employeeId == other.employeeId &&
+              fromDeviceId == other.fromDeviceId;
 
   @override
   int get hashCode => Object.hash(employeeId, fromDeviceId);
@@ -71,135 +99,225 @@ typedef LanMessageHandler = void Function(LanMessage message);
 /// - messageStore: 消息存储
 /// - configService: 员工配置管理（包含MCP配置）
 ///
-/// 使用 [getInstance] 获取实例，用 [create] 初始化。
+/// 使用 [getInstance] 获取实例，用 [initialize] 初始化。
+///
+/// ```dart
+/// final client = DeviceClient.getInstance(deviceId);
+/// await client.initialize(DeviceClientConfig(
+///   dbPath: '/path/to/data',
+///   host: '192.168.1.100',
+///   port: 9090,
+/// ));
+/// await client.connect();
+/// ```
 class DeviceClient {
   final String _deviceId;
   String? _deviceName;
-  final String _host;
-  final int _port;
-  final String? _topic;
+  String _host = '';
+  int _port = 9090;
+  String? _topic;
+  bool _initialized = false;
 
   // ===== 子模块懒加载引用 =====
 
-  late final DeviceConnectionManager _connectionManager =
+  DeviceConnectionManager get _connectionManager =>
       DeviceConnectionManager.getInstance(_deviceId);
-  late final DeviceRegistry _deviceRegistry = DeviceRegistry.getInstance(
-    _deviceId,
-  );
-  late final DeviceConfigManager _configManager =
+
+  DeviceRegistry get _deviceRegistry =>
+      DeviceRegistry.getInstance(
+        _deviceId,
+      );
+
+  DeviceConfigManager get _configManager =>
       DeviceConfigManager.getInstance(_deviceId);
-  late final DataSyncManager _dataSyncManager = DataSyncManager.getInstance(
-    _deviceId,
-  );
-  late final EmployeeOnlineTracker _onlineTracker =
+
+  DataSyncManager get _dataSyncManager =>
+      DataSyncManager.getInstance(
+        _deviceId,
+      );
+
+  EmployeeOnlineTracker get _onlineTracker =>
       EmployeeOnlineTracker.getInstance(_deviceId);
-  late final DeviceAgentManager _agentManager = DeviceAgentManager.getInstance(
-    _deviceId,
-  );
-  late final DeviceNotificationManager _notificationManager =
+
+  DeviceAgentManager get _agentManager =>
+      DeviceAgentManager.getInstance(
+        _deviceId,
+      );
+
+  DeviceNotificationManager get _notificationManager =>
       DeviceNotificationManager.getInstance(_deviceId);
-  late final DeviceStateHolder _stateHolder = DeviceStateHolder.getInstance(
-    _deviceId,
-  );
+
+  DeviceMessageHandler get _messageHandler =>
+      DeviceMessageHandler.getInstance(_deviceId);
+
+  DeviceStateHolder get _stateHolder =>
+      DeviceStateHolder.getInstance(
+        _deviceId,
+      );
 
   // ===== 基础服务 =====
 
-  late final EmployeeManager _employeeManager = EmployeeManager.getInstance(
-    _deviceId,
-  );
-  late final SessionManager _sessionManager = SessionManager.getInstance();
-  late final MessageStoreService _messageStoreService =
+  EmployeeManager get _employeeManager =>
+      EmployeeManager.getInstance(
+        _deviceId,
+      );
+
+  SessionManager get _sessionManager => SessionManager.getInstance(_deviceId);
+
+  MessageStoreService get _messageStoreService =>
       MessageStoreService.getInstance(_deviceId);
-  late final SkillManager _skillManager = SkillManager.getInstance(_deviceId);
-  late final EmployeeConfigService _configService =
+
+  SkillManager get _skillManager => SkillManager.getInstance(_deviceId);
+
+  EmployeeConfigService get _configService =>
       EmployeeConfigService.getInstance(_deviceId);
 
-  DeviceClient._({
-    required String deviceId,
-    String? deviceName,
-    required String host,
-    required int port,
-    String? topic,
-  }) : _deviceId = deviceId,
-       _deviceName = deviceName,
-       _host = host,
-       _port = port,
-       _topic = topic;
+  DeviceClient._({required String deviceId}) : _deviceId = deviceId;
 
   // ===== 单例管理 =====
 
   static final Map<String, DeviceClient> _instances = {};
+  static final Map<String, AsyncLock> _initLocks = {};
 
-  /// 获取已初始化的 DeviceClient 实例
+  /// 获取实例（不存在则自动创建）
   static DeviceClient getInstance(String deviceId) {
-    final instance = _instances[deviceId];
-    if (instance == null) {
-      throw StateError(
-        'DeviceClient not initialized for deviceId: $deviceId. Call create() first.',
-      );
-    }
-    return instance;
+    return _instances.putIfAbsent(
+      deviceId,
+          () => DeviceClient._(deviceId: deviceId),
+    );
   }
 
-  /// 创建并初始化 DeviceClient 实例
+  /// 初始化配置（带锁，防止并发初始化）
   ///
-  /// [deviceId] 设备ID（用于数据隔离）
-  /// [deviceName] 设备名称
-  /// [host] 服务器主机地址
-  /// [port] 服务器端口，默认 9090
-  /// [topic] 分组主题
-  static DeviceClient create({
-    required String deviceId,
-    String? deviceName,
-    required String host,
-    int port = 9090,
+  /// 统一初始化流程：
+  /// 1. 初始化数据库 [DatabaseManager]
+  /// 2. 读取数据库配置表（合并缺失的连接参数）
+  /// 3. 初始化所有关联子模块
+  Future<void> initialize(DeviceClientConfig config) async {
+    if (_initialized) return;
+    final lock = _initLocks.putIfAbsent(_deviceId, () => AsyncLock());
+    await lock.synchronized(() async {
+      if (_initialized) return;
+
+      // 1. 初始化数据库
+      await DatabaseManager.getInstance(_deviceId)
+          .initialize(storagePath: config.dbPath);
+
+      // 2. 设置配置（参数优先）
+      _host = config.host ?? '';
+      _port = config.port;
+      _topic = config.topic;
+      _deviceName = config.deviceName;
+
+      // 如果 host 未传入，尝试从数据库配置读取
+      if (_host.isEmpty) {
+        try {
+          final dbConfig = await _configManager.getDeviceConfig();
+          _mergeDbConfig(dbConfig);
+        } catch (_) {
+          // DB 中无配置，忽略
+        }
+      }
+
+      // 3. 初始化子模块
+      _connectionManager.initialize(
+        host: _host,
+        port: _port,
+        topic: _topic,
+      );
+      _deviceRegistry.initialize(
+        deviceName: _deviceName,
+        host: _host,
+        port: _port,
+        topic: _topic,
+      );
+      _notificationManager.initialize(topic: _topic);
+      _agentManager.initialize(topic: _topic);
+      _messageHandler.initialize(
+        deviceName: _deviceName,
+        topic: _topic,
+      );
+
+      // 4. 初始化 notificationHub 回调
+      _notificationManager.initNotificationHubCallback();
+
+      _initialized = true;
+    });
+  }
+
+  /// 从数据库配置合并缺失的连接参数
+  ///
+  /// 优先级：参数传入 > 数据库 metadata > 环境变量
+  void _mergeDbConfig(DeviceConfigEntity dbConfig) {
+    final meta = dbConfig.deviceInfo.metadata;
+    final env = dbConfig.environmentVariables;
+
+    if (_host.isEmpty) {
+      _host = meta['host'] as String? ?? env['LAN_HOST'] ?? '';
+    }
+    if (meta['port'] != null) {
+      _port = int.tryParse(meta['port'].toString()) ?? _port;
+    }
+    _topic ??= meta['topic'] as String? ?? env['LAN_TOPIC'];
+    _deviceName ??= dbConfig.deviceInfo.name;
+  }
+
+  /// 获取当前配置
+  DeviceClientConfig getConfig() =>
+      DeviceClientConfig(
+        dbPath: '',
+        // dbPath 仅在 initialize 时设置，运行时不可变
+        host: _host,
+        port: _port,
+        topic: _topic,
+        deviceName: _deviceName,
+      );
+
+  /// 更新运行时配置
+  ///
+  /// 如果连接参数（host/port/topic）发生变化且当前已连接，将自动触发重连。
+  /// 其他参数（deviceName）变更会同步到关联子模块。
+  Future<void> updateConfig({
+    String? host,
+    int? port,
     String? topic,
-  }) {
-    final client = DeviceClient._(
-      deviceId: deviceId,
-      deviceName: deviceName,
-      host: host,
-      port: port,
-      topic: topic,
+    String? deviceName,
+  }) async {
+    final oldHost = _host;
+    final oldPort = _port;
+    final oldTopic = _topic;
+
+    if (host != null) _host = host;
+    if (port != null) _port = port;
+    if (topic != null) _topic = topic;
+    if (deviceName != null) _deviceName = deviceName;
+
+    // 同步到所有子模块
+    _connectionManager.updateConfig(host: _host, port: _port, topic: _topic);
+    _deviceRegistry.updateConfig(
+      deviceName: _deviceName,
+      host: _host,
+      port: _port,
+      topic: _topic,
     );
-    _instances[deviceId] = client;
+    _notificationManager.updateConfig(topic: _topic);
+    _agentManager.updateConfig(topic: _topic);
+    _messageHandler.updateConfig(deviceName: _deviceName, topic: _topic);
 
-    // 初始化所有需要完整参数的子模块
-    DeviceConnectionManager.create(
-      deviceId: deviceId,
-      host: host,
-      port: port,
-      topic: topic,
-    );
-
-    DeviceRegistry.create(
-      deviceId: deviceId,
-      deviceName: deviceName,
-      host: host,
-      port: port,
-      topic: topic,
-    );
-
-    DeviceNotificationManager.create(deviceId: deviceId, topic: topic);
-
-    DeviceAgentManager.create(deviceId: deviceId, topic: topic);
-
-    DeviceMessageHandler.create(
-      deviceId: deviceId,
-      deviceName: deviceName,
-      topic: topic,
-    );
-
-    // 初始化 notificationHub 回调
-    client._notificationManager.initNotificationHubCallback();
-
-    return client;
+    // 如果连接参数变化且当前已连接，自动重连
+    final connectionChanged =
+        _host != oldHost || _port != oldPort || _topic != oldTopic;
+    if (connectionChanged && _connectionManager.isConnected) {
+      await _connectionManager.reconnect();
+    }
   }
 
   /// 销毁实例并释放所有资源
   static Future<void> removeInstance(String deviceId) async {
+    _initLocks.remove(deviceId);
     final client = _instances.remove(deviceId);
     if (client != null) {
+      client._initialized = false;
       await client.dispose();
     }
     DeviceStateHolder.removeInstance(deviceId);
@@ -225,6 +343,8 @@ class DeviceClient {
   int get port => _port;
 
   String? get topic => _topic;
+
+  bool get isInitialized => _initialized;
 
   DeviceConnectionState get connectionState =>
       _connectionManager.connectionState;
@@ -274,8 +394,7 @@ class DeviceClient {
 
   // ===== 连接管理 =====
 
-  Future<bool> pingEmployee(
-    String employeeId, {
+  Future<bool> pingEmployee(String employeeId, {
     Duration timeout = const Duration(seconds: 2),
   }) async {
     final localAgent = _agentManager.getLocalAgent(employeeId);
@@ -292,7 +411,22 @@ class DeviceClient {
   bool? isEmployeeOnline(String employeeId) =>
       _onlineTracker.isEmployeeOnline(employeeId);
 
-  Future<void> connect() => _connectionManager.connect();
+  /// 连接到服务器
+  ///
+  /// 必须先调用 [initialize] 完成初始化。
+  Future<void> connect() async {
+    if (!_initialized) {
+      throw StateError(
+        'DeviceClient 未初始化，请先调用 initialize() 方法',
+      );
+    }
+    if (_host.isEmpty) {
+      throw StateError(
+        '未配置服务器地址(host)，请先通过 initialize() 或 updateConfig() 配置',
+      );
+    }
+    await _connectionManager.connect();
+  }
 
   Future<void> reconnect({String? newHost, int? newPort}) =>
       _connectionManager.reconnect(newHost: newHost, newPort: newPort);
@@ -312,12 +446,13 @@ class DeviceClient {
     String? deviceId,
     AiEmployeeEntity? employee,
     bool autoCreateSession = true,
-  }) => _agentManager.getOrCreateAgentProxy(
-    employeeId: employeeId,
-    deviceId: deviceId,
-    employee: employee,
-    autoCreateSession: autoCreateSession,
-  );
+  }) =>
+      _agentManager.getOrCreateAgentProxy(
+        employeeId: employeeId,
+        deviceId: deviceId,
+        employee: employee,
+        autoCreateSession: autoCreateSession,
+      );
 
   Future<void> destroyAgentProxy(String employeeId) =>
       _agentManager.destroyAgentProxy(employeeId);
@@ -418,10 +553,11 @@ class DeviceClient {
   Future<AiEmployeeEntity?> syncEmployeeFromDevice({
     required String employeeId,
     String? targetDeviceId,
-  }) => _dataSyncManager.syncEmployeeFromDevice(
-    employeeId: employeeId,
-    targetDeviceId: targetDeviceId,
-  );
+  }) =>
+      _dataSyncManager.syncEmployeeFromDevice(
+        employeeId: employeeId,
+        targetDeviceId: targetDeviceId,
+      );
 
   /// 广播员工到所有在线设备（创建/更新后调用）
   Future<void> broadcastEmployeeToAllDevices(String employeeId) =>
@@ -435,10 +571,11 @@ class DeviceClient {
   Future<bool> syncEmployeeToDevice({
     required String employeeId,
     required String targetDeviceId,
-  }) => _dataSyncManager.syncEmployeeToDevice(
-    employeeId: employeeId,
-    targetDeviceId: targetDeviceId,
-  );
+  }) =>
+      _dataSyncManager.syncEmployeeToDevice(
+        employeeId: employeeId,
+        targetDeviceId: targetDeviceId,
+      );
 
   // ===== LAN消息扩展 =====
 
@@ -469,19 +606,17 @@ class DeviceClient {
 
   // ===== 文件传输 =====
 
-  Future<String> uploadFile(
-    String filePath, {
+  Future<String> uploadFile(String filePath, {
     void Function(double)? onProgress,
   }) async {
     final fileId = await _connectionManager.uploadFile(filePath);
     return fileId;
   }
 
-  Future<void> downloadFile(
-    String fileId,
-    String savePath, {
-    void Function(double)? onProgress,
-  }) async {
+  Future<void> downloadFile(String fileId,
+      String savePath, {
+        void Function(double)? onProgress,
+      }) async {
     await _connectionManager.downloadFile(fileId, savePath);
   }
 
@@ -493,10 +628,11 @@ class DeviceClient {
   Future<void> setCurrentOpenSession({
     required String employeeId,
     String? fromDeviceId,
-  }) => _notificationManager.setCurrentOpenSession(
-    employeeId: employeeId,
-    fromDeviceId: fromDeviceId,
-  );
+  }) =>
+      _notificationManager.setCurrentOpenSession(
+        employeeId: employeeId,
+        fromDeviceId: fromDeviceId,
+      );
 
   void clearCurrentOpenSession() =>
       _notificationManager.clearCurrentOpenSession();
@@ -510,10 +646,11 @@ class DeviceClient {
   bool shouldAutoMarkAsRead({
     required String employeeId,
     String? fromDeviceId,
-  }) => _notificationManager.shouldAutoMarkAsRead(
-    employeeId: employeeId,
-    fromDeviceId: fromDeviceId,
-  );
+  }) =>
+      _notificationManager.shouldAutoMarkAsRead(
+        employeeId: employeeId,
+        fromDeviceId: fromDeviceId,
+      );
 
   // ===== 消息通知中心 =====
 
@@ -531,10 +668,11 @@ class DeviceClient {
   void markAllMessagesAsRead({
     required String employeeId,
     String? fromDeviceId,
-  }) => _notificationManager.markAllMessagesAsRead(
-    employeeId: employeeId,
-    fromDeviceId: fromDeviceId,
-  );
+  }) =>
+      _notificationManager.markAllMessagesAsRead(
+        employeeId: employeeId,
+        fromDeviceId: fromDeviceId,
+      );
 
   void markAllMessagesAsReadGlobal() =>
       _notificationManager.markAllMessagesAsReadGlobal();
@@ -549,19 +687,21 @@ class DeviceClient {
     required String employeeId,
     required String deviceId,
     int limit = 2,
-  }) => _notificationManager.getLatestMessages(
-    employeeId: employeeId,
-    deviceId: deviceId,
-    limit: limit,
-  );
+  }) =>
+      _notificationManager.getLatestMessages(
+        employeeId: employeeId,
+        deviceId: deviceId,
+        limit: limit,
+      );
 
   AgentMessage? getCachedLatestMessage({
     required String employeeId,
     required String deviceId,
-  }) => _notificationManager.getCachedLatestMessage(
-    employeeId: employeeId,
-    deviceId: deviceId,
-  );
+  }) =>
+      _notificationManager.getCachedLatestMessage(
+        employeeId: employeeId,
+        deviceId: deviceId,
+      );
 }
 
 /// 员工在线状态变化事件
@@ -598,13 +738,14 @@ class DeviceWithEmployeesInfo {
     required this.employees,
   });
 
-  Map<String, dynamic> toMap() => {
-    'deviceId': deviceId,
-    'deviceName': deviceName,
-    'ip': ip,
-    'connectedAt': connectedAt?.millisecondsSinceEpoch,
-    'employees': employees.map((e) => e.toMap()).toList(),
-  };
+  Map<String, dynamic> toMap() =>
+      {
+        'deviceId': deviceId,
+        'deviceName': deviceName,
+        'ip': ip,
+        'connectedAt': connectedAt?.millisecondsSinceEpoch,
+        'employees': employees.map((e) => e.toMap()).toList(),
+      };
 }
 
 /// 员工简要信息
@@ -621,10 +762,11 @@ class EmployeeBriefInfo {
     this.deviceId,
   });
 
-  Map<String, dynamic> toMap() => {
-    'uuid': uuid,
-    'name': name,
-    'status': status,
-    'deviceId': deviceId,
-  };
+  Map<String, dynamic> toMap() =>
+      {
+        'uuid': uuid,
+        'name': name,
+        'status': status,
+        'deviceId': deviceId,
+      };
 }

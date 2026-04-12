@@ -81,21 +81,22 @@ class SessionSyncTest {
     print('  设备B 临时目录: $tempDirB');
 
     // 初始化设备 A
-    await DatabaseManager.getInstance('test').initialize(storagePath: tempDirA);
-    deviceA = DeviceClient.create(
-      deviceId: deviceAId,
-      deviceName: 'Device Alpha',
+    deviceA = DeviceClient.getInstance(deviceAId);
+    await deviceA.initialize(DeviceClientConfig(
+      dbPath: tempDirA,
       host: 'localhost',
       port: 9090,
-    );
+      deviceName: 'Device Alpha',
+    ));
 
     // 初始化设备 B
-    deviceB = DeviceClient.create(
-      deviceId: deviceBId,
-      deviceName: 'Device Beta',
+    deviceB = DeviceClient.getInstance(deviceBId);
+    await deviceB.initialize(DeviceClientConfig(
+      dbPath: tempDirB,
       host: 'localhost',
       port: 9091,
-    );
+      deviceName: 'Device Beta',
+    ));
 
     print('  ✓ 两个设备初始化完成');
   }

@@ -27,6 +27,7 @@ class ReconnectTest {
   late LanHostServiceImpl host;
   late DeviceClient deviceA;
   late DeviceClient deviceB;
+  late String tempDirPath;
 
   final String deviceAId = 'device-alpha';
   final String deviceBId = 'device-beta';
@@ -92,9 +93,8 @@ class ReconnectTest {
   /// 初始化存储
   Future<void> _initializeStorage() async {
     final tempDir = await Directory.systemTemp.createTemp('wenzagent_reconnect_');
-    print('  临时目录: ${tempDir.path}');
-    await DatabaseManager.getInstance('test').initialize(storagePath: tempDir.path);
-    print('  ✓ Hive 初始化完成');
+    tempDirPath = tempDir.path;
+    print('  临时目录: $tempDirPath');
   }
 
   /// 启动 LAN Host
@@ -107,22 +107,24 @@ class ReconnectTest {
   /// 两个设备连接并建立会话
   Future<void> _bothDevicesConnect() async {
     // Device-A 连接
-    deviceA = DeviceClient.create(
-      deviceId: deviceAId,
-      deviceName: 'Device Alpha',
+    deviceA = DeviceClient.getInstance(deviceAId);
+    await deviceA.initialize(DeviceClientConfig(
+      dbPath: tempDirPath,
       host: host.localIp!,
       port: host.port,
-    );
+      deviceName: 'Device Alpha',
+    ));
     await deviceA.connect();
     print('  ✓ Device-A 已连接: $deviceAId');
 
     // Device-B 连接
-    deviceB = DeviceClient.create(
-      deviceId: deviceBId,
-      deviceName: 'Device Beta',
+    deviceB = DeviceClient.getInstance(deviceBId);
+    await deviceB.initialize(DeviceClientConfig(
+      dbPath: tempDirPath,
       host: host.localIp!,
       port: host.port,
-    );
+      deviceName: 'Device Beta',
+    ));
     await deviceB.connect();
     print('  ✓ Device-B 已连接: $deviceBId');
 
@@ -219,12 +221,13 @@ class ReconnectTest {
   /// Device-B 重连
   Future<void> _deviceBReconnect() async {
     print('\n  [Device-B 重连]');
-    deviceB = DeviceClient.create(
-      deviceId: deviceBId,
-      deviceName: 'Device Beta',
+    deviceB = DeviceClient.getInstance(deviceBId);
+    await deviceB.initialize(DeviceClientConfig(
+      dbPath: tempDirPath,
       host: host.localIp!,
       port: host.port,
-    );
+      deviceName: 'Device Beta',
+    ));
 
     await deviceB.connect();
     print('  ✓ Device-B 已重连: $deviceBId');
@@ -371,7 +374,7 @@ class ReconnectTest {
       final type = event.type;
       final data = event.data;
 
-      if (type == 'messageStatusChanged') {
+      if (type == AgentEventType.messageStatusChanged) {
         final msgId = data['messageId'] as String?;
         final status = data['status'] as String?;
 

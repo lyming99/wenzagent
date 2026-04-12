@@ -27,6 +27,7 @@ class TopicFilterTest {
   late DeviceClient deviceA;
   late DeviceClient deviceB;
   late DeviceClient deviceC;
+  late String tempDirPath;
 
   Future<void> run() async {
     try {
@@ -70,9 +71,8 @@ class TopicFilterTest {
     final tempDir = await Directory.systemTemp.createTemp(
       'wenzagent_topic_filter_',
     );
-    print('  临时目录: ${tempDir.path}');
-    await DatabaseManager.getInstance('test').initialize(storagePath: tempDir.path);
-    print('  ✓ Hive 初始化完成');
+    tempDirPath = tempDir.path;
+    print('  临时目录: $tempDirPath');
   }
 
   /// 启动 LAN Host
@@ -84,13 +84,14 @@ class TopicFilterTest {
 
   /// Device-A 连接 (topic: group1)
   Future<void> _connectDeviceA() async {
-    deviceA = DeviceClient.create(
-      deviceId: 'device-alpha',
-      deviceName: 'Device Alpha',
+    deviceA = DeviceClient.getInstance('device-alpha');
+    await deviceA.initialize(DeviceClientConfig(
+      dbPath: tempDirPath,
       host: host.localIp!,
       port: host.port,
       topic: 'group1',
-    );
+      deviceName: 'Device Alpha',
+    ));
     await deviceA.connect();
     print('  ✓ Device-A 已连接 (topic: group1)');
 
@@ -100,13 +101,14 @@ class TopicFilterTest {
 
   /// Device-B 连接 (topic: group1)
   Future<void> _connectDeviceB() async {
-    deviceB = DeviceClient.create(
-      deviceId: 'device-beta',
-      deviceName: 'Device Beta',
+    deviceB = DeviceClient.getInstance('device-beta');
+    await deviceB.initialize(DeviceClientConfig(
+      dbPath: tempDirPath,
       host: host.localIp!,
       port: host.port,
       topic: 'group1',
-    );
+      deviceName: 'Device Beta',
+    ));
     await deviceB.connect();
     print('  ✓ Device-B 已连接 (topic: group1)');
 
@@ -116,13 +118,14 @@ class TopicFilterTest {
 
   /// Device-C 连接 (topic: group2)
   Future<void> _connectDeviceC() async {
-    deviceC = DeviceClient.create(
-      deviceId: 'device-gamma',
-      deviceName: 'Device Gamma',
+    deviceC = DeviceClient.getInstance('device-gamma');
+    await deviceC.initialize(DeviceClientConfig(
+      dbPath: tempDirPath,
       host: host.localIp!,
       port: host.port,
       topic: 'group2',
-    );
+      deviceName: 'Device Gamma',
+    ));
     await deviceC.connect();
     print('  ✓ Device-C 已连接 (topic: group2)');
 

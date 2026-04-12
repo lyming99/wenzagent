@@ -17,7 +17,7 @@ import 'device_config_manager.dart';
 class DeviceRpcHandler {
   final String _deviceId;
   late final EmployeeManager _employeeManager = EmployeeManager.getInstance(_deviceId);
-  late final SessionManager _sessionManager = SessionManager.getInstance();
+  late final SessionManager _sessionManager = SessionManager.getInstance(_deviceId);
   late final SkillManager _skillManager = SkillManager.getInstance(_deviceId);
   late final MessageStoreService _messageStoreService = MessageStoreService.getInstance(_deviceId);
   late final DeviceAgentManager _agentManager = DeviceAgentManager.getInstance(_deviceId);

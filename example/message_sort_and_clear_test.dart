@@ -81,17 +81,15 @@ class MessageSortAndClearTest {
     tempDirPath = tempDir.path;
     print('  临时目录: $tempDirPath');
 
-    await DatabaseManager.getInstance('test').initialize(storagePath: tempDirPath);
-
-    messageStoreService = MessageStoreServiceImpl(deviceId: deviceId);
-
-    // 创建 DeviceClient
-    device = DeviceClient.create(
-      deviceId: deviceId,
-      deviceName: 'Test Device',
+    device = DeviceClient.getInstance(deviceId);
+    await device.initialize(DeviceClientConfig(
+      dbPath: tempDirPath,
       host: 'localhost',
       port: 9090,
-    );
+      deviceName: 'Test Device',
+    ));
+
+    messageStoreService = MessageStoreServiceImpl(deviceId: deviceId);
 
     print('  ✓ 初始化完成');
   }

@@ -28,7 +28,7 @@ class DeviceAgentManager {
   final String _deviceId;
   String? _topic;
   late final EmployeeManager _employeeManager = EmployeeManager.getInstance(_deviceId);
-  late final SessionManager _sessionManager = SessionManager.getInstance();
+  late final SessionManager _sessionManager = SessionManager.getInstance(_deviceId);
   late final MessageStoreService _messageStoreService = MessageStoreService.getInstance(_deviceId);
   late final DeviceConnectionManager _connectionManager = DeviceConnectionManager.getInstance(_deviceId);
   late final DeviceStateHolder _stateHolder = DeviceStateHolder.getInstance(_deviceId);
@@ -51,7 +51,8 @@ class DeviceAgentManager {
   final Map<String, StreamSubscription<AgentEvent>> _agentEventSubscriptions = {};
 
   /// 定时任务管理器
-  final ScheduledTaskManagerImpl _scheduledTaskManager = ScheduledTaskManagerImpl();
+  late final ScheduledTaskManagerImpl _scheduledTaskManager =
+      ScheduledTaskManagerImpl(deviceId: _deviceId);
 
   DeviceAgentManager._({required String deviceId, String? topic})
       : _deviceId = deviceId,
@@ -59,7 +60,6 @@ class DeviceAgentManager {
     _scheduledTaskManager.getAgent = (employeeId) async {
       return _localAgents[employeeId];
     };
-    _scheduledTaskManager.start();
   }
 
   // ===== 单例管理 =====
@@ -73,17 +73,10 @@ class DeviceAgentManager {
     );
   }
 
-  /// 创建并注册实例（带完整参数）
-  static DeviceAgentManager create({
-    required String deviceId,
-    String? topic,
-  }) {
-    final instance = DeviceAgentManager._(
-      deviceId: deviceId,
-      topic: topic,
-    );
-    _instances[deviceId] = instance;
-    return instance;
+  /// 初始化配置
+  void initialize({String? topic}) {
+    updateConfig(topic: topic);
+    _scheduledTaskManager.start();
   }
 
   static void removeInstance(String deviceId) {
@@ -383,15 +376,15 @@ class DeviceAgentManager {
 
     LanMessageType msgType;
     switch (type) {
-      case 'agentStatusChanged':
+      case AgentEventType.agentStatusChanged:
         msgType = LanMessageType.agentStatusChanged;
-      case 'messageStatusChanged':
+      case AgentEventType.messageStatusChanged:
         msgType = LanMessageType.agentMessageStatusChanged;
-      case 'messageReadStatusChanged':
+      case AgentEventType.messageReadStatusChanged:
         msgType = LanMessageType.agentMessageReadStatusChanged;
-      case 'toolCallStart':
+      case AgentEventType.toolCallStart:
         msgType = LanMessageType.toolCallStart;
-      case 'toolCallResult':
+      case AgentEventType.toolCallResult:
         msgType = LanMessageType.toolCallResult;
       default:
         return;
@@ -402,7 +395,7 @@ class DeviceAgentManager {
       fromId: _deviceId,
       content: jsonEncode({
         'employeeId': employeeId,
-        'type': type,
+        'type': type.value,
         'data': data,
       }),
       topic: _topic,
@@ -546,7 +539,12 @@ class DeviceAgentManager {
     final chatAdapter = PersistentChatAdapter();
     _setupPersistCallbacks(chatAdapter, employeeId);
 
-    agent = AgentImpl(employeeId: employeeId, chatAdapter: chatAdapter);
+    final deviceId = employee.currentDeviceId;
+    if (deviceId == null || deviceId.isEmpty) {
+      throw StateError('员工 $employeeId 的 currentDeviceId 为空，无法创建 Agent');
+    }
+
+    agent = AgentImpl(employeeId: employeeId, deviceId: deviceId, chatAdapter: chatAdapter);
     await agent.initialize(employeeId: employeeId);
 
     _injectScheduleTaskCallbacks(agent, employeeId);
@@ -816,7 +814,7 @@ class DeviceAgentManager {
         ));
       }
 
-      if (type != 'messageStatusChanged') return;
+      if (type != AgentEventType.messageStatusChanged) return;
       final status = data['status'] as String?;
       final messageId = data['messageId'] as String?;
 

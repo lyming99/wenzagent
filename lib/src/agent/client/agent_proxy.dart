@@ -919,7 +919,7 @@ class AgentProxy {
     _eventController.add(event);
 
     switch (type) {
-      case 'agentStatusChanged':
+      case AgentEventType.agentStatusChanged:
         final snapshot = AgentStateSnapshot.fromMap(data);
         // 只在状态真正改变时才更新和广播
         if (_remoteCache.status != snapshot.status) {
@@ -929,7 +929,7 @@ class AgentProxy {
         }
         break;
 
-      case 'messageStatusChanged':
+      case AgentEventType.messageStatusChanged:
         // 消息状态变化事件，需要根据消息状态更新 Agent 状态
         final messageStatusStr = data['status'] as String?;
         if (messageStatusStr != null) {

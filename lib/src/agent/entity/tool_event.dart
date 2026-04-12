@@ -1,3 +1,5 @@
+import 'agent_event.dart';
+
 /// 工具事件实体
 ///
 /// 统一封装 Agent 执行工具调用时产生的事件，
@@ -41,12 +43,12 @@ class ToolCallResultEvent extends ToolEvent {
 class ToolEventMapper {
   /// 从 Map 创建 ToolEvent
   static ToolEvent fromMap(Map<String, dynamic> map) {
-    final type = map['type'] as String;
+    final type = AgentEventType.fromString(map['type'] as String);
     final data = map['data'] as Map<String, dynamic>;
     final toolCallId = data['toolCallId'] as String;
     final toolName = data['toolName'] as String;
 
-    if (type == 'toolCallStart') {
+    if (type == AgentEventType.toolCallStart) {
       return ToolCallStartEvent(
         toolCallId: toolCallId,
         toolName: toolName,
@@ -68,7 +70,7 @@ class ToolEventMapper {
   static Map<String, dynamic> toMap(ToolEvent event) {
     return switch (event) {
       ToolCallStartEvent(:final arguments) => {
-          'type': 'toolCallStart',
+          'type': AgentEventType.toolCallStart.value,
           'data': {
             'toolCallId': event.toolCallId,
             'toolName': event.toolName,
@@ -82,7 +84,7 @@ class ToolEventMapper {
         :final denyReason,
       ) =>
         {
-          'type': 'toolCallResult',
+          'type': AgentEventType.toolCallResult.value,
           'data': {
             'toolCallId': event.toolCallId,
             'toolName': event.toolName,

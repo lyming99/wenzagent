@@ -21,6 +21,9 @@ class AgentImpl implements IAgent {
   @override
   final String employeeId;
 
+  /// 所属设备ID（用于数据库隔离）
+  final String deviceId;
+
   // ===== 内部组件 =====
 
   /// 对话适配器
@@ -76,7 +79,7 @@ class AgentImpl implements IAgent {
   /// 异步操作锁
   Completer<void>? _lockCompleter;
 
-  AgentImpl({required this.employeeId, required IChatAdapter chatAdapter})
+  AgentImpl({required this.employeeId, required this.deviceId, required IChatAdapter chatAdapter})
     : _chatAdapter = chatAdapter;
 
   // ===== IAgent: 基础信息 =====
@@ -151,7 +154,7 @@ class AgentImpl implements IAgent {
       // 广播权限请求事件
       _eventController.add(
         AgentEvent(
-          type: 'toolPermissionRequest',
+          type: AgentEventType.toolPermissionRequest,
           data: request.toMap(),
           employeeId: employeeId,
         ),
@@ -354,7 +357,7 @@ class AgentImpl implements IAgent {
 
   /// 从数据库加载持久化技能
   Future<void> _loadPersistedSkills(String employeeId) async {
-    final store = SkillStore(deviceId: employeeId.split('-').firstOrNull);
+    final store = SkillStore(deviceId: deviceId);
     print('[Skill] 开始加载持久化技能, employeeId=$employeeId');
 
     final entities = await store.findByEmployeeWithDeviceId(null, employeeId);
@@ -674,7 +677,7 @@ class AgentImpl implements IAgent {
     int lastSeq = 0,
     int limit = 20,
   }) async {
-    final store = MessageStore(deviceId: employeeId.split('-').firstOrNull);
+    final store = MessageStore(deviceId: deviceId);
     final entities = await store.getMessagesAfterSeq(employeeId, lastSeq, limit: limit);
 
     final messages = entities.map((e) {
@@ -695,7 +698,7 @@ class AgentImpl implements IAgent {
 
   @override
   Future<int> getMaxSeq({required String employeeId}) async {
-    final store = MessageStore(deviceId: employeeId.split('-').firstOrNull);
+    final store = MessageStore(deviceId: deviceId);
     return store.getMaxSeqForEmployee(employeeId);
   }
 
@@ -728,7 +731,7 @@ class AgentImpl implements IAgent {
     // 广播已读状态变更事件
     _eventController.add(
       AgentEvent(
-        type: 'messageReadStatusChanged',
+        type: AgentEventType.messageReadStatusChanged,
         data: {
           'employeeId': employeeId,
           'readerDeviceId': readerDeviceId,
@@ -876,7 +879,7 @@ class AgentImpl implements IAgent {
   Future<void> setSkills(List<Map<String, dynamic>> skillMaps) async {
     _touch();
     await _withLock(() async {
-      final store = SkillStore(deviceId: employeeId.split('-').firstOrNull);
+      final store = SkillStore(deviceId: deviceId);
 
       // 1. 软删除当前员工的所有技能
       final existingSkills = await store.findByEmployeeWithDeviceId(
@@ -932,8 +935,8 @@ class AgentImpl implements IAgent {
   Future<void> setMcpConfigs(List<Map<String, dynamic>> mcpConfigMaps) async {
     _touch();
     await _withLock(() async {
-      final employeeStore = EmployeeStore(deviceId: employeeId.split('-').firstOrNull);
-      final skillStore = SkillStore(deviceId: employeeId.split('-').firstOrNull);
+      final employeeStore = EmployeeStore(deviceId: deviceId);
+      final skillStore = SkillStore(deviceId: deviceId);
 
       // 1. 更新员工实体的 MCP 配置
       final configs = mcpConfigMaps
@@ -1076,7 +1079,7 @@ class AgentImpl implements IAgent {
       // 广播权限响应事件
       _eventController.add(
         AgentEvent(
-          type: 'toolPermissionResponse',
+          type: AgentEventType.toolPermissionResponse,
           data: {
             'requestId': requestId,
             'decision': decision.name,
@@ -1186,7 +1189,7 @@ class AgentImpl implements IAgent {
     _stateController.add(snapshot);
     _eventController.add(
       AgentEvent(
-        type: 'agentStatusChanged',
+        type: AgentEventType.agentStatusChanged,
         data: snapshot.toMap(),
         employeeId: employeeId,
       ),
@@ -1337,7 +1340,7 @@ class AgentImpl implements IAgent {
       _stateController.add(snapshot);
       _eventController.add(
         AgentEvent(
-          type: 'agentStatusChanged',
+          type: AgentEventType.agentStatusChanged,
           data: snapshot.toMap(),
           employeeId: employeeId,
         ),
@@ -1357,7 +1360,7 @@ class AgentImpl implements IAgent {
     if (_status == AgentStatus.disposed) return;
     _eventController.add(
       AgentEvent(
-        type: 'messageStatusChanged',
+        type: AgentEventType.messageStatusChanged,
         data: {
           'messageId': messageId,
           'status': status.name,

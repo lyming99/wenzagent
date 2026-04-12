@@ -360,27 +360,31 @@ class CachedAgentProxy {
     print('[CachedAgentProxy] 收到事件: $type');
 
     switch (type) {
-      case 'messageStatusChanged':
+      case AgentEventType.messageStatusChanged:
         _handleMessageStatusChanged(data);
         break;
-      case 'agentStatusChanged':
+      case AgentEventType.agentStatusChanged:
         _handleAgentStatusChanged(data);
         break;
-      case 'toolCallStart':
-      case 'toolCallResult':
-        _handleToolEvent(type, data);
+      case AgentEventType.toolCallStart:
+      case AgentEventType.toolCallResult:
+        _handleToolEvent(type.value, data);
         break;
-      case 'toolPermissionRequest':
+      case AgentEventType.toolPermissionRequest:
         _handlePermissionRequest(data);
         break;
-      case 'messageReplied':
+      case AgentEventType.messageReplied:
         _handleMessageReplied(data);
         break;
-      case 'messageQueued':
+      case AgentEventType.messageQueued:
         _handleMessageQueued(data);
         break;
-      case 'messageProcessing':
+      case AgentEventType.messageProcessing:
         _handleMessageProcessing(data);
+        break;
+      case AgentEventType.unknown:
+      case AgentEventType.messageReadStatusChanged:
+      case AgentEventType.toolPermissionResponse:
         break;
     }
   }

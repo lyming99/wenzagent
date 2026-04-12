@@ -71,20 +71,18 @@ class MessagePersistenceTest {
     final tempDir = await Directory.systemTemp.createTemp('wenzagent_message_test_');
     tempDirPath = tempDir.path;
     print('  临时目录: $tempDirPath');
-
-    await DatabaseManager.getInstance('test').initialize(storagePath: tempDirPath);
-    print('  ✓ 数据库初始化完成');
   }
 
   /// 创建设备和员工
   Future<void> _createDeviceAndEmployee() async {
     // 创建 DeviceClient
-    device = DeviceClient.create(
-      deviceId: deviceId,
-      deviceName: 'Test Device',
+    device = DeviceClient.getInstance(deviceId);
+    await device.initialize(DeviceClientConfig(
+      dbPath: tempDirPath,
       host: 'localhost',
       port: 9090,
-    );
+      deviceName: 'Test Device',
+    ));
 
     // 创建员工
     employeeId = 'emp-test-${const Uuid().v4().substring(0, 8)}';

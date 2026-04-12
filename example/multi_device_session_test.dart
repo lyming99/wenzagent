@@ -25,6 +25,7 @@ Future<void> main() async {
 class MultiDeviceSessionTest {
   late DeviceClient deviceA;
   late DeviceClient deviceB;
+  late String tempDirPath;
   
   final String deviceAId = 'device-alpha';
   final String deviceBId = 'device-beta';
@@ -80,30 +81,29 @@ class MultiDeviceSessionTest {
   Future<void> _initializeStorage() async {
     // 创建临时目录存储测试数据
     final tempDir = await Directory.systemTemp.createTemp('wenzagent_test_');
-    print('  临时目录: ${tempDir.path}');
-
-    // 初始化 Hive
-    await DatabaseManager.getInstance('test').initialize(storagePath: tempDir.path);
-    print('  ✓ Hive 初始化完成');
+    tempDirPath = tempDir.path;
+    print('  临时目录: $tempDirPath');
   }
 
   /// 创建设备客户端
   Future<void> _createDeviceClients() async {
     // Device-A
-    deviceA = DeviceClient.create(
-      deviceId: deviceAId,
-      deviceName: 'Device Alpha',
+    deviceA = DeviceClient.getInstance(deviceAId);
+    await deviceA.initialize(DeviceClientConfig(
+      dbPath: tempDirPath,
       host: 'localhost',
       port: 9090,
-    );
-    
+      deviceName: 'Device Alpha',
+    ));
+
     // Device-B
-    deviceB = DeviceClient.create(
-      deviceId: deviceBId,
-      deviceName: 'Device Beta',
+    deviceB = DeviceClient.getInstance(deviceBId);
+    await deviceB.initialize(DeviceClientConfig(
+      dbPath: tempDirPath,
       host: 'localhost',
       port: 9091,
-    );
+      deviceName: 'Device Beta',
+    ));
 
     print('  ✓ Device-A 创建完成: $deviceAId');
     print('  ✓ Device-B 创建完成: $deviceBId');

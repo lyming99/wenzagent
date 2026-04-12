@@ -61,7 +61,7 @@ class DeviceStateHolder {
       _employeeChangeController.add(event);
     });
 
-    final sessionManager = SessionManager.getInstance();
+    final sessionManager = SessionManager.getInstance(deviceId);
     _sessionChangeSub = sessionManager.onSessionChanged.listen((event) {
       _sessionChangeController.add(event);
     });

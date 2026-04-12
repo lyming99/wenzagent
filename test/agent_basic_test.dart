@@ -98,6 +98,7 @@ void main() {
     // 创建 Agent
     agent = AgentImpl(
       employeeId: employeeId,
+      deviceId: deviceId,
       chatAdapter: adapter,
     );
     

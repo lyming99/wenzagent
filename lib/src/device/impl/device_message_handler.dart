@@ -43,19 +43,9 @@ class DeviceMessageHandler {
     );
   }
 
-  /// 创建并注册实例（带完整参数）
-  static DeviceMessageHandler create({
-    required String deviceId,
-    String? deviceName,
-    String? topic,
-  }) {
-    final instance = DeviceMessageHandler._(
-      deviceId: deviceId,
-      deviceName: deviceName,
-      topic: topic,
-    );
-    _instances[deviceId] = instance;
-    return instance;
+  /// 初始化配置
+  void initialize({String? deviceName, String? topic}) {
+    updateConfig(deviceName: deviceName, topic: topic);
   }
 
   static void removeInstance(String deviceId) {
@@ -169,20 +159,20 @@ class DeviceMessageHandler {
   void _handleAgentEvent(LanMessage msg) {
     try {
       final content = jsonDecode(msg.content ?? '{}') as Map<String, dynamic>;
-      final type = content['type'] as String?;
+      final eventType = AgentEventType.fromString(content['type'] as String? ?? '');
       final data = content['data'] as Map<String, dynamic>? ?? {};
       final employeeId = content['employeeId'] as String?;
       final fromDeviceId = msg.fromId;
 
       _stateHolder.eventController.add(AgentEvent(
-        type: type ?? '',
+        type: eventType,
         data: data,
         employeeId: employeeId,
         fromDeviceId: fromDeviceId,
       ));
 
       if (employeeId != null && fromDeviceId != null) {
-        if (type == 'messageStatusChanged') {
+        if (eventType == AgentEventType.messageStatusChanged) {
           final status = data['status'] as String?;
           final messageId = data['messageId'] as String?;
 
@@ -209,7 +199,7 @@ class DeviceMessageHandler {
           }
         }
 
-        if (type == 'agentStatusChanged') {
+        if (eventType == AgentEventType.agentStatusChanged) {
           final status = data['status'] as String?;
           if (status != null) {
             _stateHolder.notificationHub.onAgentStatusChanged(
@@ -245,7 +235,7 @@ class DeviceMessageHandler {
           }
         }
 
-        if (type == 'messageReadStatusChanged') {
+        if (eventType == AgentEventType.messageReadStatusChanged) {
           final readerDeviceId = data['readerDeviceId'] as String?;
           if (readerDeviceId != null && readerDeviceId != _deviceId) {
             _stateHolder.notificationHub.markAllAsRead(

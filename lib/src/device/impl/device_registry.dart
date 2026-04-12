@@ -51,23 +51,9 @@ class DeviceRegistry {
     );
   }
 
-  /// 创建并注册实例（带完整参数）
-  static DeviceRegistry create({
-    required String deviceId,
-    String? deviceName,
-    required String host,
-    required int port,
-    String? topic,
-  }) {
-    final instance = DeviceRegistry._(
-      deviceId: deviceId,
-      deviceName: deviceName,
-      host: host,
-      port: port,
-      topic: topic,
-    );
-    _instances[deviceId] = instance;
-    return instance;
+  /// 初始化配置
+  void initialize({String? deviceName, String? host, int? port, String? topic}) {
+    updateConfig(deviceName: deviceName, host: host, port: port, topic: topic);
   }
 
   static void removeInstance(String deviceId) {

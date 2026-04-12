@@ -16,7 +16,7 @@ class DeviceNotificationManager {
   final String _deviceId;
   String? _topic;
   late final EmployeeManager _employeeManager = EmployeeManager.getInstance(_deviceId);
-  late final SessionManager _sessionManager = SessionManager.getInstance();
+  late final SessionManager _sessionManager = SessionManager.getInstance(_deviceId);
   late final MessageStoreService _messageStoreService = MessageStoreService.getInstance(_deviceId);
   late final DeviceConnectionManager _connectionManager = DeviceConnectionManager.getInstance(_deviceId);
   late final DeviceStateHolder _stateHolder = DeviceStateHolder.getInstance(_deviceId);
@@ -43,17 +43,9 @@ class DeviceNotificationManager {
     );
   }
 
-  /// 创建并注册实例（带完整参数）
-  static DeviceNotificationManager create({
-    required String deviceId,
-    String? topic,
-  }) {
-    final instance = DeviceNotificationManager._(
-      deviceId: deviceId,
-      topic: topic,
-    );
-    _instances[deviceId] = instance;
-    return instance;
+  /// 初始化配置
+  void initialize({String? topic}) {
+    updateConfig(topic: topic);
   }
 
   static void removeInstance(String deviceId) {

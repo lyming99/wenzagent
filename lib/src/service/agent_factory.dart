@@ -107,12 +107,17 @@ class AgentFactoryImpl implements AgentFactory {
       throw StateError('Employee not found: $employeeId');
     }
 
+    final deviceId = employee.currentDeviceId;
+    if (deviceId == null || deviceId.isEmpty) {
+      throw StateError('员工 $employeeId 的 currentDeviceId 为空，无法创建 Agent');
+    }
+
     // 创建PersistentChatAdapter并设置持久化回调
     final chatAdapter = PersistentChatAdapter();
     _setupPersistCallbacks(chatAdapter, employeeId);
 
     // 创建Agent
-    agent = AgentImpl(employeeId: employeeId, chatAdapter: chatAdapter);
+    agent = AgentImpl(employeeId: employeeId, deviceId: deviceId, chatAdapter: chatAdapter);
 
     // 初始化Agent
     await agent.initialize(employeeId: employeeId);

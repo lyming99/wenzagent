@@ -16,7 +16,7 @@ class DataSyncManager {
   late final EmployeeManager _employeeManager = EmployeeManager.getInstance(
     _deviceId,
   );
-  late final SessionManager _sessionManager = SessionManager.getInstance();
+  late final SessionManager _sessionManager = SessionManager.getInstance(_deviceId);
   late final DeviceConnectionManager _connectionManager =
       DeviceConnectionManager.getInstance(_deviceId);
   late final DeviceRegistry _deviceRegistry = DeviceRegistry.getInstance(
