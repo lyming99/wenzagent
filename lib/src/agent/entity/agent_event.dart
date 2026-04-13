@@ -30,6 +30,9 @@ enum AgentEventType {
   /// 消息处理中（ChatAdapter 工具回调）
   messageProcessing,
 
+  /// 会话被清空
+  sessionCleared,
+
   /// 未知类型（兼容旧数据或外部扩展）
   unknown;
 

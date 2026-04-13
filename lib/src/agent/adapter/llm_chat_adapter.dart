@@ -290,7 +290,7 @@ class LlmChatAdapter implements IChatAdapter {
               break;
             } else {
               if (notReplyRecord.tooLongNotReply()) {
-                print('[LlmChatAdapter] ai not reply, too long no reply');
+                print('[LlmChatAdapter] ai not reply, too long no reply:${notReplyRecord.notReplyCount}');
                 break;
               }
               print('[LlmChatAdapter] ai not reply, wait for ai reply');
@@ -675,7 +675,7 @@ class LlmChatAdapter implements IChatAdapter {
             break;
           case llm.CompletionEvent():
             finalResponse = event.response;
-            print('[LlmChatAdapter] finalResponse');
+            print('[LlmChatAdapter] finalResponse:${finalResponse.text},${finalResponse.usage.toString()},${finalResponse.toolCalls}');
             break;
           case llm.ErrorEvent():
             print('[LlmChatAdapter] LLM stream error event: ${event.error}');

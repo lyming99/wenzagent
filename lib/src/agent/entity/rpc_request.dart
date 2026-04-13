@@ -269,6 +269,26 @@ class GetMessagesAfterSeqRequest {
   }
 }
 
+/// 获取最小 seq 请求
+///
+/// 客户端查询远程最早保留消息的 seq，
+/// 用于清理本地过期消息（seq < minSeq 的可以安全删除）
+class GetMinSeqRequest {
+  final String employeeId;
+
+  const GetMinSeqRequest({required this.employeeId});
+
+  Map<String, dynamic> toMap() {
+    return {'employeeId': employeeId};
+  }
+
+  factory GetMinSeqRequest.fromMap(Map<String, dynamic> map) {
+    return GetMinSeqRequest(
+      employeeId: map['employeeId'] as String,
+    );
+  }
+}
+
 /// 更新同步水位线请求
 ///
 /// 客户端同步完成后更新本地水位线
@@ -871,6 +891,23 @@ class GetMcpConfigsRequest {
 
   factory GetMcpConfigsRequest.fromMap(Map<String, dynamic> map) {
     return GetMcpConfigsRequest(
+      employeeId: map['employeeId'] as String,
+    );
+  }
+}
+
+/// 获取正在调用的工具 callId 列表请求
+class GetCallingToolIdsRequest {
+  final String employeeId;
+
+  const GetCallingToolIdsRequest({required this.employeeId});
+
+  Map<String, dynamic> toMap() {
+    return {'employeeId': employeeId};
+  }
+
+  factory GetCallingToolIdsRequest.fromMap(Map<String, dynamic> map) {
+    return GetCallingToolIdsRequest(
       employeeId: map['employeeId'] as String,
     );
   }

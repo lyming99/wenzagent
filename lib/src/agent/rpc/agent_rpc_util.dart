@@ -88,6 +88,13 @@ class AgentRpcUtil {
     return _rpcCall(AgentRpcConfig.methodGetMaxSeq, request.toMap());
   }
 
+  /// 获取最小 seq
+  Future<Map<String, dynamic>> getMinSeq(
+    GetMinSeqRequest request,
+  ) async {
+    return _rpcCall(AgentRpcConfig.methodGetMinSeq, request.toMap());
+  }
+
   /// 标记消息为已读
   Future<Map<String, dynamic>> markMessagesAsRead(
     MarkMessagesAsReadRequest request,
@@ -213,5 +220,12 @@ class AgentRpcUtil {
   /// 获取状态快照
   Future<Map<String, dynamic>> getState(GetStateRequest request) async {
     return _rpcCall(AgentRpcConfig.methodGetState, request.toMap());
+  }
+
+  /// 获取正在调用的工具 callId 列表
+  Future<Map<String, dynamic>> getCallingToolIds(
+    GetCallingToolIdsRequest request,
+  ) async {
+    return _rpcCall(AgentRpcConfig.methodGetCallingToolIds, request.toMap());
   }
 }

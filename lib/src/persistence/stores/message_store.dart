@@ -15,6 +15,9 @@ class MessageStore {
 
   Database get _db => _dbManager.db;
 
+  /// 暴露 DatabaseManager，供关联 Store 复用（如 SyncWatermarkStore）
+  DatabaseManager get dbManager => _dbManager;
+
   /// 从数据库行解码为 ChatMessage
   ChatMessage _rowToMessage(Row row) {
     return MessageMapper.fromRow(row);
@@ -93,11 +96,26 @@ class MessageStore {
     );
   }
 
+  /// 更新 sync_watermark.last_seq（MAX 语义，防止回退）
+  void _updateWatermarkLastSeq(String employeeId, int seq) {
+    _db.execute('''
+      INSERT INTO sync_watermark (employee_id, last_seq, update_time)
+        VALUES (?, ?, ?)
+        ON CONFLICT(employee_id) DO UPDATE SET
+          last_seq = MAX(last_seq, excluded.last_seq),
+          update_time = excluded.update_time
+    ''', [employeeId, seq, DateTime.now().millisecondsSinceEpoch]);
+  }
+
   /// 使用明确 deviceId 添加消息
+  ///
+  /// [updateWatermark] 是否更新同步水位线，默认 true。
+  /// 本地临时消息（localOnly）应传 false，避免本地分配的 seq 污染同步水位线。
   Future<void> addWithDeviceId(
     String? deviceId,
-    ChatMessage message,
-  ) async {
+    ChatMessage message, {
+    bool updateWatermark = true,
+  }) async {
     // 如果 seq 为 0，自动分配下一个序列号
     var msg = message;
     if (msg.seq == 0) {
@@ -111,6 +129,9 @@ class MessageStore {
         is_read, deleted, create_time, update_time, seq
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', _messageToParams(msg));
+    if (updateWatermark) {
+      _updateWatermarkLastSeq(msg.employeeId, msg.seq);
+    }
   }
 
   /// 更新消息
@@ -120,12 +141,11 @@ class MessageStore {
       message,
     );
   }
-
-  /// 使用明确 deviceId 更新消息
   Future<void> updateWithDeviceId(
     String? deviceId,
-    ChatMessage message,
-  ) async {
+    ChatMessage message, {
+    bool updateWatermark = true,
+  }) async {
     // 更新时保留原有 seq（如果当前 message 的 seq 为 0 则从 DB 读取）
     var msg = message;
     if (msg.seq == 0) {
@@ -144,6 +164,9 @@ class MessageStore {
         is_read, deleted, create_time, update_time, seq
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', _messageToParams(msg));
+    if (updateWatermark) {
+      _updateWatermarkLastSeq(msg.employeeId, msg.seq);
+    }
   }
 
   /// 更新消息状态
@@ -160,7 +183,8 @@ class MessageStore {
         processingError: error,
         updatedAt: DateTime.now(),
       );
-      await updateWithDeviceId(deviceId, updated);
+      // 状态更新不更新水位线，避免本地临时消息的状态变更泄漏 seq 到同步水位线
+      await updateWithDeviceId(deviceId, updated, updateWatermark: false);
     }
   }
 
@@ -223,6 +247,10 @@ class MessageStore {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', _messageToParams(msg));
       }
+      // 更新 sync_watermark.last_seq
+      for (var msg in messages) {
+        _updateWatermarkLastSeq(msg.employeeId, msg.seq);
+      }
       _db.execute('COMMIT');
     } catch (e) {
       _db.execute('ROLLBACK');
@@ -231,9 +259,21 @@ class MessageStore {
   }
 
   /// 获取下一个可用的 seq 值
+  ///
+  /// 同时从 messages 表和 sync_watermark 表取最大值，确保清空消息后 seq 不会重复。
   int getNextSeq() {
-    final result = _db.select('SELECT COALESCE(MAX(seq), 0) + 1 as next_seq FROM messages');
-    return result.first['next_seq'] as int;
+    final msgResult = _db.select(
+      'SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages',
+    );
+    final msgMaxSeq = msgResult.first['max_seq'] as int;
+
+    final wmResult = _db.select(
+      'SELECT COALESCE(MAX(last_seq), 0) as max_seq FROM sync_watermark',
+    );
+    final wmMaxSeq = wmResult.first['max_seq'] as int;
+
+    final currentMax = msgMaxSeq > wmMaxSeq ? msgMaxSeq : wmMaxSeq;
+    return currentMax + 1;
   }
 
   /// 获取当前最大 seq
@@ -249,6 +289,19 @@ class MessageStore {
       [employeeId],
     );
     return result.first['max_seq'] as int;
+  }
+
+  /// 获取指定 employee 的最小 seq（未删除消息）
+  ///
+  /// 用于客户端同步时判断远程最早保留的消息位置，
+  /// 本地 seq < minSeq 的消息可以安全删除。
+  /// 如果没有消息返回 0。
+  int getMinSeqForEmployee(String employeeId) {
+    final result = _db.select(
+      'SELECT COALESCE(MIN(seq), 0) as min_seq FROM messages WHERE employee_id = ? AND deleted = 0',
+      [employeeId],
+    );
+    return result.first['min_seq'] as int;
   }
 
   /// 增量拉取：获取 seq > lastSeq 的消息（包含已软删除的，供 Client 同步删除状态）
@@ -276,15 +329,64 @@ class MessageStore {
     return result.first['cnt'] as int;
   }
 
+  /// 获取指定员工的未读消息 ID 列表（assistant 且 is_read=0 且 deleted=0）
+  List<String> getUnreadMessageIds(String employeeId) {
+    final resultSet = _db.select(
+      'SELECT uuid FROM messages WHERE employee_id = ? AND role = ? AND is_read = 0 AND deleted = 0 ORDER BY create_time ASC',
+      [employeeId, 'assistant'],
+    );
+    return resultSet.map((row) => row['uuid'] as String).toList();
+  }
+
+  /// 获取指定员工中仍处于 processing 状态的本地工具调用消息 ID 列表
+  ///
+  /// 用于清理 agent 重启后残留的临时工具调用消息。
+  List<String> getStaleLocalToolCallMessages(String employeeId) {
+    final resultSet = _db.select(
+      "SELECT uuid FROM messages WHERE employee_id = ? AND uuid LIKE 'local_toolcall_%' AND processing_status = 'processing' AND deleted = 0",
+      [employeeId],
+    );
+    return resultSet.map((row) => row['uuid'] as String).toList();
+  }
+
   /// 批量标记指定员工的消息为已读（SQL 直接更新，返回受影响行数）
+  ///
+  /// 同时更新每条消息的 seq，使已读状态变更可通过 LSN 增量拉取同步到其他设备。
   int markAsReadByEmployee(String employeeId) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    // 查询需要标记已读的消息（用于后续更新 seq）
+    final unreadMessages = _db.select(
+      'SELECT uuid FROM messages WHERE employee_id = ? AND role = ? AND is_read = 0 AND deleted = 0',
+      [employeeId, 'assistant'],
+    );
+
+    if (unreadMessages.isEmpty) return 0;
+
+    // 批量更新 is_read
     _db.execute(
       'UPDATE messages SET is_read = 1, update_time = ? WHERE employee_id = ? AND role = ? AND is_read = 0 AND deleted = 0',
-      [DateTime.now().millisecondsSinceEpoch, employeeId, 'assistant'],
+      [now, employeeId, 'assistant'],
     );
-    final result = _db.select(
-      'SELECT changes() as affected',
-    );
+
+    // 为每条消息分配新 seq，使已读变更能被增量同步
+    int maxSeq = 0;
+    for (final row in unreadMessages) {
+      final uuid = row['uuid'] as String;
+      final newSeq = getNextSeq();
+      if (newSeq > maxSeq) maxSeq = newSeq;
+      _db.execute(
+        'UPDATE messages SET seq = ? WHERE uuid = ?',
+        [newSeq, uuid],
+      );
+    }
+
+    // 更新水位线
+    if (maxSeq > 0) {
+      _updateWatermarkLastSeq(employeeId, maxSeq);
+    }
+
+    final result = _db.select('SELECT changes() as affected');
     return result.first['affected'] as int;
   }
 
@@ -299,6 +401,14 @@ class MessageStore {
       'UPDATE messages SET deleted = 1, seq = ?, update_time = ? WHERE uuid = ?',
       [newSeq, now, uuid],
     );
+    // 更新 sync_watermark.last_seq（子查询获取 employeeId）
+    _db.execute('''
+      INSERT INTO sync_watermark (employee_id, last_seq, update_time)
+        SELECT employee_id, ?, ? FROM messages WHERE uuid = ?
+        ON CONFLICT(employee_id) DO UPDATE SET
+          last_seq = MAX(last_seq, excluded.last_seq),
+          update_time = excluded.update_time
+    ''', [newSeq, now, uuid]);
   }
 
   /// 按会话软删除所有消息并更新 seq（用于 clearCurrentSession 同步场景）
@@ -311,12 +421,31 @@ class MessageStore {
       [employeeId],
     );
     final now = DateTime.now().millisecondsSinceEpoch;
+    int maxSeq = 0;
     for (final row in messages) {
       final newSeq = getNextSeq();
+      if (newSeq > maxSeq) maxSeq = newSeq;
       _db.execute(
         'UPDATE messages SET deleted = 1, seq = ?, update_time = ? WHERE uuid = ?',
         [newSeq, now, row['uuid'] as String],
       );
     }
+    if (maxSeq > 0) {
+      _updateWatermarkLastSeq(employeeId, maxSeq);
+    }
+  }
+
+  /// 删除指定会话中 seq < beforeSeq 的所有消息（硬删除）
+  ///
+  /// 用于清空水位线场景：服务端设置 clear_seq 后，
+  /// 客户端同步时删除本地所有 seq < clearSeq 的消息。
+  /// 返回被删除的消息数量。
+  int deleteBeforeSeq(String employeeId, int beforeSeq) {
+    _db.execute(
+      'DELETE FROM messages WHERE employee_id = ? AND seq < ?',
+      [employeeId, beforeSeq],
+    );
+    final result = _db.select('SELECT changes() as affected');
+    return result.first['affected'] as int;
   }
 }

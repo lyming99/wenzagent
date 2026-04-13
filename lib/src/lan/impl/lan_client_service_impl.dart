@@ -73,7 +73,7 @@ class LanClientServiceImpl implements LanClientService {
 
   // 心跳 ping 定时器
   Timer? _pingTimer;
-  static const Duration _pingInterval = Duration(seconds: 10);
+  static const Duration _pingInterval = Duration(seconds: 9);
 
   final LanChunkService _chunkService = LanChunkService();
   final _uuid = const Uuid();

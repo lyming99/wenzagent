@@ -25,6 +25,7 @@ class AgentRpcConfig {
   static const String methodGetMessagesAfterSeq = 'agentGetMessagesAfterSeq';
   static const String methodUpdateSyncWatermark = 'agentUpdateSyncWatermark';
   static const String methodGetMaxSeq = 'agentGetMaxSeq';
+  static const String methodGetMinSeq = 'agentGetMinSeq';
   static const String methodMarkMessagesAsRead = 'agentMarkMessagesAsRead';
   static const String methodGetMessagesReadStatus = 'agentGetMessagesReadStatus';
   static const String methodCreateSession = 'agentCreateSession';
@@ -78,6 +79,7 @@ class AgentRpcConfig {
   // ===== Agent 状态查询 =====
 
   static const String methodGetState = 'agentGetState';
+  static const String methodGetCallingToolIds = 'agentGetCallingToolIds';
   static const String methodSubscribeState = 'agentSubscribeState';
 
   // ===== Agent 生命周期 =====

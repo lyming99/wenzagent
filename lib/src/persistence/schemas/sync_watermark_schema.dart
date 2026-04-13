@@ -10,6 +10,7 @@ class SyncWatermarkSchema {
       CREATE TABLE IF NOT EXISTS sync_watermark (
         employee_id  TEXT PRIMARY KEY,
         last_seq     INTEGER NOT NULL DEFAULT 0,
+        clear_seq    INTEGER DEFAULT NULL,
         update_time  INTEGER NOT NULL
       )
     ''');

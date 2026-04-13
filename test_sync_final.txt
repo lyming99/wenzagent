@@ -1,0 +1,1065 @@
+00:00 +0: loading test/cached_agent_proxy_sync_test.dart                                                                                                                                               00:00 +0: loading test/cached_agent_proxy_sync_test.dart                                                                                                                                               
+
+=== CachedAgentProxy 远程消息同步测试完成 ===
+
+00:00 +0: (setUpAll)                                                                                                                                                                                   00:00 +0: 问答消息正确性与一致性 host 注入 assistant 消息后客户端可通过 syncFromRemote 获取                                                                                                                                    00:00 +0: 问答消息正确性与一致性 host 注入 assistant 消息后客户端可通过 syncFromRemote 获取                                                                                                                                    
+[DatabaseManager] 迁移到版本 1 ...
+[DatabaseManager] 迁移到版本 1 完成
+[DatabaseManager] 迁移到版本 2 ...
+[DatabaseManager] 迁移到版本 2 完成
+[DatabaseManager] 迁移到版本 3 ...
+[DatabaseManager] 迁移到版本 3 完成
+[DatabaseManager] 迁移到版本 4 ...
+[DatabaseManager] 迁移到版本 4 完成
+[DatabaseManager] 迁移到版本 5 ...
+[DatabaseManager] 迁移到版本 5 完成
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[DatabaseManager] 迁移到版本 1 ...
+[DatabaseManager] 迁移到版本 1 完成
+[DatabaseManager] 迁移到版本 2 ...
+[DatabaseManager] 迁移到版本 2 完成
+[DatabaseManager] 迁移到版本 3 ...
+[DatabaseManager] 迁移到版本 3 完成
+[DatabaseManager] 迁移到版本 4 ...
+[DatabaseManager] 迁移到版本 4 完成
+[DatabaseManager] 迁移到版本 5 ...
+[DatabaseManager] 迁移到版本 5 完成
+[CachedAgentProxy] 初始化事件监听...
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_990eeadb-78cd-4f34-b022-3da2f9ba5415_1776042555727), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_990eeadb-78cd-4f34-b022-3da2f9ba5415_1776042555727), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_990eeadb-78cd-4f34-b022-3da2f9ba5415_1776042555727)
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=1, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 1 条
+[CachedAgentProxy] 从远程获取到 1 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 1 条
+[CachedAgentProxy] 水位线已更新: lastSeq=1
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=1, completed=1, failed=0, remaining=0
+00:00 +1: 问答消息正确性与一致性 host 注入 assistant 消息后客户端可通过 syncFromRemote 获取                                                                                                                                    00:00 +1: 问答消息正确性与一致性 多轮对话消息顺序和内容一致                                                                                                                                                                    00:00 +1: 问答消息正确性与一致性 多轮对话消息顺序和内容一致                                                                                                                                                                    
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_a1f9eb19-8f33-464f-963f-ddbcdbf3904a_1776042555774), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_a1f9eb19-8f33-464f-963f-ddbcdbf3904a_1776042555774), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_a1f9eb19-8f33-464f-963f-ddbcdbf3904a_1776042555774)
+[PersistenceQueue] Queue empty, processing stopped
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_70d96e1c-fbf3-4a9f-805f-59edef39194c_1776042555776), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_70d96e1c-fbf3-4a9f-805f-59edef39194c_1776042555776), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_70d96e1c-fbf3-4a9f-805f-59edef39194c_1776042555776)
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=4, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 4 条
+[CachedAgentProxy] 从远程获取到 4 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 4 条
+[CachedAgentProxy] 水位线已更新: lastSeq=4
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=2, completed=2, failed=0, remaining=0
+00:00 +2: 问答消息正确性与一致性 多轮对话消息顺序和内容一致                                                                                                                                                                    00:00 +2: 问答消息正确性与一致性 增量同步只拉取新消息                                                                                                                                                                       00:00 +2: 问答消息正确性与一致性 增量同步只拉取新消息                                                                                                                                                                       
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_978de190-4413-4752-8962-bbb4f90ebb7a_1776042555804), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_978de190-4413-4752-8962-bbb4f90ebb7a_1776042555804), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_978de190-4413-4752-8962-bbb4f90ebb7a_1776042555804)
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=2, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 2 条
+[CachedAgentProxy] 从远程获取到 2 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 2 条
+[CachedAgentProxy] 水位线已更新: lastSeq=2
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_d23495e6-000d-41f2-8fcf-3075880d6edc_1776042555809), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_d23495e6-000d-41f2-8fcf-3075880d6edc_1776042555809), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_d23495e6-000d-41f2-8fcf-3075880d6edc_1776042555809)
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 本地水位线: lastSeq=2, 远程 maxSeq=4, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=2, 返回 2 条
+[CachedAgentProxy] 从远程获取到 2 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 2 条
+[CachedAgentProxy] 水位线已更新: lastSeq=4
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=2, completed=2, failed=0, remaining=0
+00:00 +3: 问答消息正确性与一致性 增量同步只拉取新消息                                                                                                                                                                       00:00 +3: 问答消息正确性与一致性 sendMessage 后本地消息立即可见                                                                                                                                                            00:00 +3: 问答消息正确性与一致性 sendMessage 后本地消息立即可见                                                                                                                                                            
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[CachedAgentProxy] 客户端生成消息ID: 57f6699e-d9f8-4a76-8fda-115c99a44fbf
+[CachedAgentProxy] 创建本地消息: ID=57f6699e-d9f8-4a76-8fda-115c99a44fbf, role=user
+[CachedAgentProxy] 发送消息到远程: ID=57f6699e-d9f8-4a76-8fda-115c99a44fbf
+[AgentProxy] sendMessage isLocalMode: false
+[AgentProxy] 消息ID: 57f6699e-d9f8-4a76-8fda-115c99a44fbf (客户端提供)
+[AgentProxy] inputWithId.id: 57f6699e-d9f8-4a76-8fda-115c99a44fbf
+[AgentProxy] 调用RPC sendMessage
+[AgentProxy] 发送的消息数据: {content: 你好, type: text, id: 57f6699e-d9f8-4a76-8fda-115c99a44fbf}
+[AgentProxy] 消息数据中的ID: 57f6699e-d9f8-4a76-8fda-115c99a44fbf
+[AgentImpl] sendMessage: 你好
+[AgentImpl] 使用客户端提供的消息ID: 57f6699e-d9f8-4a76-8fda-115c99a44fbf (强制覆盖metadata)
+[AgentImpl] 提交消息到处理器，最终消息ID: 57f6699e-d9f8-4a76-8fda-115c99a44fbf
+[MessageProcessor] submitMessage: 57f6699e-d9f8-4a76-8fda-115c99a44fbf
+[MessageProcessor] message queued, queue length: 1
+[MessageProcessor] current status: AgentStatus.idle
+[MessageProcessor] status is idle, calling _processNext
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] processing message: 57f6699e-d9f8-4a76-8fda-115c99a44fbf
+[MessageProcessor] _processMessage: 57f6699e-d9f8-4a76-8fda-115c99a44fbf
+[LlmChatAdapter] stream start, model: null
+[LlmChatAdapter] ERROR: _chatCapability is null
+[AgentProxy] 远程返回的消息ID: 57f6699e-d9f8-4a76-8fda-115c99a44fbf
+[AgentProxy] 返回消息ID: 57f6699e-d9f8-4a76-8fda-115c99a44fbf
+[CachedAgentProxy] AgentProxy返回的消息ID: 57f6699e-d9f8-4a76-8fda-115c99a44fbf
+[CachedAgentProxy] 消息状态更新为sent: ID=57f6699e-d9f8-4a76-8fda-115c99a44fbf
+[MessageProcessor] error: 未配置 LLM Provider，请先调用 updateProvider()
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] queue is empty, setting status to idle
+00:00 +3 -1: 问答消息正确性与一致性 sendMessage 后本地消息立即可见 [E]                                                                                                                                                     
+  Expected: true
+    Actual: <null>
+  
+  package:matcher                               expect
+  test\cached_agent_proxy_sync_test.dart 367:7  main.<fn>.<fn>
+  
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=0, completed=0, failed=0, remaining=0
+
+To run this test again: D:\soft\dev\flutter\bin\cache\dart-sdk\bin\dart.exe test test/cached_agent_proxy_sync_test.dart -p vm --plain-name "问答消息正确性与一致性 sendMessage 后本地消息立即可见"
+00:00 +3 -1: 问答消息正确性与一致性 sendMessage 返回的消息 ID 与本地消息一致                                                                                                                                                  00:00 +3 -1: 问答消息正确性与一致性 sendMessage 返回的消息 ID 与本地消息一致                                                                                                                                                  
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[CachedAgentProxy] 客户端生成消息ID: f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4
+[CachedAgentProxy] 创建本地消息: ID=f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4, role=user
+[CachedAgentProxy] 发送消息到远程: ID=f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4
+[AgentProxy] sendMessage isLocalMode: false
+[AgentProxy] 消息ID: f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4 (客户端提供)
+[AgentProxy] inputWithId.id: f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4
+[AgentProxy] 调用RPC sendMessage
+[AgentProxy] 发送的消息数据: {content: ID 一致性测试, type: text, id: f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4}
+[AgentProxy] 消息数据中的ID: f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4
+[AgentImpl] sendMessage: ID 一致性测试
+[AgentImpl] 使用客户端提供的消息ID: f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4 (强制覆盖metadata)
+[AgentImpl] 提交消息到处理器，最终消息ID: f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4
+[MessageProcessor] submitMessage: f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4
+[MessageProcessor] message queued, queue length: 1
+[MessageProcessor] current status: AgentStatus.idle
+[MessageProcessor] status is idle, calling _processNext
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] processing message: f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4
+[MessageProcessor] _processMessage: f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4
+[LlmChatAdapter] stream start, model: null
+[LlmChatAdapter] ERROR: _chatCapability is null
+[AgentProxy] 远程返回的消息ID: f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4
+[AgentProxy] 返回消息ID: f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4
+[CachedAgentProxy] AgentProxy返回的消息ID: f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4
+[CachedAgentProxy] 消息状态更新为sent: ID=f4ce39d1-66f5-4659-aa2d-ba2a50cf5aa4
+[MessageProcessor] error: 未配置 LLM Provider，请先调用 updateProvider()
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] queue is empty, setting status to idle
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=0, completed=0, failed=0, remaining=0
+00:00 +4 -1: 问答消息正确性与一致性 sendMessage 返回的消息 ID 与本地消息一致                                                                                                                                                  00:00 +4 -1: 消息状态正确性与一致性 sendMessage 创建的消息初始状态为 pending                                                                                                                                                00:00 +4 -1: 消息状态正确性与一致性 sendMessage 创建的消息初始状态为 pending                                                                                                                                                
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[CachedAgentProxy] 客户端生成消息ID: 8239e496-6060-48d3-9e93-3e048c2f31a5
+[CachedAgentProxy] 创建本地消息: ID=8239e496-6060-48d3-9e93-3e048c2f31a5, role=user
+[CachedAgentProxy] 发送消息到远程: ID=8239e496-6060-48d3-9e93-3e048c2f31a5
+[AgentProxy] sendMessage isLocalMode: false
+[AgentProxy] 消息ID: 8239e496-6060-48d3-9e93-3e048c2f31a5 (客户端提供)
+[AgentProxy] inputWithId.id: 8239e496-6060-48d3-9e93-3e048c2f31a5
+[AgentProxy] 调用RPC sendMessage
+[AgentProxy] 发送的消息数据: {content: 状态测试, type: text, id: 8239e496-6060-48d3-9e93-3e048c2f31a5}
+[AgentProxy] 消息数据中的ID: 8239e496-6060-48d3-9e93-3e048c2f31a5
+[AgentImpl] sendMessage: 状态测试
+[AgentImpl] 使用客户端提供的消息ID: 8239e496-6060-48d3-9e93-3e048c2f31a5 (强制覆盖metadata)
+[AgentImpl] 提交消息到处理器，最终消息ID: 8239e496-6060-48d3-9e93-3e048c2f31a5
+[MessageProcessor] submitMessage: 8239e496-6060-48d3-9e93-3e048c2f31a5
+[MessageProcessor] message queued, queue length: 1
+[MessageProcessor] current status: AgentStatus.idle
+[MessageProcessor] status is idle, calling _processNext
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] processing message: 8239e496-6060-48d3-9e93-3e048c2f31a5
+[MessageProcessor] _processMessage: 8239e496-6060-48d3-9e93-3e048c2f31a5
+[LlmChatAdapter] stream start, model: null
+[LlmChatAdapter] ERROR: _chatCapability is null
+[AgentProxy] 远程返回的消息ID: 8239e496-6060-48d3-9e93-3e048c2f31a5
+[AgentProxy] 返回消息ID: 8239e496-6060-48d3-9e93-3e048c2f31a5
+[CachedAgentProxy] AgentProxy返回的消息ID: 8239e496-6060-48d3-9e93-3e048c2f31a5
+[CachedAgentProxy] 消息状态更新为sent: ID=8239e496-6060-48d3-9e93-3e048c2f31a5
+[MessageProcessor] error: 未配置 LLM Provider，请先调用 updateProvider()
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] queue is empty, setting status to idle
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=0, completed=0, failed=0, remaining=0
+00:00 +5 -1: 消息状态正确性与一致性 sendMessage 创建的消息初始状态为 pending                                                                                                                                                00:00 +5 -1: 消息状态正确性与一致性 sendMessage 成功后状态更新（sent 在枚举中不存在，回退为 none）                                                                                                                                    00:00 +5 -1: 消息状态正确性与一致性 sendMessage 成功后状态更新（sent 在枚举中不存在，回退为 none）                                                                                                                                    
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[CachedAgentProxy] 客户端生成消息ID: 77361400-eff8-428f-956e-6f1f25dc9349
+[CachedAgentProxy] 创建本地消息: ID=77361400-eff8-428f-956e-6f1f25dc9349, role=user
+[CachedAgentProxy] 发送消息到远程: ID=77361400-eff8-428f-956e-6f1f25dc9349
+[AgentProxy] sendMessage isLocalMode: false
+[AgentProxy] 消息ID: 77361400-eff8-428f-956e-6f1f25dc9349 (客户端提供)
+[AgentProxy] inputWithId.id: 77361400-eff8-428f-956e-6f1f25dc9349
+[AgentProxy] 调用RPC sendMessage
+[AgentProxy] 发送的消息数据: {content: 发送后状态, type: text, id: 77361400-eff8-428f-956e-6f1f25dc9349}
+[AgentProxy] 消息数据中的ID: 77361400-eff8-428f-956e-6f1f25dc9349
+[AgentImpl] sendMessage: 发送后状态
+[AgentImpl] 使用客户端提供的消息ID: 77361400-eff8-428f-956e-6f1f25dc9349 (强制覆盖metadata)
+[AgentImpl] 提交消息到处理器，最终消息ID: 77361400-eff8-428f-956e-6f1f25dc9349
+[MessageProcessor] submitMessage: 77361400-eff8-428f-956e-6f1f25dc9349
+[MessageProcessor] message queued, queue length: 1
+[MessageProcessor] current status: AgentStatus.idle
+[MessageProcessor] status is idle, calling _processNext
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] processing message: 77361400-eff8-428f-956e-6f1f25dc9349
+[MessageProcessor] _processMessage: 77361400-eff8-428f-956e-6f1f25dc9349
+[LlmChatAdapter] stream start, model: null
+[LlmChatAdapter] ERROR: _chatCapability is null
+[AgentProxy] 远程返回的消息ID: 77361400-eff8-428f-956e-6f1f25dc9349
+[AgentProxy] 返回消息ID: 77361400-eff8-428f-956e-6f1f25dc9349
+[CachedAgentProxy] AgentProxy返回的消息ID: 77361400-eff8-428f-956e-6f1f25dc9349
+[CachedAgentProxy] 消息状态更新为sent: ID=77361400-eff8-428f-956e-6f1f25dc9349
+[MessageProcessor] error: 未配置 LLM Provider，请先调用 updateProvider()
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] queue is empty, setting status to idle
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=0, completed=0, failed=0, remaining=0
+00:00 +6 -1: 消息状态正确性与一致性 sendMessage 成功后状态更新（sent 在枚举中不存在，回退为 none）                                                                                                                                    00:00 +6 -1: 消息状态正确性与一致性 host 端消息状态变更同步到客户端                                                                                                                                                            00:00 +6 -1: 消息状态正确性与一致性 host 端消息状态变更同步到客户端                                                                                                                                                            
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=1, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 1 条
+[CachedAgentProxy] 从远程获取到 1 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 1 条
+[CachedAgentProxy] 水位线已更新: lastSeq=1
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=0, completed=0, failed=0, remaining=0
+00:00 +7 -1: 消息状态正确性与一致性 host 端消息状态变更同步到客户端                                                                                                                                                            00:00 +7 -1: 消息状态正确性与一致性 host 端消息失败状态（含 error）同步到客户端                                                                                                                                                   00:00 +7 -1: 消息状态正确性与一致性 host 端消息失败状态（含 error）同步到客户端                                                                                                                                                   
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=1, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 1 条
+[CachedAgentProxy] 从远程获取到 1 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 1 条
+[CachedAgentProxy] 水位线已更新: lastSeq=1
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=0, completed=0, failed=0, remaining=0
+00:00 +8 -1: 消息状态正确性与一致性 host 端消息失败状态（含 error）同步到客户端                                                                                                                                                   00:00 +8 -1: 消息状态正确性与一致性 多轮消息状态各自独立正确                                                                                                                                                                  00:00 +8 -1: 消息状态正确性与一致性 多轮消息状态各自独立正确                                                                                                                                                                  
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=3, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 3 条
+[CachedAgentProxy] 从远程获取到 3 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 3 条
+[CachedAgentProxy] 水位线已更新: lastSeq=3
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=0, completed=0, failed=0, remaining=0
+00:00 +9 -1: 消息状态正确性与一致性 多轮消息状态各自独立正确                                                                                                                                                                  00:00 +9 -1: updateWatermark 修复验证 本地临时消息不更新同步水位线                                                                                                                                                       00:01 +9 -1: updateWatermark 修复验证 本地临时消息不更新同步水位线                                                                                                                                                       
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[CachedAgentProxy] 客户端生成消息ID: a9147c9d-6dbb-4690-801b-66a44c0cf8ff
+[CachedAgentProxy] 创建本地消息: ID=a9147c9d-6dbb-4690-801b-66a44c0cf8ff, role=user
+[CachedAgentProxy] 发送消息到远程: ID=a9147c9d-6dbb-4690-801b-66a44c0cf8ff
+[AgentProxy] sendMessage isLocalMode: false
+[AgentProxy] 消息ID: a9147c9d-6dbb-4690-801b-66a44c0cf8ff (客户端提供)
+[AgentProxy] inputWithId.id: a9147c9d-6dbb-4690-801b-66a44c0cf8ff
+[AgentProxy] 调用RPC sendMessage
+[AgentProxy] 发送的消息数据: {content: 本地临时消息, type: text, id: a9147c9d-6dbb-4690-801b-66a44c0cf8ff}
+[AgentProxy] 消息数据中的ID: a9147c9d-6dbb-4690-801b-66a44c0cf8ff
+[AgentImpl] sendMessage: 本地临时消息
+[AgentImpl] 使用客户端提供的消息ID: a9147c9d-6dbb-4690-801b-66a44c0cf8ff (强制覆盖metadata)
+[AgentImpl] 提交消息到处理器，最终消息ID: a9147c9d-6dbb-4690-801b-66a44c0cf8ff
+[MessageProcessor] submitMessage: a9147c9d-6dbb-4690-801b-66a44c0cf8ff
+[MessageProcessor] message queued, queue length: 1
+[MessageProcessor] current status: AgentStatus.idle
+[MessageProcessor] status is idle, calling _processNext
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] processing message: a9147c9d-6dbb-4690-801b-66a44c0cf8ff
+[MessageProcessor] _processMessage: a9147c9d-6dbb-4690-801b-66a44c0cf8ff
+[LlmChatAdapter] stream start, model: null
+[LlmChatAdapter] ERROR: _chatCapability is null
+[AgentProxy] 远程返回的消息ID: a9147c9d-6dbb-4690-801b-66a44c0cf8ff
+[AgentProxy] 返回消息ID: a9147c9d-6dbb-4690-801b-66a44c0cf8ff
+[CachedAgentProxy] AgentProxy返回的消息ID: a9147c9d-6dbb-4690-801b-66a44c0cf8ff
+[CachedAgentProxy] 消息状态更新为sent: ID=a9147c9d-6dbb-4690-801b-66a44c0cf8ff
+[MessageProcessor] error: 未配置 LLM Provider，请先调用 updateProvider()
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] queue is empty, setting status to idle
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=0, completed=0, failed=0, remaining=0
+00:01 +10 -1: updateWatermark 修复验证 本地临时消息不更新同步水位线                                                                                                                                                      00:01 +10 -1: updateWatermark 修复验证 远程同步消息正常更新同步水位线                                                                                                                                                     00:01 +10 -1: updateWatermark 修复验证 远程同步消息正常更新同步水位线                                                                                                                                                     
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_23c46f03-aaa4-40bd-9c45-1770b57b3ee2_1776042556286), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_23c46f03-aaa4-40bd-9c45-1770b57b3ee2_1776042556286), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_23c46f03-aaa4-40bd-9c45-1770b57b3ee2_1776042556286)
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=2, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 2 条
+[CachedAgentProxy] 从远程获取到 2 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 2 条
+[CachedAgentProxy] 水位线已更新: lastSeq=2
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=1, completed=1, failed=0, remaining=0
+00:01 +11 -1: updateWatermark 修复验证 远程同步消息正常更新同步水位线                                                                                                                                                     00:01 +11 -1: updateWatermark 修复验证 sendMessage 后 syncFromRemote 仍能拉取服务端消息                                                                                                                              00:01 +11 -1: updateWatermark 修复验证 sendMessage 后 syncFromRemote 仍能拉取服务端消息                                                                                                                              
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[CachedAgentProxy] 客户端生成消息ID: 67d9c7b6-f7a9-4319-845f-9a18361667ac
+[CachedAgentProxy] 创建本地消息: ID=67d9c7b6-f7a9-4319-845f-9a18361667ac, role=user
+[CachedAgentProxy] 发送消息到远程: ID=67d9c7b6-f7a9-4319-845f-9a18361667ac
+[AgentProxy] sendMessage isLocalMode: false
+[AgentProxy] 消息ID: 67d9c7b6-f7a9-4319-845f-9a18361667ac (客户端提供)
+[AgentProxy] inputWithId.id: 67d9c7b6-f7a9-4319-845f-9a18361667ac
+[AgentProxy] 调用RPC sendMessage
+[AgentProxy] 发送的消息数据: {content: 本地消息, type: text, id: 67d9c7b6-f7a9-4319-845f-9a18361667ac}
+[AgentProxy] 消息数据中的ID: 67d9c7b6-f7a9-4319-845f-9a18361667ac
+[AgentImpl] sendMessage: 本地消息
+[AgentImpl] 使用客户端提供的消息ID: 67d9c7b6-f7a9-4319-845f-9a18361667ac (强制覆盖metadata)
+[AgentImpl] 提交消息到处理器，最终消息ID: 67d9c7b6-f7a9-4319-845f-9a18361667ac
+[MessageProcessor] submitMessage: 67d9c7b6-f7a9-4319-845f-9a18361667ac
+[MessageProcessor] message queued, queue length: 1
+[MessageProcessor] current status: AgentStatus.idle
+[MessageProcessor] status is idle, calling _processNext
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] processing message: 67d9c7b6-f7a9-4319-845f-9a18361667ac
+[MessageProcessor] _processMessage: 67d9c7b6-f7a9-4319-845f-9a18361667ac
+[LlmChatAdapter] stream start, model: null
+[LlmChatAdapter] ERROR: _chatCapability is null
+[AgentProxy] 远程返回的消息ID: 67d9c7b6-f7a9-4319-845f-9a18361667ac
+[AgentProxy] 返回消息ID: 67d9c7b6-f7a9-4319-845f-9a18361667ac
+[CachedAgentProxy] AgentProxy返回的消息ID: 67d9c7b6-f7a9-4319-845f-9a18361667ac
+[CachedAgentProxy] 消息状态更新为sent: ID=67d9c7b6-f7a9-4319-845f-9a18361667ac
+[MessageProcessor] error: 未配置 LLM Provider，请先调用 updateProvider()
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] queue is empty, setting status to idle
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_204412ac-ecf9-4b13-b435-4f0ff3bff2ff_1776042556364), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_204412ac-ecf9-4b13-b435-4f0ff3bff2ff_1776042556364), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_204412ac-ecf9-4b13-b435-4f0ff3bff2ff_1776042556364)
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=1, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 1 条
+[CachedAgentProxy] 从远程获取到 1 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 1 条
+[CachedAgentProxy] 水位线已更新: lastSeq=1
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=1, completed=1, failed=0, remaining=0
+00:01 +12 -1: updateWatermark 修复验证 sendMessage 后 syncFromRemote 仍能拉取服务端消息                                                                                                                              00:01 +12 -1: updateWatermark 修复验证 多次 sendMessage + sync 后水位线仅反映远程 seq                                                                                                                                 00:01 +12 -1: updateWatermark 修复验证 多次 sendMessage + sync 后水位线仅反映远程 seq                                                                                                                                 
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[CachedAgentProxy] 客户端生成消息ID: 0d9900fa-fd81-47ed-8b4b-edac5df71368
+[CachedAgentProxy] 创建本地消息: ID=0d9900fa-fd81-47ed-8b4b-edac5df71368, role=user
+[CachedAgentProxy] 发送消息到远程: ID=0d9900fa-fd81-47ed-8b4b-edac5df71368
+[AgentProxy] sendMessage isLocalMode: false
+[AgentProxy] 消息ID: 0d9900fa-fd81-47ed-8b4b-edac5df71368 (客户端提供)
+[AgentProxy] inputWithId.id: 0d9900fa-fd81-47ed-8b4b-edac5df71368
+[AgentProxy] 调用RPC sendMessage
+[AgentProxy] 发送的消息数据: {content: 本地消息0, type: text, id: 0d9900fa-fd81-47ed-8b4b-edac5df71368}
+[AgentProxy] 消息数据中的ID: 0d9900fa-fd81-47ed-8b4b-edac5df71368
+[AgentImpl] sendMessage: 本地消息0
+[AgentImpl] 使用客户端提供的消息ID: 0d9900fa-fd81-47ed-8b4b-edac5df71368 (强制覆盖metadata)
+[AgentImpl] 提交消息到处理器，最终消息ID: 0d9900fa-fd81-47ed-8b4b-edac5df71368
+[MessageProcessor] submitMessage: 0d9900fa-fd81-47ed-8b4b-edac5df71368
+[MessageProcessor] message queued, queue length: 1
+[MessageProcessor] current status: AgentStatus.idle
+[MessageProcessor] status is idle, calling _processNext
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] processing message: 0d9900fa-fd81-47ed-8b4b-edac5df71368
+[MessageProcessor] _processMessage: 0d9900fa-fd81-47ed-8b4b-edac5df71368
+[LlmChatAdapter] stream start, model: null
+[LlmChatAdapter] ERROR: _chatCapability is null
+[AgentProxy] 远程返回的消息ID: 0d9900fa-fd81-47ed-8b4b-edac5df71368
+[AgentProxy] 返回消息ID: 0d9900fa-fd81-47ed-8b4b-edac5df71368
+[CachedAgentProxy] AgentProxy返回的消息ID: 0d9900fa-fd81-47ed-8b4b-edac5df71368
+[CachedAgentProxy] 消息状态更新为sent: ID=0d9900fa-fd81-47ed-8b4b-edac5df71368
+[CachedAgentProxy] 客户端生成消息ID: dfe29d82-6a75-4948-9cb8-fabac792bd56
+[CachedAgentProxy] 创建本地消息: ID=dfe29d82-6a75-4948-9cb8-fabac792bd56, role=user
+[CachedAgentProxy] 发送消息到远程: ID=dfe29d82-6a75-4948-9cb8-fabac792bd56
+[AgentProxy] sendMessage isLocalMode: false
+[AgentProxy] 消息ID: dfe29d82-6a75-4948-9cb8-fabac792bd56 (客户端提供)
+[AgentProxy] inputWithId.id: dfe29d82-6a75-4948-9cb8-fabac792bd56
+[AgentProxy] 调用RPC sendMessage
+[AgentProxy] 发送的消息数据: {content: 本地消息1, type: text, id: dfe29d82-6a75-4948-9cb8-fabac792bd56}
+[AgentProxy] 消息数据中的ID: dfe29d82-6a75-4948-9cb8-fabac792bd56
+[AgentImpl] sendMessage: 本地消息1
+[AgentImpl] 使用客户端提供的消息ID: dfe29d82-6a75-4948-9cb8-fabac792bd56 (强制覆盖metadata)
+[AgentImpl] 提交消息到处理器，最终消息ID: dfe29d82-6a75-4948-9cb8-fabac792bd56
+[MessageProcessor] submitMessage: dfe29d82-6a75-4948-9cb8-fabac792bd56
+[MessageProcessor] message queued, queue length: 1
+[MessageProcessor] current status: AgentStatus.processing
+[MessageProcessor] running interrupt judgment...
+[MessageProcessor] error: 未配置 LLM Provider，请先调用 updateProvider()
+[MessageProcessor] interrupt judgment result: InterruptJudgeResult(decision: InterruptDecision.wait, reason: LLM judgment error: Exception: 未配置 LLM Provider, targetId: null)
+[AgentProxy] 远程返回的消息ID: dfe29d82-6a75-4948-9cb8-fabac792bd56
+[AgentProxy] 返回消息ID: dfe29d82-6a75-4948-9cb8-fabac792bd56
+[CachedAgentProxy] AgentProxy返回的消息ID: dfe29d82-6a75-4948-9cb8-fabac792bd56
+[CachedAgentProxy] 消息状态更新为sent: ID=dfe29d82-6a75-4948-9cb8-fabac792bd56
+[CachedAgentProxy] 客户端生成消息ID: c44954f3-e62f-4c3b-9aed-f3f0dfd932c6
+[CachedAgentProxy] 创建本地消息: ID=c44954f3-e62f-4c3b-9aed-f3f0dfd932c6, role=user
+[CachedAgentProxy] 发送消息到远程: ID=c44954f3-e62f-4c3b-9aed-f3f0dfd932c6
+[AgentProxy] sendMessage isLocalMode: false
+[AgentProxy] 消息ID: c44954f3-e62f-4c3b-9aed-f3f0dfd932c6 (客户端提供)
+[AgentProxy] inputWithId.id: c44954f3-e62f-4c3b-9aed-f3f0dfd932c6
+[AgentProxy] 调用RPC sendMessage
+[AgentProxy] 发送的消息数据: {content: 本地消息2, type: text, id: c44954f3-e62f-4c3b-9aed-f3f0dfd932c6}
+[AgentProxy] 消息数据中的ID: c44954f3-e62f-4c3b-9aed-f3f0dfd932c6
+[AgentImpl] sendMessage: 本地消息2
+[AgentImpl] 使用客户端提供的消息ID: c44954f3-e62f-4c3b-9aed-f3f0dfd932c6 (强制覆盖metadata)
+[AgentImpl] 提交消息到处理器，最终消息ID: c44954f3-e62f-4c3b-9aed-f3f0dfd932c6
+[MessageProcessor] submitMessage: c44954f3-e62f-4c3b-9aed-f3f0dfd932c6
+[MessageProcessor] message queued, queue length: 2
+[MessageProcessor] current status: AgentStatus.idle
+[MessageProcessor] status is idle, calling _processNext
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] processing message: dfe29d82-6a75-4948-9cb8-fabac792bd56
+[MessageProcessor] _processMessage: dfe29d82-6a75-4948-9cb8-fabac792bd56
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] processing message: c44954f3-e62f-4c3b-9aed-f3f0dfd932c6
+[MessageProcessor] _processMessage: c44954f3-e62f-4c3b-9aed-f3f0dfd932c6
+[LlmChatAdapter] stream start, model: null
+[LlmChatAdapter] ERROR: _chatCapability is null
+[AgentProxy] 远程返回的消息ID: c44954f3-e62f-4c3b-9aed-f3f0dfd932c6
+[AgentProxy] 返回消息ID: c44954f3-e62f-4c3b-9aed-f3f0dfd932c6
+[CachedAgentProxy] AgentProxy返回的消息ID: c44954f3-e62f-4c3b-9aed-f3f0dfd932c6
+[CachedAgentProxy] 消息状态更新为sent: ID=c44954f3-e62f-4c3b-9aed-f3f0dfd932c6
+[LlmChatAdapter] stream start, model: null
+[LlmChatAdapter] ERROR: _chatCapability is null
+[MessageProcessor] error: 未配置 LLM Provider，请先调用 updateProvider()
+[MessageProcessor] error: 未配置 LLM Provider，请先调用 updateProvider()
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] queue is empty, setting status to idle
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] queue is empty, setting status to idle
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=1, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 1 条
+[CachedAgentProxy] 从远程获取到 1 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 1 条
+[CachedAgentProxy] 水位线已更新: lastSeq=1
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=0, completed=0, failed=0, remaining=0
+00:01 +13 -1: updateWatermark 修复验证 多次 sendMessage + sync 后水位线仅反映远程 seq                                                                                                                                 00:01 +13 -1: updateWatermark 修复验证 水位线 MAX 语义：只升不降                                                                                                                                                     00:01 +13 -1: updateWatermark 修复验证 水位线 MAX 语义：只升不降                                                                                                                                                     
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=1, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 1 条
+[CachedAgentProxy] 从远程获取到 1 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 1 条
+[CachedAgentProxy] 水位线已更新: lastSeq=1
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_d051e6fd-1adb-4b51-9bcc-2e719a00882c_1776042556508), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_d051e6fd-1adb-4b51-9bcc-2e719a00882c_1776042556508), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_d051e6fd-1adb-4b51-9bcc-2e719a00882c_1776042556508)
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 本地水位线: lastSeq=1, 远程 maxSeq=2, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=1, 返回 1 条
+[CachedAgentProxy] 从远程获取到 1 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 1 条
+[CachedAgentProxy] 水位线已更新: lastSeq=2
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=1, completed=1, failed=0, remaining=0
+00:01 +14 -1: updateWatermark 修复验证 水位线 MAX 语义：只升不降                                                                                                                                                     00:01 +14 -1: 事件流验证 onMessagesChanged 在 initialize 后触发                                                                                                                                                 00:01 +14 -1: 事件流验证 onMessagesChanged 在 initialize 后触发                                                                                                                                                 
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=0, completed=0, failed=0, remaining=0
+00:01 +15 -1: 事件流验证 onMessagesChanged 在 initialize 后触发                                                                                                                                                 00:01 +15 -1: 事件流验证 syncFromRemote 后 onMessagesChanged 触发                                                                                                                                              00:01 +15 -1: 事件流验证 syncFromRemote 后 onMessagesChanged 触发                                                                                                                                              
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_f590658d-d65d-489f-b9ca-ecde9855053f_1776042556645), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_f590658d-d65d-489f-b9ca-ecde9855053f_1776042556645), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_f590658d-d65d-489f-b9ca-ecde9855053f_1776042556645)
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=1, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 1 条
+[CachedAgentProxy] 从远程获取到 1 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 1 条
+[CachedAgentProxy] 水位线已更新: lastSeq=1
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=1, completed=1, failed=0, remaining=0
+00:01 +16 -1: 事件流验证 syncFromRemote 后 onMessagesChanged 触发                                                                                                                                              00:01 +16 -1: 事件流验证 sendMessage 后 onMessagesChanged 触发                                                                                                                                                 00:01 +16 -1: 事件流验证 sendMessage 后 onMessagesChanged 触发                                                                                                                                                 
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[CachedAgentProxy] 客户端生成消息ID: 1b42b4cc-44b0-43bc-87f6-2d760c2cce83
+[CachedAgentProxy] 创建本地消息: ID=1b42b4cc-44b0-43bc-87f6-2d760c2cce83, role=user
+[CachedAgentProxy] 发送消息到远程: ID=1b42b4cc-44b0-43bc-87f6-2d760c2cce83
+[AgentProxy] sendMessage isLocalMode: false
+[AgentProxy] 消息ID: 1b42b4cc-44b0-43bc-87f6-2d760c2cce83 (客户端提供)
+[AgentProxy] inputWithId.id: 1b42b4cc-44b0-43bc-87f6-2d760c2cce83
+[AgentProxy] 调用RPC sendMessage
+[AgentProxy] 发送的消息数据: {content: 事件测试, type: text, id: 1b42b4cc-44b0-43bc-87f6-2d760c2cce83}
+[AgentProxy] 消息数据中的ID: 1b42b4cc-44b0-43bc-87f6-2d760c2cce83
+[AgentImpl] sendMessage: 事件测试
+[AgentImpl] 使用客户端提供的消息ID: 1b42b4cc-44b0-43bc-87f6-2d760c2cce83 (强制覆盖metadata)
+[AgentImpl] 提交消息到处理器，最终消息ID: 1b42b4cc-44b0-43bc-87f6-2d760c2cce83
+[MessageProcessor] submitMessage: 1b42b4cc-44b0-43bc-87f6-2d760c2cce83
+[MessageProcessor] message queued, queue length: 1
+[MessageProcessor] current status: AgentStatus.idle
+[MessageProcessor] status is idle, calling _processNext
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] processing message: 1b42b4cc-44b0-43bc-87f6-2d760c2cce83
+[MessageProcessor] _processMessage: 1b42b4cc-44b0-43bc-87f6-2d760c2cce83
+[LlmChatAdapter] stream start, model: null
+[LlmChatAdapter] ERROR: _chatCapability is null
+[AgentProxy] 远程返回的消息ID: 1b42b4cc-44b0-43bc-87f6-2d760c2cce83
+[AgentProxy] 返回消息ID: 1b42b4cc-44b0-43bc-87f6-2d760c2cce83
+[CachedAgentProxy] AgentProxy返回的消息ID: 1b42b4cc-44b0-43bc-87f6-2d760c2cce83
+[CachedAgentProxy] 消息状态更新为sent: ID=1b42b4cc-44b0-43bc-87f6-2d760c2cce83
+[MessageProcessor] error: 未配置 LLM Provider，请先调用 updateProvider()
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] queue is empty, setting status to idle
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=0, completed=0, failed=0, remaining=0
+00:01 +17 -1: 事件流验证 sendMessage 后 onMessagesChanged 触发                                                                                                                                                 00:01 +17 -1: 消息通知与内容一致性 事件流中的消息与 getMessages 结果一致                                                                                                                                                     00:01 +17 -1: 消息通知与内容一致性 事件流中的消息与 getMessages 结果一致                                                                                                                                                     
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_de2fca0e-3f6a-4c6a-bccc-711ca92a7547_1776042556893), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_de2fca0e-3f6a-4c6a-bccc-711ca92a7547_1776042556893), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_de2fca0e-3f6a-4c6a-bccc-711ca92a7547_1776042556893)
+[PersistenceQueue] Queue empty, processing stopped
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_ad94ffbb-a4cb-4332-94b5-3194da00cc3c_1776042556895), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_ad94ffbb-a4cb-4332-94b5-3194da00cc3c_1776042556895), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_ad94ffbb-a4cb-4332-94b5-3194da00cc3c_1776042556895)
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=4, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 4 条
+[CachedAgentProxy] 从远程获取到 4 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 4 条
+[CachedAgentProxy] 水位线已更新: lastSeq=4
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=2, completed=2, failed=0, remaining=0
+00:01 +18 -1: 消息通知与内容一致性 事件流中的消息与 getMessages 结果一致                                                                                                                                                     00:01 +18 -1: 消息通知与内容一致性 syncWithRemote 返回的消息按时间正序                                                                                                                                                     00:01 +18 -1: 消息通知与内容一致性 syncWithRemote 返回的消息按时间正序                                                                                                                                                     
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_07f2d900-1576-4395-858e-960872e76bc0_1776042557018), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_07f2d900-1576-4395-858e-960872e76bc0_1776042557018), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_07f2d900-1576-4395-858e-960872e76bc0_1776042557018)
+[PersistenceQueue] Queue empty, processing stopped
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_e3858c8f-fc5b-4029-9852-e5eac8c11f2f_1776042557036), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_e3858c8f-fc5b-4029-9852-e5eac8c11f2f_1776042557036), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_e3858c8f-fc5b-4029-9852-e5eac8c11f2f_1776042557036)
+[PersistenceQueue] Queue empty, processing stopped
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_541f8656-3073-4d11-9215-ef9fd82fb47f_1776042557052), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_541f8656-3073-4d11-9215-ef9fd82fb47f_1776042557052), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_541f8656-3073-4d11-9215-ef9fd82fb47f_1776042557052)
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=3, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 3 条
+[CachedAgentProxy] 从远程获取到 3 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 3 条
+[CachedAgentProxy] 水位线已更新: lastSeq=3
+[CachedAgentProxy] 消息同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=3, completed=3, failed=0, remaining=0
+00:01 +19 -1: 消息通知与内容一致性 syncWithRemote 返回的消息按时间正序                                                                                                                                                     00:01 +19 -1: clearCurrentSession 后同步行为 清空会话后客户端消息和水位线被重置                                                                                                                                              00:01 +19 -1: clearCurrentSession 后同步行为 清空会话后客户端消息和水位线被重置                                                                                                                                              
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_905cc367-c3d7-4d6f-8d4e-7bfbcd6feb3c_1776042557070), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_905cc367-c3d7-4d6f-8d4e-7bfbcd6feb3c_1776042557070), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_905cc367-c3d7-4d6f-8d4e-7bfbcd6feb3c_1776042557070)
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=2, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 2 条
+[CachedAgentProxy] 从远程获取到 2 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 2 条
+[CachedAgentProxy] 水位线已更新: lastSeq=2
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistentChatAdapter] clearCurrentSession: 已删除数据库中的消息
+[CachedAgentProxy] 会话已清空，水位线已重置为 0
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=1, completed=1, failed=0, remaining=0
+00:01 +20 -1: clearCurrentSession 后同步行为 清空会话后客户端消息和水位线被重置                                                                                                                                              00:01 +20 -1: clearCurrentSession 后同步行为 清空后新增消息可正常同步                                                                                                                                                   00:01 +20 -1: clearCurrentSession 后同步行为 清空后新增消息可正常同步                                                                                                                                                   
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=1, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 1 条
+[CachedAgentProxy] 从远程获取到 1 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 1 条
+[CachedAgentProxy] 水位线已更新: lastSeq=1
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistentChatAdapter] clearCurrentSession: 已删除数据库中的消息
+[CachedAgentProxy] 会话已清空，水位线已重置为 0
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_11a356d2-12af-44d6-bf26-1e4121ef14d8_1776042557092), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_11a356d2-12af-44d6-bf26-1e4121ef14d8_1776042557092), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_11a356d2-12af-44d6-bf26-1e4121ef14d8_1776042557092)
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=3, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 2 条
+[CachedAgentProxy] 从远程获取到 2 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 2 条
+[CachedAgentProxy] 水位线已更新: lastSeq=3
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=1, completed=1, failed=0, remaining=0
+00:01 +21 -1: clearCurrentSession 后同步行为 清空后新增消息可正常同步                                                                                                                                                   00:01 +21 -1: syncFromRemote 完整端到端流程 完整流程：sendMessage → hostAdd → syncFromRemote → 验证一致性                                                                                                               00:01 +21 -1: syncFromRemote 完整端到端流程 完整流程：sendMessage → hostAdd → syncFromRemote → 验证一致性                                                                                                               
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[CachedAgentProxy] 客户端生成消息ID: 258e0a9c-bef2-4ceb-bfe2-e79801be6e39
+[CachedAgentProxy] 创建本地消息: ID=258e0a9c-bef2-4ceb-bfe2-e79801be6e39, role=user
+[CachedAgentProxy] 发送消息到远程: ID=258e0a9c-bef2-4ceb-bfe2-e79801be6e39
+[AgentProxy] sendMessage isLocalMode: false
+[AgentProxy] 消息ID: 258e0a9c-bef2-4ceb-bfe2-e79801be6e39 (客户端提供)
+[AgentProxy] inputWithId.id: 258e0a9c-bef2-4ceb-bfe2-e79801be6e39
+[AgentProxy] 调用RPC sendMessage
+[AgentProxy] 发送的消息数据: {content: 客户端问题, type: text, id: 258e0a9c-bef2-4ceb-bfe2-e79801be6e39}
+[AgentProxy] 消息数据中的ID: 258e0a9c-bef2-4ceb-bfe2-e79801be6e39
+[AgentImpl] sendMessage: 客户端问题
+[AgentImpl] 使用客户端提供的消息ID: 258e0a9c-bef2-4ceb-bfe2-e79801be6e39 (强制覆盖metadata)
+[AgentImpl] 提交消息到处理器，最终消息ID: 258e0a9c-bef2-4ceb-bfe2-e79801be6e39
+[MessageProcessor] submitMessage: 258e0a9c-bef2-4ceb-bfe2-e79801be6e39
+[MessageProcessor] message queued, queue length: 1
+[MessageProcessor] current status: AgentStatus.idle
+[MessageProcessor] status is idle, calling _processNext
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] processing message: 258e0a9c-bef2-4ceb-bfe2-e79801be6e39
+[MessageProcessor] _processMessage: 258e0a9c-bef2-4ceb-bfe2-e79801be6e39
+[LlmChatAdapter] stream start, model: null
+[LlmChatAdapter] ERROR: _chatCapability is null
+[AgentProxy] 远程返回的消息ID: 258e0a9c-bef2-4ceb-bfe2-e79801be6e39
+[AgentProxy] 返回消息ID: 258e0a9c-bef2-4ceb-bfe2-e79801be6e39
+[CachedAgentProxy] AgentProxy返回的消息ID: 258e0a9c-bef2-4ceb-bfe2-e79801be6e39
+[CachedAgentProxy] 消息状态更新为sent: ID=258e0a9c-bef2-4ceb-bfe2-e79801be6e39
+[MessageProcessor] error: 未配置 LLM Provider，请先调用 updateProvider()
+[MessageProcessor] _processNext called, disposed: false
+[MessageProcessor] queue is empty, setting status to idle
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_0f9b19f2-b505-4e79-8ce7-0306edbe8527_1776042557160), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_0f9b19f2-b505-4e79-8ce7-0306edbe8527_1776042557160), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_0f9b19f2-b505-4e79-8ce7-0306edbe8527_1776042557160)
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=1, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 1 条
+[CachedAgentProxy] 从远程获取到 1 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 1 条
+[CachedAgentProxy] 水位线已更新: lastSeq=1
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=1, completed=1, failed=0, remaining=0
+00:01 +22 -1: syncFromRemote 完整端到端流程 完整流程：sendMessage → hostAdd → syncFromRemote → 验证一致性                                                                                                               00:01 +22 -1: syncFromRemote 完整端到端流程 服务端连续注入多条消息后批量同步                                                                                                                                                  00:01 +22 -1: syncFromRemote 完整端到端流程 服务端连续注入多条消息后批量同步                                                                                                                                                  
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_bccc19ad-c2d3-4c4c-9395-da4c8f5756a4_1776042557175), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_bccc19ad-c2d3-4c4c-9395-da4c8f5756a4_1776042557175), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_bccc19ad-c2d3-4c4c-9395-da4c8f5756a4_1776042557175)
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_59000c39-e312-4488-9412-f97b42fc3e71_1776042557177), queue length: 1
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_59000c39-e312-4488-9412-f97b42fc3e71_1776042557177), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_59000c39-e312-4488-9412-f97b42fc3e71_1776042557177)
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_2e0004ce-1ac3-4f6e-b27e-7b878e0516fc_1776042557178), queue length: 1
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_2e0004ce-1ac3-4f6e-b27e-7b878e0516fc_1776042557178), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_2e0004ce-1ac3-4f6e-b27e-7b878e0516fc_1776042557178)
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_44998a4e-2c1c-46c9-ac6a-36c1f8f6310e_1776042557179), queue length: 1
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_44998a4e-2c1c-46c9-ac6a-36c1f8f6310e_1776042557179), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_44998a4e-2c1c-46c9-ac6a-36c1f8f6310e_1776042557179)
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_d097e285-cc22-4030-b793-e1e82bee39d0_1776042557180), queue length: 1
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_d097e285-cc22-4030-b793-e1e82bee39d0_1776042557180), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_d097e285-cc22-4030-b793-e1e82bee39d0_1776042557180)
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_5b15f60b-2fb6-4eb8-9485-d64ba1b9e9db_1776042557181), queue length: 1
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_5b15f60b-2fb6-4eb8-9485-d64ba1b9e9db_1776042557181), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_5b15f60b-2fb6-4eb8-9485-d64ba1b9e9db_1776042557181)
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_ab79476a-3e15-41c8-883f-6e5b91a90015_1776042557181), queue length: 1
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_ab79476a-3e15-41c8-883f-6e5b91a90015_1776042557181), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_ab79476a-3e15-41c8-883f-6e5b91a90015_1776042557181)
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_48c4d8a2-edb0-4158-bd25-d266d615436c_1776042557182), queue length: 1
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_48c4d8a2-edb0-4158-bd25-d266d615436c_1776042557182), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_48c4d8a2-edb0-4158-bd25-d266d615436c_1776042557182)
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_4cf3b68a-70b9-4401-9cad-c6091094259f_1776042557183), queue length: 1
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_4cf3b68a-70b9-4401-9cad-c6091094259f_1776042557183), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_4cf3b68a-70b9-4401-9cad-c6091094259f_1776042557183)
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_de83025e-f1bb-4efb-9045-d0ae0bd56bec_1776042557184), queue length: 1
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_de83025e-f1bb-4efb-9045-d0ae0bd56bec_1776042557184), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_de83025e-f1bb-4efb-9045-d0ae0bd56bec_1776042557184)
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=10, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 10 条
+[CachedAgentProxy] 从远程获取到 10 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 10 条
+[CachedAgentProxy] 水位线已更新: lastSeq=10
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=10, completed=10, failed=0, remaining=0
+00:01 +23 -1: syncFromRemote 完整端到端流程 服务端连续注入多条消息后批量同步                                                                                                                                                  00:01 +23 -1: syncFromRemote 完整端到端流程 seq 严格递增                                                                                                                                                          00:01 +23 -1: syncFromRemote 完整端到端流程 seq 严格递增                                                                                                                                                          
+[PersistentChatAdapter] 从数据库加载了 0 条消息
+[PersistentChatAdapter] loadRemainingMessages: 从数据库加载了 0 条消息
+[Skill] ========== 开始初始化技能系统, employeeId=test-cached-proxy-sync ==========
+[Skill] 开始加载持久化技能, employeeId=test-cached-proxy-sync
+[Skill] 数据库查询完成, 共 0 条技能记录
+[Skill] 持久化技能加载完成: 成功=0, 跳过=0, 失败=0
+[Skill] ========== 技能系统初始化完成 ==========
+[CachedAgentProxy] 初始化事件监听...
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_806416c0-06dd-46d0-8e61-9b1c3df5e389_1776042557206), queue length: 1
+[PersistenceQueue] Starting to process queue, 1 tasks pending
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_806416c0-06dd-46d0-8e61-9b1c3df5e389_1776042557206), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_806416c0-06dd-46d0-8e61-9b1c3df5e389_1776042557206)
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_1ba6207b-0783-4245-b08b-8567b57b38d4_1776042557207), queue length: 1
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_1ba6207b-0783-4245-b08b-8567b57b38d4_1776042557207), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_1ba6207b-0783-4245-b08b-8567b57b38d4_1776042557207)
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_6f2d7d1b-74a6-4c04-a5d7-52bebd8ee7c1_1776042557208), queue length: 1
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_6f2d7d1b-74a6-4c04-a5d7-52bebd8ee7c1_1776042557208), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_6f2d7d1b-74a6-4c04-a5d7-52bebd8ee7c1_1776042557208)
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_fe850368-f850-4660-be4a-00084c09de58_1776042557209), queue length: 1
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_fe850368-f850-4660-be4a-00084c09de58_1776042557209), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_fe850368-f850-4660-be4a-00084c09de58_1776042557209)
+[PersistenceQueue] Task added: PersistenceTaskType.message (msg_5fe367a1-49ac-421e-b059-f311bdf921a7_1776042557210), queue length: 1
+[PersistenceQueue] Processing task: PersistenceTaskType.message (msg_5fe367a1-49ac-421e-b059-f311bdf921a7_1776042557210), retry: 0/3
+[PersistenceQueue] Task completed: PersistenceTaskType.message (msg_5fe367a1-49ac-421e-b059-f311bdf921a7_1776042557210)
+[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...
+[PersistenceQueue] Queue empty, processing stopped
+[CachedAgentProxy] 本地水位线: lastSeq=0, 远程 maxSeq=5, 远程 minSeq=0
+[AgentImpl] getMessagesAfterSeq: employeeId=test-cached-proxy-sync, lastSeq=0, 返回 5 条
+[CachedAgentProxy] 从远程获取到 5 条新消息
+[CachedAgentProxy] 开始写入远程消息...
+[CachedAgentProxy] 远程消息写入完成，共 5 条
+[CachedAgentProxy] 水位线已更新: lastSeq=5
+[CachedAgentProxy] 消息同步完成
+[CachedAgentProxy] 开始同步远程会话状态和权限请求...
+[CachedAgentProxy] 远程 Agent 状态: AgentStatus.idle
+[CachedAgentProxy] 远程无 Provider 配置
+[CachedAgentProxy] 远程项目 UUID: null
+[CachedAgentProxy] 远程技能配置: 0 个
+[CachedAgentProxy] 远程 MCP 配置: 0 个
+[CachedAgentProxy] 远程状态同步完成
+[PersistenceQueue] Disposing, 0 tasks in queue
+[PersistenceQueue] Disposed, statistics: total=5, completed=5, failed=0, remaining=0
+00:02 +24 -1: syncFromRemote 完整端到端流程 seq 严格递增                                                                                                                                                          00:02 +24 -1: (tearDownAll)                                                                                                                                                                            00:02 +24 -1: Some tests failed.                                                                                                                                                                       
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.

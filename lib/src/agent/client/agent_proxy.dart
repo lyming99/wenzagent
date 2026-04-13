@@ -412,6 +412,18 @@ class AgentProxy {
     return result['maxSeq'] as int? ?? 0;
   }
 
+  /// 获取会话的最小 seq
+  ///
+  /// 用于客户端判断远程最早保留消息的位置，本地 seq < minSeq 的消息可安全删除
+  Future<int> getMinSeq() async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.getMinSeq(employeeId: employeeId);
+    }
+    final request = GetMinSeqRequest(employeeId: employeeId);
+    final result = await _rpcUtil!.getMinSeq(request);
+    return result['minSeq'] as int? ?? 0;
+  }
+
   /// 标记消息为已读
   ///
   /// 当用户打开会话查看消息时，通知 Agent 消息已读
@@ -853,6 +865,24 @@ class AgentProxy {
     final request = GetStateRequest(employeeId: employeeId);
     final result = await _rpcUtil!.getState(request);
     return AgentStateSnapshot.fromMap(result);
+  }
+
+  /// 获取正在调用的工具 callId 列表
+  List<String> getCallingToolIds() {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.getCallingToolIds();
+    }
+    return [];
+  }
+
+  /// 获取正在调用的工具 callId 列表（异步版本，支持远程 RPC）
+  Future<List<String>> getCallingToolIdsAsync() async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.getCallingToolIds();
+    }
+    final request = GetCallingToolIdsRequest(employeeId: employeeId);
+    final result = await _rpcUtil!.getCallingToolIds(request);
+    return (result['callingToolIds'] as List?)?.cast<String>() ?? [];
   }
 
   bool get isSending {

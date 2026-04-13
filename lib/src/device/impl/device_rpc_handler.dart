@@ -139,6 +139,14 @@ class DeviceRpcHandler {
       return {'maxSeq': maxSeq};
     });
 
+    // 获取最小 seq
+    rpcServer.register(AgentRpcConfig.methodGetMinSeq, (params) async {
+      final request = GetMinSeqRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      final minSeq = await agent.getMinSeq(employeeId: request.employeeId);
+      return {'minSeq': minSeq};
+    });
+
     // 标记消息为已读
     rpcServer.register(AgentRpcConfig.methodMarkMessagesAsRead, (params) async {
       final request = MarkMessagesAsReadRequest.fromMap(params);
@@ -166,6 +174,12 @@ class DeviceRpcHandler {
       final request = GetStateRequest.fromMap(params);
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
       return agent.getStateSnapshot().toMap();
+    });
+
+    rpcServer.register(AgentRpcConfig.methodGetCallingToolIds, (params) async {
+      final request = GetCallingToolIdsRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      return {'callingToolIds': agent.getCallingToolIds()};
     });
 
     rpcServer.register(AgentRpcConfig.methodSetContext, (params) async {

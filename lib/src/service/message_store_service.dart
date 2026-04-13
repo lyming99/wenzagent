@@ -60,9 +60,13 @@ abstract class MessageStoreService {
   Future<ChatMessage?> getMessage(String uuid, {String? deviceId});
 
   /// 添加消息
+  ///
+  /// [updateWatermark] 是否更新同步水位线，默认 true。
+  /// 本地临时消息应传 false，避免本地分配的 seq 污染同步水位线。
   Future<ChatMessage> addMessage(
     ChatMessage message, {
     String? deviceId,
+    bool updateWatermark = true,
   });
 
   /// 批量添加消息
@@ -75,6 +79,7 @@ abstract class MessageStoreService {
   Future<void> updateMessage(
     ChatMessage message, {
     String? deviceId,
+    bool updateWatermark = true,
   });
 
   /// 更新消息状态
@@ -109,6 +114,18 @@ abstract class MessageStoreService {
   /// [employeeId] 员工ID
   Future<void> softDeleteBySession(String employeeId);
 
+  /// 删除指定会话中 seq < beforeSeq 的所有消息（硬删除）
+  ///
+  /// 用于清空水位线场景：服务端设置 clear_seq 后，
+  /// 客户端同步时删除本地所有 seq < clearSeq 的消息。
+  /// 返回被删除的消息数量。
+  int deleteMessagesBeforeSeq(String employeeId, int beforeSeq);
+
+  /// 获取指定会话的最大 seq（含已软删除的消息）
+  ///
+  /// 用于清空会话时设置清空水位线。
+  int getMaxSeq(String employeeId);
+
   /// 硬删除单条消息（从数据库直接删除，非软删除）
   ///
   /// [uuid] 消息UUID
@@ -124,8 +141,23 @@ abstract class MessageStoreService {
   /// 批量标记指定员工的消息为已读（SQL 直接更新，返回受影响行数）
   int markAsReadInDb(String employeeId);
 
+  /// 获取指定员工的未读消息 ID 列表
+  List<String> getUnreadMessageIds(String employeeId);
+
+  /// 获取指定员工中仍处于 processing 状态的本地工具调用消息 ID 列表
+  List<String> getStaleLocalToolCallMessages(String employeeId);
+
   /// 消息变更通知流
   Stream<MessageChangeEvent> get onMessageChanged;
+
+  /// 获取同步水位线（lastSeq）
+  int getLastSeq(String employeeId);
+
+  /// 更新同步水位线（MAX 语义，防止回退）
+  void updateLastSeq(String employeeId, int lastSeq);
+
+  /// 强制重置同步水位线（不受 MAX 语义限制，用于清空会话场景）
+  void resetLastSeq(String employeeId, int lastSeq);
 }
 
 /// 消息存储服务实现
@@ -173,8 +205,9 @@ class MessageStoreServiceImpl implements MessageStoreService {
   Future<ChatMessage> addMessage(
     ChatMessage message, {
     String? deviceId,
+    bool updateWatermark = true,
   }) async {
-    await _store.addWithDeviceId(deviceId ?? _deviceId, message);
+    await _store.addWithDeviceId(deviceId ?? _deviceId, message, updateWatermark: updateWatermark);
     _notifyChange(MessageChangeType.added, message);
     return message;
   }
@@ -194,11 +227,12 @@ class MessageStoreServiceImpl implements MessageStoreService {
   Future<void> updateMessage(
     ChatMessage message, {
     String? deviceId,
+    bool updateWatermark = true,
   }) async {
     final updated = message.copyWith(
       updatedAt: DateTime.now(),
     );
-    await _store.updateWithDeviceId(deviceId ?? _deviceId, updated);
+    await _store.updateWithDeviceId(deviceId ?? _deviceId, updated, updateWatermark: updateWatermark);
     _notifyChange(MessageChangeType.updated, updated);
   }
 
@@ -250,6 +284,17 @@ class MessageStoreServiceImpl implements MessageStoreService {
   }
 
   @override
+  int deleteMessagesBeforeSeq(String employeeId, int beforeSeq) {
+    return _store.deleteBeforeSeq(employeeId, beforeSeq);
+  }
+
+  @override
+  int getMaxSeq(String employeeId) {
+    // 使用全局最大 seq（含已删除消息），确保清空水位线覆盖所有消息
+    return _store.getMaxSeq();
+  }
+
+  @override
   Future<void> hardDeleteMessage(String uuid, {String? deviceId}) async {
     await _store.delete(deviceId ?? _deviceId, uuid);
   }
@@ -270,8 +315,36 @@ class MessageStoreServiceImpl implements MessageStoreService {
   }
 
   @override
+  List<String> getUnreadMessageIds(String employeeId) {
+    return _store.getUnreadMessageIds(employeeId);
+  }
+
+  @override
+  List<String> getStaleLocalToolCallMessages(String employeeId) {
+    return _store.getStaleLocalToolCallMessages(employeeId);
+  }
+
+  @override
   Stream<MessageChangeEvent> get onMessageChanged =>
       _changeController.stream;
+
+  @override
+  int getLastSeq(String employeeId) {
+    final store = SyncWatermarkStore(dbManager: _store.dbManager);
+    return store.getLastSeq(employeeId);
+  }
+
+  @override
+  void updateLastSeq(String employeeId, int lastSeq) {
+    final store = SyncWatermarkStore(dbManager: _store.dbManager);
+    store.updateLastSeq(employeeId, lastSeq);
+  }
+
+  @override
+  void resetLastSeq(String employeeId, int lastSeq) {
+    final store = SyncWatermarkStore(dbManager: _store.dbManager);
+    store.resetLastSeq(employeeId, lastSeq);
+  }
 
   void _notifyChange(MessageChangeType type, ChatMessage message) {
     _changeController.add(MessageChangeEvent(

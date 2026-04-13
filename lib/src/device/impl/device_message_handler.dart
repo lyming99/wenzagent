@@ -84,6 +84,7 @@ class DeviceMessageHandler {
       case LanMessageType.agentMessageReadStatusChanged:
       case LanMessageType.toolCallStart:
       case LanMessageType.toolCallResult:
+      case LanMessageType.agentSessionCleared:
         _handleAgentEvent(msg);
       case LanMessageType.agentMessageReadStatus:
         _handleRemoteReadStatus(msg);

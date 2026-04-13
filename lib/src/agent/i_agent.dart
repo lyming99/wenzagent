@@ -159,6 +159,13 @@ abstract class IAgent {
   /// [employeeId] 会话ID
   Future<int> getMaxSeq({required String employeeId});
 
+  /// 获取会话的最小 seq
+  ///
+  /// 用于客户端判断远程最早保留的消息位置，
+  /// 本地 seq < minSeq 的消息可以安全删除。
+  /// [employeeId] 会话ID
+  Future<int> getMinSeq({required String employeeId});
+
   /// 标记消息为已读
   ///
   /// 当用户打开会话查看消息时，设备通过此方法通知 Agent 消息已读
@@ -316,4 +323,11 @@ abstract class IAgent {
 
   /// 最后活跃时间
   DateTime get lastActiveTime;
+
+  /// 获取正在调用中的工具 callId 列表
+  ///
+  /// 返回当前 Agent 正在执行的工具调用的 callId 列表。
+  /// 前端可用于判断哪些工具尚在运行中，避免重复提交或显示加载状态。
+  /// 返回的是不可变副本。
+  List<String> getCallingToolIds();
 }

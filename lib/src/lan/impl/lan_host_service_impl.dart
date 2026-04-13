@@ -442,6 +442,7 @@ class LanHostServiceImpl implements LanHostService {
         type == LanMessageType.agentStatusChanged ||
         type == LanMessageType.agentMessageStatusChanged ||
         type == LanMessageType.agentPermissionChanged ||
+        type == LanMessageType.agentSessionCleared ||
         type == LanMessageType.deviceOnline ||
         type == LanMessageType.deviceOffline ||
         type == LanMessageType.deviceInfoChanged ||
@@ -594,7 +595,7 @@ class LanHostServiceImpl implements LanHostService {
   /// 启动心跳检测定时器
   void _startHeartbeatTimer() {
     _stopHeartbeatTimer();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (!_isRunning) {
         _stopHeartbeatTimer();
         return;

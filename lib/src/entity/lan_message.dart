@@ -47,6 +47,9 @@ enum LanMessageType {
   /// Agent 权限请求变更
   agentPermissionChanged,
 
+  /// Agent 会话被清空（跨设备同步）
+  agentSessionCleared,
+
   /// Agent 消息广播（实时新消息推送）
   agentUnreceivedMessagesBatch,
 

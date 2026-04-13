@@ -65,6 +65,10 @@ class AgentImpl implements IAgent {
   /// 当某个设备上的用户查看了消息后，记录已读状态
   final Map<String, Map<String, DateTime>> _messageReadStatus = {};
 
+  /// 正在调用中的工具 callId 集合
+  /// toolCallStart 时加入，toolCallResult 时移除
+  final Set<String> _callingToolIds = {};
+
   // ===== 内部状态 =====
 
   /// 当前 Agent 状态
@@ -170,8 +174,14 @@ class AgentImpl implements IAgent {
       }
     };
 
-    // 设置工具事件回调：通过事件流广播
+    // 设置工具事件回调：通过事件流广播 + 维护工具调用状态
     _chatAdapter.setToolEventCallback((toolEvent) {
+      switch (toolEvent) {
+        case ToolCallStartEvent():
+          _callingToolIds.add(toolEvent.toolCallId);
+        case ToolCallResultEvent():
+          _callingToolIds.remove(toolEvent.toolCallId);
+      }
       final map = ToolEventMapper.toMap(toolEvent);
       _eventController.add(
         AgentEvent.fromMap({...map, 'employeeId': employeeId}),
@@ -292,6 +302,8 @@ class AgentImpl implements IAgent {
     await _chatAdapter.dispose();
     await _stateController.close();
     await _eventController.close();
+
+    _callingToolIds.clear();
   }
 
   // ===== IAgent: 引用计数 =====
@@ -526,6 +538,7 @@ class AgentImpl implements IAgent {
   Future<void> interrupt() async {
     _touch();
     await _processor?.interruptCurrentTask();
+    _callingToolIds.clear();
     _setStatus(AgentStatus.idle);
   }
 
@@ -703,8 +716,14 @@ class AgentImpl implements IAgent {
 
   @override
   Future<int> getMaxSeq({required String employeeId}) async {
-    final store = MessageStore(deviceId: deviceId);
-    return store.getMaxSeqForEmployee(employeeId);
+    final store = SyncWatermarkStore(deviceId: deviceId);
+    return store.getLastSeq(employeeId);
+  }
+
+  @override
+  Future<int> getMinSeq({required String employeeId}) async {
+    final store = SyncWatermarkStore(deviceId: deviceId);
+    return store.getClearSeq(employeeId) ?? 0;
   }
 
   @override
@@ -823,6 +842,15 @@ class AgentImpl implements IAgent {
 
       await _chatAdapter.clearCurrentSession();
     });
+
+    // 广播会话清空事件，通知所有客户端
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.sessionCleared,
+        data: {'employeeId': employeeId},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
@@ -1138,6 +1166,11 @@ class AgentImpl implements IAgent {
   }
 
   // ===== IAgent: 状态查询 =====
+
+  @override
+  List<String> getCallingToolIds() {
+    return List.unmodifiable(_callingToolIds);
+  }
 
   @override
   AgentStateSnapshot getStateSnapshot() {

@@ -242,13 +242,26 @@ class DeviceAgentManager {
     return cachedProxy;
   }
 
-  /// 销毁 AgentProxy
+  /// 销毁 AgentProxy（同时清理本地和远程代理缓存）
   Future<void> destroyAgentProxy(String employeeId) async {
-    final proxy = _localProxies.remove(employeeId);
-    if (proxy != null) {
-      await proxy.dispose();
+    // 清理本地代理
+    final localProxy = _localProxies.remove(employeeId);
+    if (localProxy != null) {
+      await localProxy.dispose();
     }
 
+    // 清理所有远程代理（不同 targetDeviceId 下可能有多个缓存）
+    final remoteKeysToRemove = _remoteProxies.keys
+        .where((key) => key.endsWith(':$employeeId'))
+        .toList();
+    for (final key in remoteKeysToRemove) {
+      final remoteProxy = _remoteProxies.remove(key);
+      if (remoteProxy != null) {
+        await remoteProxy.dispose();
+      }
+    }
+
+    // 清理本地 Agent 实例
     final agent = _localAgents.remove(employeeId);
     if (agent != null) {
       await agent.dispose();
@@ -386,6 +399,8 @@ class DeviceAgentManager {
         msgType = LanMessageType.toolCallStart;
       case AgentEventType.toolCallResult:
         msgType = LanMessageType.toolCallResult;
+      case AgentEventType.sessionCleared:
+        msgType = LanMessageType.agentSessionCleared;
       default:
         return;
     }
@@ -790,8 +805,15 @@ class DeviceAgentManager {
     };
 
     adapter.deleteMessagesCallback = (employeeId) async {
-      // 使用软删除 + 更新 seq，使删除事件可通过 LSN 增量拉取同步到 Client
-      await _messageStoreService.softDeleteBySession(employeeId);
+      // 设置清空水位线，通知 Client 删除本地消息
+      final watermarkStore = SyncWatermarkStore(deviceId: _deviceId);
+      final maxSeq = _messageStoreService.getMaxSeq(employeeId);
+      if (maxSeq > 0) {
+        watermarkStore.setClearSeq(employeeId, maxSeq);
+      }
+
+      // 硬删除：直接从数据库删除会话所有消息
+      await _messageStoreService.deleteMessages(employeeId);
       _stateHolder.notificationHub.markAllAsRead(employeeId: employeeId);
       _notificationManager.clearLatestMessageCache(employeeId);
     };
