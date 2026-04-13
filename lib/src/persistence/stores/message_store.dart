@@ -387,18 +387,29 @@ class MessageStore {
   int markAsReadByEmployee(String employeeId, {String deviceId = ''}) {
     final now = DateTime.now().millisecondsSinceEpoch;
 
+    // 根据 deviceId 是否为空，构建不同的 SQL 条件
+    final String whereClause;
+    final List<dynamic> queryParams;
+    if (deviceId.isNotEmpty) {
+      whereClause = 'employee_id = ? AND device_id = ? AND role = ? AND is_read = 0 AND deleted = 0';
+      queryParams = [employeeId, deviceId, 'assistant'];
+    } else {
+      whereClause = 'employee_id = ? AND role = ? AND is_read = 0 AND deleted = 0';
+      queryParams = [employeeId, 'assistant'];
+    }
+
     // 查询需要标记已读的消息（用于后续更新 seq）
     final unreadMessages = _db.select(
-      'SELECT uuid FROM messages WHERE employee_id = ? AND device_id = ? AND role = ? AND is_read = 0 AND deleted = 0',
-      [employeeId, deviceId, 'assistant'],
+      'SELECT uuid FROM messages WHERE $whereClause',
+      queryParams,
     );
 
     if (unreadMessages.isEmpty) return 0;
 
     // 批量更新 is_read
     _db.execute(
-      'UPDATE messages SET is_read = 1, update_time = ? WHERE employee_id = ? AND device_id = ? AND role = ? AND is_read = 0 AND deleted = 0',
-      [now, employeeId, deviceId, 'assistant'],
+      'UPDATE messages SET is_read = 1, update_time = ? WHERE $whereClause',
+      [now, ...queryParams],
     );
 
     // 为每条消息分配新 seq，使已读变更能被增量同步

@@ -112,8 +112,14 @@ class DeviceAgentManager {
     bool autoCreateSession = true,
   }) async {
     final sw = Stopwatch()..start();
+    // 先检查会话是否已被有效删除，避免 getOrCreateSession 自动恢复已删除的会话
+    AiEmployeeSessionEntity? existingSession = await _sessionManager.getSession(employeeId);
+    final bool isSessionEffectivelyDeleted = existingSession != null &&
+        existingSession.deleted == 1 &&
+        existingSession.isEffectivelyDeleted();
+
     final results = await Future.wait<dynamic>([
-      autoCreateSession
+      (autoCreateSession && !isSessionEffectivelyDeleted)
           ? _sessionManager.getOrCreateSession(employeeId)
           : _sessionManager.getSession(employeeId),
       employee != null
@@ -850,20 +856,19 @@ class DeviceAgentManager {
 
   void _subscribeAgentEvents(String employeeId, IAgent agent) {
     final subscription = agent.onEvent.listen((event) {
+      // 始终广播到 LAN
       broadcastAgentEvent(employeeId, event);
+
+      // 始终添加到本地 eventController，确保本地 UI 能接收到所有事件
+      _stateHolder.eventController.add(AgentEvent(
+        type: event.type,
+        data: event.data,
+        employeeId: employeeId,
+        fromDeviceId: _deviceId,
+      ));
 
       final type = event.type;
       final data = event.data;
-
-      final lanClient = _connectionManager.lanClient;
-      if (lanClient == null || !lanClient.isConnected) {
-        _stateHolder.eventController.add(AgentEvent(
-          type: type,
-          data: data,
-          employeeId: employeeId,
-          fromDeviceId: _deviceId,
-        ));
-      }
 
       if (type != AgentEventType.messageStatusChanged) return;
       final status = data['status'] as String?;
