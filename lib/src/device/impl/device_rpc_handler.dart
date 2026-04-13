@@ -8,6 +8,7 @@ import '../../host/host_rpc_methods.dart';
 import '../../persistence/persistence.dart';
 import '../../rpc/remote_call_server.dart';
 import '../../service/service.dart';
+import 'data_sync_manager.dart';
 import 'device_agent_manager.dart';
 import 'device_config_manager.dart';
 
@@ -22,6 +23,7 @@ class DeviceRpcHandler {
   late final MessageStoreService _messageStoreService = MessageStoreService.getInstance(_deviceId);
   late final DeviceAgentManager _agentManager = DeviceAgentManager.getInstance(_deviceId);
   late final DeviceConfigManager _configManager = DeviceConfigManager.getInstance(_deviceId);
+  late final DataSyncManager _dataSyncManager = DataSyncManager.getInstance(_deviceId);
 
   DeviceRpcHandler._({required String deviceId}) : _deviceId = deviceId;
 
@@ -232,6 +234,9 @@ class DeviceRpcHandler {
         }
       }
 
+      // 广播到其他设备
+      await _dataSyncManager.broadcastEmployeeToAllDevices(request.employeeId);
+
       return {};
     });
 
@@ -365,6 +370,9 @@ class DeviceRpcHandler {
         );
         print('[DeviceRpcHandler] agentSetProject: Employee project synced: uuid=${employee.projectUuid} -> $projectUuid, name=${projectData?.projectName}');
       }
+
+      // 广播到其他设备
+      await _dataSyncManager.broadcastEmployeeToAllDevices(request.employeeId);
 
       return {};
     });
@@ -624,9 +632,26 @@ class DeviceRpcHandler {
           .toList();
       for (final session in sessions) {
         final existing = await _sessionManager.getSession(session.employeeId);
-        if (existing == null ||
-            session.updateTime.isAfter(existing.updateTime)) {
-          await _sessionManager.save(session);
+        if (existing == null) {
+          if (session.deleted != 1) {
+            await _sessionManager.save(session);
+          }
+        } else {
+          // 合并 deleteTime：取较大者决定 deleted 状态
+          final (dt, d) = _mergeDeleteTime(
+            existing.deleteTime, existing.deleted,
+            session.deleteTime, session.deleted,
+          );
+          final shouldUpdateData = session.updateTime.isAfter(existing.updateTime);
+          final shouldUpdateDelete = dt != existing.deleteTime || d != existing.deleted;
+          if (shouldUpdateData || shouldUpdateDelete) {
+            await _sessionManager.save(
+              (shouldUpdateData ? session : existing).copyWith(
+                deleted: d,
+                deleteTime: dt,
+              ),
+            );
+          }
         }
       }
       return {'count': sessions.length};
@@ -656,5 +681,18 @@ class DeviceRpcHandler {
       await _configManager.updateDeviceInfo(deviceInfo);
       return {'success': true};
     });
+  }
+
+  /// 合并两端的 deleteTime：取较大者决定 deleted 状态
+  static (DateTime?, int) _mergeDeleteTime(
+    DateTime? localDT,
+    int localD,
+    DateTime? remoteDT,
+    int remoteD,
+  ) {
+    if (localDT == null && remoteDT == null) return (null, 0);
+    if (localDT == null) return (remoteDT, remoteD);
+    if (remoteDT == null) return (localDT, localD);
+    return localDT.isAfter(remoteDT) ? (localDT, localD) : (remoteDT, remoteD);
   }
 }

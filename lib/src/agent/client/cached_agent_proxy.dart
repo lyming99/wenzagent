@@ -88,6 +88,9 @@ class CachedAgentProxy {
   /// 权限请求缓存（远程模式使用）
   final Map<String, AgentPermissionRequest> _pendingPermissionRequests = {};
 
+  /// 内存中的工具调用消息（本地模式使用，DB不保存临时消息）
+  final Map<String, AgentMessage> _inMemoryToolCallMessages = {};
+
   /// 事件订阅
   StreamSubscription<AgentEvent>? _eventSubscription;
   StreamSubscription<AgentStateSnapshot>? _stateSubscription;
@@ -304,6 +307,11 @@ class CachedAgentProxy {
 
     // 如果是完成或失败状态，立即同步远程消息（避免 500ms 去抖延迟）
     if (status == 'completed' || status == 'failed' || status == 'interrupted') {
+      // 本地模式：从内存缓存移除已完成的工具调用消息
+      _inMemoryToolCallMessages.removeWhere((key, _) {
+        // 移除所有以该 messageId 相关的工具调用（按 toolCallId 关联）
+        return key == messageId || key == messageId.replaceFirst('local_toolcall_', '');
+      });
       _syncMessagesFromRemote();
     }
   }
@@ -398,6 +406,12 @@ class CachedAgentProxy {
 
     // 保存到数据库（必须 await，确保 notify 时 DB 已写入）
     await _saveToolCallMessageToDb(toolMessage);
+
+    // 本地模式：将工具调用消息保存到内存缓存
+    if (_proxy.isLocalMode) {
+      _inMemoryToolCallMessages[toolCallId] = toolMessage;
+    }
+
     _notifyMessagesChanged();
   }
 
@@ -411,11 +425,6 @@ class CachedAgentProxy {
 
     print('[CachedAgentProxy] 更新工具调用消息: $toolCallId');
 
-    // 在数据库中查找本地临时消息
-    final localId = 'local_toolcall_$toolCallId';
-    final existing = await _messageStore.getMessage(localId, deviceId: _deviceId);
-    if (existing == null) return;
-
     // 根据错误类型确定状态
     String newStatus;
     if (!isError) {
@@ -426,6 +435,27 @@ class CachedAgentProxy {
     } else {
       newStatus = 'failed';
     }
+
+    // 本地模式：从内存缓存更新
+    if (_proxy.isLocalMode && _inMemoryToolCallMessages.containsKey(toolCallId)) {
+      final existing = _inMemoryToolCallMessages[toolCallId]!;
+      _inMemoryToolCallMessages[toolCallId] = existing.copyWith(
+        toolResult: result,
+        status: newStatus,
+        metadata: {
+          ...?existing.metadata,
+          'isError': isError,
+          'updateTime': DateTime.now().toIso8601String(),
+        },
+      );
+      _notifyMessagesChanged();
+      return;
+    }
+
+    // 远程模式：在数据库中查找本地临时消息
+    final localId = 'local_toolcall_$toolCallId';
+    final existing = await _messageStore.getMessage(localId, deviceId: _deviceId);
+    if (existing == null) return;
 
     final updatedMessage = _chatMessageToAgentMessage(existing).copyWith(
       toolResult: result,
@@ -1122,7 +1152,18 @@ class CachedAgentProxy {
       _employeeId,
     );
 
-    final allMessages = messageEntities.map(_chatMessageToAgentMessage).toList();
+    var allMessages = messageEntities.map(_chatMessageToAgentMessage).toList();
+
+    // 合并内存中的工具调用消息（本地模式）
+    if (_inMemoryToolCallMessages.isNotEmpty) {
+      final dbIds = allMessages.map((m) => m.id).toSet();
+      for (final msg in _inMemoryToolCallMessages.values) {
+        if (!dbIds.contains(msg.id)) {
+          allMessages.add(msg);
+        }
+      }
+    }
+
     if (allMessages.isEmpty) return [];
 
     // 按时间倒序排列（最新的在前）
@@ -1529,6 +1570,9 @@ class CachedAgentProxy {
 
     // 清除权限请求缓存
     _pendingPermissionRequests.clear();
+
+    // 清除内存中的工具调用消息
+    _inMemoryToolCallMessages.clear();
 
     if (!_proxy.isLocalMode) {
       await _cacheStateController.close();
