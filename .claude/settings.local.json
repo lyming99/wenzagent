@@ -6,7 +6,11 @@
       "Bash(dart test:*)",
       "Bash(findstr:*)",
       "Bash(find:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(git -C \"D:/project/GitHub/wenzagent\" diff:*)",
+      "Bash(git -C \"D:/project/GitHub/wenzagent\" diff --cached --stat)",
+      "Bash(git -C:*)",
+      "Bash(pushd:*)"
     ]
   }
 }

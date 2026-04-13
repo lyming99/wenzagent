@@ -287,9 +287,11 @@ class CachedAgentProxy {
       case AgentEventType.sessionCleared:
         _handleSessionCleared(data);
         break;
+      case AgentEventType.toolPermissionResponse:
+        _handlePermissionResponse(data);
+        break;
       case AgentEventType.unknown:
       case AgentEventType.messageReadStatusChanged:
-      case AgentEventType.toolPermissionResponse:
         break;
     }
   }
@@ -560,6 +562,18 @@ class CachedAgentProxy {
     }
   }
 
+  /// 处理权限响应事件（其他设备已授权/拒绝，本地需清除缓存）
+  void _handlePermissionResponse(Map<String, dynamic> data) {
+    final requestId = data['requestId'] as String?;
+    if (requestId == null) return;
+
+    final removed = _pendingPermissionRequests.remove(requestId);
+    if (removed != null) {
+      print('[CachedAgentProxy] 收到权限响应（其他设备已处理）: $requestId');
+      _notifyMessagesChanged();
+    }
+  }
+
   /// 处理消息被回复事件
   Future<void> _handleMessageReplied(Map<String, dynamic> data) async {
     final originalMessageId = data['originalMessageId'] as String?;
@@ -720,27 +734,18 @@ class CachedAgentProxy {
       // 1. 读取本地水位线
       final lastSeq = _messageStore.getLastSeq(_employeeId);
 
-      // 2. 获取服务端 maxSeq 和 minSeq
+      // 2. 获取服务端 maxSeq
       int remoteMaxSeq = -1;
-      int remoteMinSeq = 0;
       bool maxSeqObtained = false;
-      bool minSeqObtained = false;
       try {
         remoteMaxSeq = await _proxy.getMaxSeq();
         maxSeqObtained = true;
       } catch (e) {
         print('[CachedAgentProxy] 获取远程 maxSeq 失败: $e');
       }
-      try {
-        remoteMinSeq = await _proxy.getMinSeq();
-        minSeqObtained = true;
-      } catch (e) {
-        print('[CachedAgentProxy] 获取远程 minSeq 失败: $e');
-      }
 
       print('[CachedAgentProxy] 本地水位线: lastSeq=$lastSeq, '
-          '远程 maxSeq=${maxSeqObtained ? remoteMaxSeq : "获取失败"}, '
-          '远程 minSeq=${minSeqObtained ? remoteMinSeq : "获取失败"}');
+          '远程 maxSeq=${maxSeqObtained ? remoteMaxSeq : "获取失败"}');
 
       // maxSeq 获取失败时跳过本次同步，等待下次触发
       if (!maxSeqObtained) {
@@ -784,32 +789,6 @@ class CachedAgentProxy {
         }
       } else {
         print('[CachedAgentProxy] 本地水位线($lastSeq) >= 远程 maxSeq($remoteMaxSeq)，无需增量拉取');
-      }
-
-      // 7. 清理过期消息：远程 minSeq > 0 时，删除本地 seq < minSeq 的消息
-      if (minSeqObtained && remoteMinSeq > 0) {
-        final deletedCount = _messageStore.deleteMessagesBeforeSeq(
-          _employeeId, remoteMinSeq,
-        );
-        if (deletedCount > 0) {
-          print('[CachedAgentProxy] 已删除 $deletedCount 条过期消息（seq < $remoteMinSeq）');
-          _notifyMessagesChanged();
-        }
-      }
-
-      // 8. 检查 clearSeq 水位线：服务端清空会话后设置，客户端需删除本地消息
-      try {
-        final clearSeq = await _proxy.getClearSeq();
-        if (clearSeq > 0) {
-          final deletedCount = _messageStore.deleteMessagesBeforeSeq(_employeeId, clearSeq);
-          if (deletedCount > 0) {
-            _messageStore.resetLastSeq(_employeeId, 0);
-            print('[CachedAgentProxy] clearSeq 机制：已删除 $deletedCount 条消息（seq < $clearSeq），水位线已重置');
-            _notifyMessagesChanged();
-          }
-        }
-      } catch (e) {
-        print('[CachedAgentProxy] 获取 clearSeq 失败: $e');
       }
 
       print('[CachedAgentProxy] 消息同步完成');
@@ -1136,9 +1115,7 @@ class CachedAgentProxy {
     print('[CachedAgentProxy] 创建本地消息: ID=${localMessage.id}, role=${localMessage.role}');
 
     // 3. 添加到本地缓存（立即可见，不更新同步水位线）
-    if (!_proxy.isLocalMode) {
-      await _addMessageToCache(localMessage, updateWatermark: false);
-    }
+    await _addMessageToCache(localMessage, updateWatermark: false);
 
     // 4. 发送到远程（异步）
     try {

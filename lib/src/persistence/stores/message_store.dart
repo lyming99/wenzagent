@@ -196,9 +196,6 @@ class MessageStore {
         seq: newSeq,
       );
       await updateWithDeviceId(deviceId, updated, updateWatermark: updateWatermark);
-      // 确保水位线反映最新的 seq（即使 updateWatermark=false，seq 本身需要更新）
-      final effDeviceId = deviceId ?? '';
-      _updateWatermarkLastSeq(msg.employeeId, newSeq, deviceId: effDeviceId);
     }
   }
 

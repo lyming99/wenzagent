@@ -5,7 +5,6 @@ import '../../agent/entity/agent_event.dart';
 import '../../agent/entity/agent_message.dart';
 import '../../entity/lan_device_info.dart';
 import '../../entity/lan_message.dart';
-import '../../persistence/persistence.dart';
 import '../../service/service.dart';
 import '../device_client.dart';
 import 'device_agent_manager.dart';
@@ -440,30 +439,20 @@ class DeviceMessageHandler {
   void _syncAfterSessionCleared(String employeeId, String fromDeviceId) {
     Future(() async {
       try {
-        // 尝试通过已有的 AgentProxy 增量同步
+        // 先删除本地消息并重置水位线，确保后续同步不会跳过
+        final messageStore = MessageStoreService.getInstance(_deviceId);
+
+        // 删除本地消息
+        await messageStore.deleteMessages(employeeId);
+        // 重置水位线为0，确保后续增量同步能正确拉取远程消息
+        messageStore.resetLastSeq(employeeId, 0);
+        print('[DeviceMessageHandler] 会话清空后本地消息已清除，水位线已重置: employeeId=$employeeId');
+
+        // 尝试通过已有的 AgentProxy 增量同步（拉取远程最新状态）
         var proxy = _agentManager.getAgentProxy(employeeId);
         if (proxy != null) {
           await proxy.syncWithRemote();
           print('[DeviceMessageHandler] 会话清空后增量同步完成(已有proxy): employeeId=$employeeId');
-          return;
-        }
-
-        // 没有代理时，直接清除本地消息并更新水位线
-        // sessionCleared 事件本身就意味着所有消息已被清除
-        try {
-          final messageStore = MessageStoreService.getInstance(_deviceId);
-          final watermarkStore = SyncWatermarkStore(deviceId: _deviceId);
-
-          // 先获取当前最大seq，然后设置为clearSeq
-          final maxSeq = messageStore.getMaxSeq(employeeId);
-          if (maxSeq > 0) {
-            watermarkStore.setClearSeq(employeeId, maxSeq, deviceId: _deviceId);
-          }
-          // 删除本地消息
-          await messageStore.deleteMessages(employeeId);
-          print('[DeviceMessageHandler] 会话清空后直接清除完成: employeeId=$employeeId, clearSeq=$maxSeq');
-        } catch (e) {
-          print('[DeviceMessageHandler] 会话清空后直接清除失败: employeeId=$employeeId, $e');
         }
       } catch (e) {
         print('[DeviceMessageHandler] 会话清空后增量同步失败: employeeId=$employeeId, $e');
