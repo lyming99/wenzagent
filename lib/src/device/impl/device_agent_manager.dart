@@ -16,6 +16,7 @@ import '../../host/host_rpc_methods.dart';
 import '../../persistence/persistence.dart';
 import '../../service/service.dart';
 import '../../utils/logger.dart';
+import '../app_context.dart';
 import 'data_sync_manager.dart';
 import 'device_connection_manager.dart';
 import 'device_notification_manager.dart';
@@ -84,7 +85,10 @@ class DeviceAgentManager {
 
   static final Map<String, DeviceAgentManager> _instances = {};
 
+  /// 从 [AppContext] 获取实例，不存在则回退到独立创建
   static DeviceAgentManager getInstance(String deviceId) {
+    final ctx = AppContext.get(deviceId);
+    if (ctx != null) return ctx.agentManager;
     return _instances.putIfAbsent(
       deviceId,
       () => DeviceAgentManager._(deviceId: deviceId),

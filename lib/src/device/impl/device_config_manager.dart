@@ -1,5 +1,6 @@
 import '../../persistence/persistence.dart';
 import '../../utils/logger.dart';
+import '../app_context.dart';
 
 /// 设备配置管理器
 ///
@@ -16,20 +17,19 @@ class DeviceConfigManager {
 
   // ===== 单例管理 =====
 
-  static final Map<String, DeviceConfigManager> _instances = {};
-
+  /// 从 [AppContext] 获取实例，不存在则回退到独立创建
   static DeviceConfigManager getInstance(String deviceId) {
-    return _instances.putIfAbsent(
-      deviceId,
-      () => DeviceConfigManager._(
-        deviceId: deviceId,
-        deviceConfigStore: DeviceConfigStore(deviceId: deviceId),
-      ),
+    final ctx = AppContext.get(deviceId);
+    if (ctx != null) return ctx.configManager;
+    // 回退：独立创建（用于测试或未通过 AppContext 初始化的场景）
+    return DeviceConfigManager._(
+      deviceId: deviceId,
+      deviceConfigStore: DeviceConfigStore(deviceId: deviceId),
     );
   }
 
   static void removeInstance(String deviceId) {
-    _instances.remove(deviceId);
+    // 清理由 AppContext.dispose() 统一处理
   }
 
   // ===== 公开方法 =====

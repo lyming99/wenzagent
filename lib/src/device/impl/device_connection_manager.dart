@@ -7,6 +7,7 @@ import '../../utils/logger.dart';
 import '../../lan/impl/lan_client_service_impl.dart';
 import '../../rpc/remote_call_manager.dart';
 import '../../rpc/remote_call_server.dart';
+import '../app_context.dart';
 import '../device_client.dart';
 import 'async_lock.dart';
 import 'data_sync_manager.dart';
@@ -58,7 +59,10 @@ class DeviceConnectionManager {
 
   static final Map<String, DeviceConnectionManager> _instances = {};
 
+  /// 从 [AppContext] 获取实例，不存在则回退到独立创建
   static DeviceConnectionManager getInstance(String deviceId) {
+    final ctx = AppContext.get(deviceId);
+    if (ctx != null) return ctx.connectionManager;
     return _instances.putIfAbsent(
       deviceId,
       () => DeviceConnectionManager._(

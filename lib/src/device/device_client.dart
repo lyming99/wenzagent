@@ -8,6 +8,7 @@ import '../entity/lan_message.dart';
 import '../persistence/persistence.dart';
 import '../service/service.dart';
 import '../utils/logger.dart';
+import 'app_context.dart';
 import 'impl/async_lock.dart';
 import 'impl/data_sync_manager.dart';
 import 'impl/device_agent_manager.dart';
@@ -121,59 +122,56 @@ class DeviceClient {
   String? _topic;
   bool _initialized = false;
 
-  // ===== 子模块懒加载引用 =====
+  // ===== AppContext 依赖注入 =====
+
+  /// 获取关联的 AppContext（初始化后可用）
+  AppContext? get _ctx => AppContext.get(_deviceId);
+
+  // ===== 子模块懒加载引用（优先从 AppContext 获取） =====
 
   DeviceConnectionManager get _connectionManager =>
-      DeviceConnectionManager.getInstance(_deviceId);
+      _ctx?.connectionManager ?? DeviceConnectionManager.getInstance(_deviceId);
 
   DeviceRegistry get _deviceRegistry =>
-      DeviceRegistry.getInstance(
-        _deviceId,
-      );
+      _ctx?.deviceRegistry ?? DeviceRegistry.getInstance(_deviceId);
 
   DeviceConfigManager get _configManager =>
-      DeviceConfigManager.getInstance(_deviceId);
+      _ctx?.configManager ?? DeviceConfigManager.getInstance(_deviceId);
 
   DataSyncManager get _dataSyncManager =>
-      DataSyncManager.getInstance(
-        _deviceId,
-      );
+      _ctx?.dataSyncManager ?? DataSyncManager.getInstance(_deviceId);
 
   EmployeeOnlineTracker get _onlineTracker =>
-      EmployeeOnlineTracker.getInstance(_deviceId);
+      _ctx?.onlineTracker ?? EmployeeOnlineTracker.getInstance(_deviceId);
 
   DeviceAgentManager get _agentManager =>
-      DeviceAgentManager.getInstance(
-        _deviceId,
-      );
+      _ctx?.agentManager ?? DeviceAgentManager.getInstance(_deviceId);
 
   DeviceNotificationManager get _notificationManager =>
-      DeviceNotificationManager.getInstance(_deviceId);
+      _ctx?.notificationManager ?? DeviceNotificationManager.getInstance(_deviceId);
 
   DeviceMessageHandler get _messageHandler =>
-      DeviceMessageHandler.getInstance(_deviceId);
+      _ctx?.messageHandler ?? DeviceMessageHandler.getInstance(_deviceId);
 
   DeviceStateHolder get _stateHolder =>
-      DeviceStateHolder.getInstance(
-        _deviceId,
-      );
+      _ctx?.stateHolder ?? DeviceStateHolder.getInstance(_deviceId);
 
   // ===== 基础服务 =====
 
   EmployeeManager get _employeeManager =>
-      EmployeeManager.getInstance(
-        _deviceId,
-      );
+      _ctx?.employeeManager ?? EmployeeManager.getInstance(_deviceId);
 
-  SessionManager get _sessionManager => SessionManager.getInstance(_deviceId);
+  SessionManager get _sessionManager =>
+      _ctx?.sessionManager ?? SessionManager.getInstance(_deviceId);
 
   MessageStoreService get _messageStoreService =>
-      MessageStoreService.getInstance(_deviceId);
+      _ctx?.messageStoreService ?? MessageStoreService.getInstance(_deviceId);
 
-  SkillManager get _skillManager => SkillManager.getInstance(_deviceId);
+  SkillManager get _skillManager =>
+      _ctx?.skillManager ?? SkillManager.getInstance(_deviceId);
 
   EmployeeConfigService get _configService =>
-      EmployeeConfigService.getInstance(_deviceId);
+      _ctx?.employeeConfigService ?? EmployeeConfigService.getInstance(_deviceId);
 
   DeviceClient._({required String deviceId}) : _deviceId = deviceId;
 
@@ -194,8 +192,9 @@ class DeviceClient {
   ///
   /// 统一初始化流程：
   /// 1. 初始化数据库 [DatabaseManager]
-  /// 2. 读取数据库配置表（合并缺失的连接参数）
-  /// 3. 初始化所有关联子模块
+  /// 2. 创建 [AppContext] 依赖容器
+  /// 3. 读取数据库配置表（合并缺失的连接参数）
+  /// 4. 初始化所有关联子模块
   Future<void> initialize(DeviceClientConfig config) async {
     if (_initialized) return;
     final lock = _initLocks.putIfAbsent(_deviceId, () => AsyncLock());
@@ -206,7 +205,10 @@ class DeviceClient {
       await DatabaseManager.getInstance(_deviceId)
           .initialize(storagePath: config.dbPath);
 
-      // 2. 设置配置（参数优先）
+      // 2. 创建 AppContext 依赖容器
+      AppContext.create(deviceId: _deviceId, dbPath: config.dbPath);
+
+      // 3. 设置配置（参数优先）
       _host = config.host ?? '';
       _port = config.port;
       _topic = config.topic;
@@ -223,7 +225,7 @@ class DeviceClient {
         }
       }
 
-      // 3. 初始化子模块
+      // 4. 初始化子模块
       _connectionManager.initialize(
         host: _host,
         port: _port,
@@ -242,7 +244,7 @@ class DeviceClient {
         topic: _topic,
       );
 
-      // 4. 初始化 notificationHub 回调
+      // 5. 初始化 notificationHub 回调
       _notificationManager.initNotificationHubCallback();
 
       _initialized = true;
@@ -324,6 +326,9 @@ class DeviceClient {
       client._initialized = false;
       await client.dispose();
     }
+    // 释放 AppContext（统一管理所有子模块实例）
+    await AppContext.dispose(deviceId);
+    // 兼容清理：移除各模块独立 _instances 中的记录
     DeviceStateHolder.removeInstance(deviceId);
     DeviceConnectionManager.removeInstance(deviceId);
     DeviceRegistry.removeInstance(deviceId);

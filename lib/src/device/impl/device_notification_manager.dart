@@ -4,6 +4,7 @@ import '../../entity/lan_message.dart';
 import '../../shared/shared.dart';
 import '../../service/service.dart';
 import '../../utils/logger.dart';
+import '../app_context.dart';
 import '../device_client.dart';
 import 'device_connection_manager.dart';
 import 'device_agent_manager.dart';
@@ -38,7 +39,10 @@ class DeviceNotificationManager {
 
   static final Map<String, DeviceNotificationManager> _instances = {};
 
+  /// 从 [AppContext] 获取实例，不存在则回退到独立创建
   static DeviceNotificationManager getInstance(String deviceId) {
+    final ctx = AppContext.get(deviceId);
+    if (ctx != null) return ctx.notificationManager;
     return _instances.putIfAbsent(
       deviceId,
       () => DeviceNotificationManager._(deviceId: deviceId),

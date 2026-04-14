@@ -6,6 +6,7 @@ import '../../entity/lan_device_info.dart';
 import '../../entity/lan_message.dart';
 import '../../service/service.dart';
 import '../../utils/logger.dart';
+import '../app_context.dart';
 import '../device_client.dart';
 import 'device_config_manager.dart';
 import 'device_connection_manager.dart';
@@ -43,7 +44,10 @@ class DeviceRegistry {
 
   static final Map<String, DeviceRegistry> _instances = {};
 
+  /// 从 [AppContext] 获取实例，不存在则回退到独立创建
   static DeviceRegistry getInstance(String deviceId) {
+    final ctx = AppContext.get(deviceId);
+    if (ctx != null) return ctx.deviceRegistry;
     return _instances.putIfAbsent(
       deviceId,
       () => DeviceRegistry._(

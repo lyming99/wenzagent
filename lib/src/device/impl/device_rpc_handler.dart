@@ -8,10 +8,11 @@ import '../../host/host_rpc_methods.dart';
 import '../../persistence/persistence.dart';
 import '../../rpc/remote_call_server.dart';
 import '../../service/service.dart';
+import '../../utils/logger.dart';
+import '../app_context.dart';
 import 'data_sync_manager.dart';
 import 'device_agent_manager.dart';
 import 'device_config_manager.dart';
-import '../../utils/logger.dart';
 
 /// RPC 方法注册器
 ///
@@ -34,7 +35,10 @@ class DeviceRpcHandler {
 
   static final Map<String, DeviceRpcHandler> _instances = {};
 
+  /// 从 [AppContext] 获取实例，不存在则回退到独立创建
   static DeviceRpcHandler getInstance(String deviceId) {
+    final ctx = AppContext.get(deviceId);
+    if (ctx != null) return ctx.rpcHandler;
     return _instances.putIfAbsent(
       deviceId,
       () => DeviceRpcHandler._(deviceId: deviceId),

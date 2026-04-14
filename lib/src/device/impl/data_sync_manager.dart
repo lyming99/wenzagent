@@ -2,6 +2,7 @@ import '../../host/host_rpc_methods.dart';
 import '../../persistence/persistence.dart';
 import '../../service/service.dart';
 import '../../utils/logger.dart';
+import '../app_context.dart';
 import 'device_agent_manager.dart';
 import 'device_connection_manager.dart';
 import 'device_registry.dart';
@@ -37,7 +38,10 @@ class DataSyncManager {
 
   static final Map<String, DataSyncManager> _instances = {};
 
+  /// 从 [AppContext] 获取实例，不存在则回退到独立创建
   static DataSyncManager getInstance(String deviceId) {
+    final ctx = AppContext.get(deviceId);
+    if (ctx != null) return ctx.dataSyncManager;
     return _instances.putIfAbsent(
       deviceId,
       () => DataSyncManager._(deviceId: deviceId),

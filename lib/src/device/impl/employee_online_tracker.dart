@@ -1,5 +1,6 @@
 import '../../service/service.dart';
 import '../../utils/logger.dart';
+import '../app_context.dart';
 import '../device_client.dart';
 import 'device_agent_manager.dart';
 import 'device_registry.dart';
@@ -26,7 +27,10 @@ class EmployeeOnlineTracker {
 
   static final Map<String, EmployeeOnlineTracker> _instances = {};
 
+  /// 从 [AppContext] 获取实例，不存在则回退到独立创建
   static EmployeeOnlineTracker getInstance(String deviceId) {
+    final ctx = AppContext.get(deviceId);
+    if (ctx != null) return ctx.onlineTracker;
     return _instances.putIfAbsent(
       deviceId,
       () => EmployeeOnlineTracker._(deviceId: deviceId),

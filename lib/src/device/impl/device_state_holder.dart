@@ -4,6 +4,7 @@ import '../../agent/entity/agent_event.dart';
 import '../../agent/notification/agent_notification_hub.dart';
 import '../../entity/lan_message.dart';
 import '../../service/service.dart';
+import '../app_context.dart';
 import '../device_client.dart';
 
 /// 数据同步完成事件
@@ -103,7 +104,10 @@ class DeviceStateHolder {
 
   static final Map<String, DeviceStateHolder> _instances = {};
 
+  /// 从 [AppContext] 获取实例，不存在则回退到独立创建
   static DeviceStateHolder getInstance(String deviceId) {
+    final ctx = AppContext.get(deviceId);
+    if (ctx != null) return ctx.stateHolder;
     return _instances.putIfAbsent(
       deviceId,
       () => DeviceStateHolder._(deviceId: deviceId),
