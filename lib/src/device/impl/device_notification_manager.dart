@@ -148,10 +148,10 @@ class DeviceNotificationManager {
         final messageId = entry.key;
         final isRead = entry.value;
         if (isRead) {
-          _messageStoreService.getMessage(messageId).then((message) {
+          _messageStoreService.getMessage(_deviceId, messageId).then((message) {
             if (message != null && !message.isRead) {
               _messageStoreService.updateMessage(
-                message.copyWith(isRead: true),
+                _deviceId, message.copyWith(isRead: true),
               );
             }
           }).catchError((_) {});
@@ -177,7 +177,7 @@ class DeviceNotificationManager {
 
       for (final session in sessions) {
         final employeeId = session.employeeId;
-        final messages = await _messageStoreService.getMessages(employeeId);
+        final messages = await _messageStoreService.getMessages(_deviceId, employeeId);
         final unreadMessages = messages
             .where((m) => m.role == MessageRole.assistant && !m.isRead)
             .toList();
@@ -303,9 +303,9 @@ class DeviceNotificationManager {
   /// 返回值为 DB 中该员工剩余的未读消息数量，调用方可用其修正内存缓存。
   Future<int> markMessagesAsReadInDb(String employeeId, String? fromDeviceId) async {
     try {
-      _messageStoreService.markAsReadInDb(employeeId);
+      _messageStoreService.markAsReadInDb(_deviceId, employeeId);
       // 从 DB SQL 统计未读数量
-      return _messageStoreService.getUnreadCount(employeeId);
+      return _messageStoreService.getUnreadCount(_deviceId, employeeId);
     } catch (_) {
       return -1;
     }

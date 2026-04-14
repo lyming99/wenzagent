@@ -306,7 +306,15 @@ void registerHostRpcMethods({
         .map((m) => ChatMessage.fromJson(m as Map<String, dynamic>))
         .toList();
 
-    await messageStore.addMessages(messages);
+    // 消息携带各自的 deviceId，按设备分组写入
+    final byDevice = <String, List<ChatMessage>>{};
+    for (final msg in messages) {
+      final did = msg.deviceId ?? '';
+      (byDevice[did] ??= []).add(msg);
+    }
+    for (final entry in byDevice.entries) {
+      await messageStore.addMessages(entry.key, entry.value);
+    }
     return {'count': messages.length};
   });
 

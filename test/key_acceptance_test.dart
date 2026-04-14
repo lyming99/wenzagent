@@ -75,7 +75,7 @@ void main() {
           createdAt: DateTime.now().add(Duration(seconds: i)),
           deviceId: deviceIdA,
         );
-        await messageStore.addMessage(msg, deviceId: deviceIdA);
+        await messageStore.addMessage(deviceIdA, msg);
       }
 
       final maxSeqBefore = rawStore.getMaxSeqForEmployeeAll(employeeId);
@@ -84,8 +84,8 @@ void main() {
       // 2. 清空会话
       final clearSeqValue = maxSeqBefore + 1;
       watermarkStore.setClearSeq(employeeId, clearSeqValue, deviceId: deviceIdA);
-      await messageStore.deleteMessages(employeeId, deviceId: deviceIdA);
-      messageStore.resetLastSeq(employeeId, 0);
+      await messageStore.deleteMessages(deviceIdA, employeeId);
+      messageStore.resetLastSeq(deviceIdA, employeeId, 0);
 
       // 3. 验证清空后消息为空
       var messages = await messageStore.getMessagesWithDeviceId(
@@ -102,7 +102,7 @@ void main() {
         createdAt: DateTime.now(),
         deviceId: deviceIdA,
       );
-      await messageStore.addMessage(newMsg, deviceId: deviceIdA);
+      await messageStore.addMessage(deviceIdA, newMsg);
 
       // 5. 验证新消息可见
       messages = await messageStore.getMessagesWithDeviceId(

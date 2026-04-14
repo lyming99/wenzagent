@@ -443,9 +443,9 @@ class DeviceMessageHandler {
         final messageStore = MessageStoreService.getInstance(_deviceId);
 
         // 删除本地消息
-        await messageStore.deleteMessages(employeeId);
+        await messageStore.deleteMessages(_deviceId, employeeId);
         // 重置水位线为0，确保后续增量同步能正确拉取远程消息
-        messageStore.resetLastSeq(employeeId, 0);
+        messageStore.resetLastSeq(_deviceId, employeeId, 0);
         print('[DeviceMessageHandler] 会话清空后本地消息已清除，水位线已重置: employeeId=$employeeId');
 
         // 尝试通过已有的 AgentProxy 增量同步（拉取远程最新状态）

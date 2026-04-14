@@ -359,7 +359,7 @@ class CachedAgentProxy {
 
     // 去重检查：避免重复创建相同 toolCallId 的临时消息
     final localId = 'local_toolcall_$toolCallId';
-    final exists = await _messageStore.getMessage(localId, deviceId: _deviceId);
+    final exists = await _messageStore.getMessage(_deviceId, localId);
     if (exists != null) {
       print(
           '[CachedAgentProxy] 工具调用临时消息已存在，跳过: $toolName ($toolCallId)');
@@ -436,8 +436,7 @@ class CachedAgentProxy {
 
     // 远程模式：在数据库中查找本地临时消息
     final localId = 'local_toolcall_$toolCallId';
-    final existing = await _messageStore.getMessage(
-        localId, deviceId: _deviceId);
+    final existing = await _messageStore.getMessage(_deviceId, localId);
     if (existing == null) return;
 
     final updatedMessage = _chatMessageToAgentMessage(existing).copyWith(
@@ -467,7 +466,7 @@ class CachedAgentProxy {
     try {
       final chatMsg = _agentMessageToChatMessage(message);
       await _messageStore.addMessage(
-          chatMsg, deviceId: _deviceId, updateWatermark: false);
+          _deviceId, chatMsg, updateWatermark: false);
     } catch (e) {
       print('[CachedAgentProxy] 保存工具调用消息失败: $e');
     }
@@ -477,7 +476,7 @@ class CachedAgentProxy {
   Future<void> _updateToolCallMessageInDb(AgentMessage message) async {
     try {
       final chatMsg = _agentMessageToChatMessage(message);
-      await _messageStore.updateMessage(chatMsg, updateWatermark: false);
+      await _messageStore.updateMessage(_deviceId, chatMsg, updateWatermark: false);
     } catch (e) {
       print('[CachedAgentProxy] 更新工具调用消息失败: $e');
     }
@@ -512,7 +511,7 @@ class CachedAgentProxy {
     for (final toolCallId in toolCallIds) {
       final localId = 'local_toolcall_$toolCallId';
       try {
-        await _messageStore.hardDeleteMessage(localId, deviceId: _deviceId);
+        await _messageStore.hardDeleteMessage(_deviceId, localId);
         deletedCount++;
       } catch (_) {
         // 消息不存在则忽略
@@ -564,7 +563,7 @@ class CachedAgentProxy {
 
     // 从数据库查找并更新原消息
     final existing = await _messageStore.getMessage(
-        originalMessageId, deviceId: _deviceId);
+        _deviceId, originalMessageId);
     if (existing != null) {
       final updatedChatMsg = existing.copyWith(
         metadata: {
@@ -574,7 +573,7 @@ class CachedAgentProxy {
           'updateTime': DateTime.now().toIso8601String(),
         },
       );
-      await _messageStore.updateMessage(updatedChatMsg, deviceId: _deviceId);
+      await _messageStore.updateMessage(_deviceId, updatedChatMsg);
       _notifyMessagesChanged();
     }
 
@@ -593,7 +592,7 @@ class CachedAgentProxy {
 
     // 从数据库查找并更新消息状态
     final existing = await _messageStore.getMessage(
-        messageId, deviceId: _deviceId);
+        _deviceId, messageId);
     if (existing != null) {
       final updatedChatMsg = existing.copyWith(
         metadata: {
@@ -602,9 +601,9 @@ class CachedAgentProxy {
           'updateTime': DateTime.now().toIso8601String(),
         },
       );
-      await _messageStore.updateMessage(updatedChatMsg, deviceId: _deviceId);
+      await _messageStore.updateMessage(_deviceId, updatedChatMsg);
       await _messageStore.updateMessageStatus(
-        messageId, shared.MessageStatus.fromString('queued'),
+        _deviceId, messageId, shared.MessageStatus.fromString('queued'),
       );
       _notifyMessagesChanged();
     }
@@ -641,10 +640,10 @@ class CachedAgentProxy {
     _pendingPermissionRequests.clear();
 
     // 在删除前获取本地 maxSeq，用于设置 clearSeq = lastSeq = maxSeq
-    final maxSeq = _messageStore.getMaxSeq(_employeeId);
-    await _messageStore.deleteMessages(_employeeId, deviceId: _deviceId);
+    final maxSeq = _messageStore.getMaxSeq(_deviceId, _employeeId);
+    await _messageStore.deleteMessages(_deviceId, _employeeId);
     if (maxSeq > 0) {
-      _messageStore.resetLastSeq(_employeeId, maxSeq);
+      _messageStore.resetLastSeq(_deviceId, _employeeId, maxSeq);
     }
     _notifyMessagesChanged();
 
@@ -724,12 +723,12 @@ class CachedAgentProxy {
         final remoteClearSeq = await _proxy.getClearSeq();
         if (remoteClearSeq > 0) {
           final deletedCount = _messageStore.deleteMessagesBeforeSeq(
-            _employeeId, remoteClearSeq,
+            _deviceId, _employeeId, remoteClearSeq,
           );
           if (deletedCount > 0) {
             print(
                 '[CachedAgentProxy] 根据 clearSeq=$remoteClearSeq 删除了 $deletedCount 条本地消息');
-            _messageStore.resetLastSeq(_employeeId, remoteClearSeq);
+            _messageStore.resetLastSeq(_deviceId, _employeeId, remoteClearSeq);
           }
         }
       } catch (e) {
@@ -737,7 +736,7 @@ class CachedAgentProxy {
       }
 
       // 2. 查询本地消息 maxSeq
-      final localMaxSeq = _messageStore.getMaxSeq(_employeeId);
+      final localMaxSeq = _messageStore.getMaxSeq(_deviceId, _employeeId);
 
       // 3. 查询服务端 lastSeq
       int remoteLastSeq = -1;
@@ -785,7 +784,7 @@ class CachedAgentProxy {
             if (isDeleted) {
               try {
                 await _messageStore.hardDeleteMessage(
-                    message.id, deviceId: _deviceId);
+                    _deviceId, message.id);
               } catch (_) {}
               continue;
             }
@@ -794,14 +793,13 @@ class CachedAgentProxy {
                 (shouldSaveAsReadCallback?.call() ?? false);
             final chatMsg = _agentMessageToChatMessage(
                 message, forceRead: forceRead);
-            await _messageStore.addMessage(chatMsg, deviceId: _deviceId);
+            await _messageStore.addMessage(_deviceId, chatMsg);
           }
 
           // 清理已被远程消息取代的本地工具调用临时消息
           await _cleanupSupersededLocalToolCalls(allNewMessages);
 
-          // 更新本地水位线
-          _messageStore.updateLastSeq(_employeeId, currentSeq);
+          // 水位线已在 addMessage 内部逐条更新，此处无需重复
           _notifyMessagesChanged();
 
           print('[CachedAgentProxy] 同步完成: 拉取 ${allNewMessages
@@ -826,12 +824,12 @@ class CachedAgentProxy {
   void _cleanupStaleToolCallMessages() {
     if (_proxy.isLocalMode) return;
 
-    final staleIds = _messageStore.getStaleLocalToolCallMessages(_employeeId);
+    final staleIds = _messageStore.getStaleLocalToolCallMessages(_deviceId, _employeeId);
     if (staleIds.isEmpty) return;
 
     for (final uuid in staleIds) {
       _messageStore.updateMessageStatus(
-        uuid, shared.MessageStatus.failed,
+        _deviceId, uuid, shared.MessageStatus.failed,
         error: '工具调用无结果（agent 可能已重启）',
       );
     }
@@ -993,7 +991,7 @@ class CachedAgentProxy {
   Future<void> _updateMessageStatus(String messageId, String status,
       {String? error}) async {
     await _messageStore.updateMessageStatus(
-      messageId, shared.MessageStatus.fromString(status),
+      _deviceId, messageId, shared.MessageStatus.fromString(status),
       error: error,
     );
     _notifyMessagesChanged();
@@ -1010,7 +1008,7 @@ class CachedAgentProxy {
           (shouldSaveAsReadCallback?.call() ?? false);
       final chatMsg = _agentMessageToChatMessage(message, forceRead: forceRead);
       await _messageStore.addMessage(
-          chatMsg, deviceId: _deviceId, updateWatermark: updateWatermark);
+          _deviceId, chatMsg, updateWatermark: updateWatermark);
     } catch (e) {
       print('保存消息到数据库失败: $e');
     }
@@ -1272,7 +1270,7 @@ class CachedAgentProxy {
 
     // 从数据库中删除消息
     try {
-      await _messageStore.hardDeleteMessage(messageId, deviceId: _deviceId);
+      await _messageStore.hardDeleteMessage(_deviceId, messageId);
       print('[CachedAgentProxy] 已从数据库删除消息: $messageId');
 
       // 本地模式：还需要删除助手回复消息（它们的时间戳紧随用户消息之后）
@@ -1289,7 +1287,7 @@ class CachedAgentProxy {
             if (msg.role == 'assistant') {
               try {
                 await _messageStore.hardDeleteMessage(
-                    msg.id, deviceId: _deviceId);
+                    _deviceId, msg.id);
                 print('[CachedAgentProxy] 已从数据库删除助手消息: ${msg.id}');
 
                 // 从 Agent 内存中删除助手消息
@@ -1337,10 +1335,10 @@ class CachedAgentProxy {
     if (!_proxy.isLocalMode) {
       _pendingPermissionRequests.clear();
       // 使用正确的 deviceId 删除消息
-      await _messageStore.deleteMessages(_employeeId, deviceId: _deviceId);
+      await _messageStore.deleteMessages(_deviceId, _employeeId);
       // 【修复】重置水位线，避免后续增量同步拉取大量删除事件
       // 注意：updateLastSeq 使用 MAX 语义无法降为 0，必须用 resetLastSeq
-      _messageStore.resetLastSeq(_employeeId, 0);
+      _messageStore.resetLastSeq(_deviceId, _employeeId, 0);
       print('[CachedAgentProxy] 会话已清空，水位线已重置为 0');
       _notifyMessagesChanged();
     }
@@ -1486,7 +1484,7 @@ class CachedAgentProxy {
   ///
   /// 从本地数据库统计 assistant 且 is_read=0 的消息数量
   Future<int> getUnreadCount() async {
-    return _messageStore.getUnreadCount(_employeeId);
+    return _messageStore.getUnreadCount(_deviceId, _employeeId);
   }
 
   /// 查询当前会话的未读消息 ID 列表
@@ -1494,7 +1492,7 @@ class CachedAgentProxy {
   /// 从本地数据库查询 assistant 且 is_read=0 的消息 UUID 列表，
   /// 按创建时间升序排列。
   Future<List<String>> getUnreadMessageIds() async {
-    return _messageStore.getUnreadMessageIds(_employeeId);
+    return _messageStore.getUnreadMessageIds(_deviceId, _employeeId);
   }
 
   /// 标记当前会话的所有消息为已读
@@ -1536,7 +1534,7 @@ class CachedAgentProxy {
   /// 3. 通知 UI 刷新消息列表
   Future<void> clearAllUnread() async {
     // 1. 本地数据库批量标记已读
-    _messageStore.markAsReadInDb(_employeeId);
+    _messageStore.markAsReadInDb(_deviceId, _employeeId);
 
     // 2. 通知远程 Agent
     markMessagesAsRead();
@@ -1602,7 +1600,7 @@ class CachedAgentProxy {
 
     _lastSyncTime = null;
     // 使用正确的 deviceId 删除消息
-    await _messageStore.deleteMessages(_employeeId, deviceId: _deviceId);
+    await _messageStore.deleteMessages(_deviceId, _employeeId);
   }
 
   /// 释放资源

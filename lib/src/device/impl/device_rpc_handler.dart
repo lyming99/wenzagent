@@ -665,7 +665,15 @@ class DeviceRpcHandler {
       final messages = request.messages
           .map((m) => ChatMessage.fromJson(m))
           .toList();
-      await _messageStoreService.addMessages(messages);
+      // 消息携带各自的 deviceId，按设备分组写入
+      final byDevice = <String, List<ChatMessage>>{};
+      for (final msg in messages) {
+        final did = msg.deviceId ?? '';
+        (byDevice[did] ??= []).add(msg);
+      }
+      for (final entry in byDevice.entries) {
+        await _messageStoreService.addMessages(entry.key, entry.value);
+      }
       return {'count': messages.length};
     });
 

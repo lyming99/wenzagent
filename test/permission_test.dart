@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:test/test.dart';
 import 'package:wenzagent/src/agent/agent_state.dart';
-import 'package:wenzagent/src/agent/entity/agent_event.dart';
-import 'package:wenzagent/src/agent/entity/agent_message.dart';
 import 'package:wenzagent/src/agent/notification/agent_notification_event.dart';
 import 'package:wenzagent/src/agent/notification/agent_notification_hub.dart';
 
@@ -19,17 +17,6 @@ void main() {
       final hub = AgentNotificationHub();
       final events = <AgentNotificationEvent>[];
       final sub = hub.stream(employeeId: 'emp-1').listen(events.add);
-
-      // 模拟权限请求到达
-      final request = AgentPermissionRequest(
-        requestId: 'req-001',
-        type: 'file_write',
-        description: '写入文件 /tmp/test.txt',
-        functionName: 'write_file',
-        permissionArgKey: 'path',
-        permissionArgValue: '/tmp/test.txt',
-        suggestedPattern: '/tmp/*',
-      );
 
       // 通知 Agent 状态变为等待权限
       hub.onAgentStatusChanged(

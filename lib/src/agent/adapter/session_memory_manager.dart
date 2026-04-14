@@ -229,7 +229,7 @@ class SessionMemoryManager {
           shouldMarkAsRead?.call(employeeId) == true) {
         msgToSave = message.copyWith(isRead: true);
       }
-      _messageStore!.addMessage(msgToSave, deviceId: _deviceId!);
+      _messageStore!.addMessage(_deviceId!, msgToSave);
     }
   }
 
@@ -316,13 +316,13 @@ class SessionMemoryManager {
   Future<void> clearSessionFromDb(String employeeId) async {
     clearSession(employeeId);
     if (_messageStore != null) {
-      await _messageStore!.deleteMessages(employeeId, deviceId: _deviceId);
+      await _messageStore!.deleteMessages(_deviceId!, employeeId);
     }
   }
 
   /// 获取指定 employee 的最大 seq（含已软删除的消息）
   int getMaxSeq(String employeeId) {
-    return _messageStore?.getMaxSeq(employeeId) ?? 0;
+    return _messageStore?.getMaxSeq(_deviceId!, employeeId) ?? 0;
   }
 
   /// 更新消息状态（写 DB）
@@ -330,13 +330,13 @@ class SessionMemoryManager {
     String messageId, String status, {String? error}
   ) async {
     await _messageStore?.updateMessageStatus(
-      messageId, MessageStatus.fromString(status), error: error,
+      _deviceId!, messageId, MessageStatus.fromString(status), error: error,
     );
   }
 
   /// 软删除消息（写 DB）
   Future<void> softDeleteMessage(String messageId) async {
-    await _messageStore?.softDeleteMessage(messageId);
+    await _messageStore?.softDeleteMessage(_deviceId!, messageId);
   }
 
   /// 清理所有会话

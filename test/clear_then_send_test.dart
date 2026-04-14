@@ -83,9 +83,9 @@ void main() {
         createdAt: DateTime.now().add(Duration(seconds: i)),
         deviceId: deviceId,
       );
-      await store.addMessage(msg, deviceId: deviceId);
+      await store.addMessage(deviceId, msg);
       // 读取实际分配的 seq
-      final saved = await store.getMessage('$idPrefix-$i', deviceId: deviceId);
+      final saved = await store.getMessage(deviceId, '$idPrefix-$i');
       if (saved != null) seqs.add(saved.seq);
     }
     return seqs;
@@ -93,21 +93,21 @@ void main() {
 
   /// 辅助：模拟清空会话（服务端）
   Future<int> _serverClearSession() async {
-    final maxSeq = serverStore.getMaxSeq(employeeId);
+    final maxSeq = serverStore.getMaxSeq(deviceIdA, employeeId);
     // 1. 设置 clearSeq = lastSeq = maxSeq
     if (maxSeq > 0) {
       serverWatermark.setClearSeq(employeeId, maxSeq, deviceId: deviceIdA);
       serverWatermark.resetLastSeq(employeeId, maxSeq, deviceId: deviceIdA);
     }
     // 2. 硬删除消息
-    await serverStore.deleteMessages(employeeId, deviceId: deviceIdA);
+    await serverStore.deleteMessages(deviceIdA, employeeId);
     return maxSeq;
   }
 
   /// 辅助：模拟客户端收到清空事件
   Future<void> _clientHandleClear() async {
-    final maxSeq = clientStore.getMaxSeq(employeeId);
-    await clientStore.deleteMessages(employeeId, deviceId: deviceIdB);
+    final maxSeq = clientStore.getMaxSeq(deviceIdB, employeeId);
+    await clientStore.deleteMessages(deviceIdB, employeeId);
     if (maxSeq > 0) {
       clientWatermark.resetLastSeq(employeeId, maxSeq, deviceId: deviceIdB);
     }

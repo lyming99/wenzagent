@@ -125,7 +125,13 @@ class MessageStore {
     ''', [employeeId, deviceId, seq, DateTime.now().millisecondsSinceEpoch]);
   }
 
-  /// 使用明确 deviceId 添加消息
+  /// 使用明确 deviceId 添加消息（upsert）
+  ///
+  /// seq 分配流程：
+  /// 1. 查询水位表 lastSeq（含 clearSeq 上界）
+  /// 2. 从水位线分配新 seq = max(messages, watermark, clearSeq) + 1
+  /// 3. INSERT OR REPLACE 写入消息
+  /// 4. 更新水位表 lastSeq
   ///
   /// [updateWatermark] 是否更新同步水位线，默认 true。
   /// 本地临时消息（localOnly）应传 false，避免本地分配的 seq 污染同步水位线。
@@ -136,11 +142,9 @@ class MessageStore {
   }) async {
     _validateDeviceId(deviceId, 'addWithDeviceId');
     final effDeviceId = deviceId!;
-    // 如果 seq 为 0，自动分配下一个序列号
-    var msg = message;
-    if (msg.seq == 0) {
-      msg = msg.copyWith(seq: getNextSeq(deviceId: effDeviceId));
-    }
+    // 始终从本地水位线分配 seq，忽略远程携带的 seq
+    final newSeq = getNextSeq(deviceId: effDeviceId);
+    final msg = message.copyWith(seq: newSeq);
     _db.execute('''
       INSERT OR REPLACE INTO messages (
         uuid, employee_id, device_id, role, type, content,
