@@ -213,6 +213,9 @@ class MessageProcessor {
   /// 是否正在进行打断判断（防止并发）
   bool _isJudging = false;
 
+  /// 待处理的权限请求数量（引用计数，支持多个并发权限请求）
+  int _permissionBlockCount = 0;
+
   /// 状态变更回调
   void Function(AgentStatus status)? onStateChanged;
 
@@ -362,11 +365,19 @@ class MessageProcessor {
   }
 
   /// 设置权限阻塞
+  ///
+  /// 使用引用计数支持多个并发权限请求：每个 requestId 增加计数，
+  /// 每次 null 调用减少计数，计数归零时才恢复为 processing 状态。
   void setPermissionBlocked(String? requestId) {
     if (requestId != null) {
+      _permissionBlockCount++;
       _setStatus(AgentStatus.waitingPermission);
     } else {
-      _setStatus(AgentStatus.processing);
+      _permissionBlockCount--;
+      if (_permissionBlockCount <= 0) {
+        _permissionBlockCount = 0;
+        _setStatus(AgentStatus.processing);
+      }
     }
   }
 
