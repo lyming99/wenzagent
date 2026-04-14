@@ -10,6 +10,8 @@ import '../rpc/agent_rpc_util.dart';
 import '../tool/agent_tool.dart';
 import '../../utils/logger.dart';
 
+part 'agent_proxy_remote_ops.dart';
+
 /// RPC 调用回调类型
 typedef RpcCall =
     Future<Map<String, dynamic>> Function(
@@ -41,6 +43,9 @@ class AgentProxy {
 
   /// RPC 工具类（远程模式使用）
   AgentRpcUtil? _rpcUtil;
+
+  /// 远程操作封装
+  _RemoteOps? _remoteOps;
 
   /// 远程状态缓存
   final _RemoteStateCache _remoteCache = _RemoteStateCache();
@@ -76,6 +81,14 @@ class AgentProxy {
   }) : isLocalMode = false,
        _localAgent = null {
     _rpcUtil = AgentRpcUtil(rpcCall);
+    _remoteOps = _RemoteOps(
+      rpcUtil: _rpcUtil!,
+      employeeId: employeeId,
+      remoteCache: _remoteCache,
+      removeConfirmedMessages: _removeConfirmedMessages,
+      eventController: _eventController,
+      stateController: _stateController,
+    );
     if (remoteEventStream != null) {
       _subscribeRemoteEvents(remoteEventStream);
     }
@@ -119,69 +132,69 @@ class AgentProxy {
   /// 发送消息
   Future<String> sendMessage(MessageInput input) async {
     _log.debug('sendMessage isLocalMode: $isLocalMode');
-    
-    // 🔑 关键：在客户端生成UUID，确保远程和本地ID一致
+
+    // 关键：在客户端生成UUID，确保远程和本地ID一致
     final messageId = input.id ?? const Uuid().v4();
     _log.debug('消息ID: $messageId (${input.id != null ? "客户端提供" : "客户端生成"})');
-    
+
     // 创建带有ID的input副本
     final inputWithId = input.id != null ? input : input.copyWith(id: messageId);
     _log.debug('inputWithId.id: ${inputWithId.id}');
-    
-    // 🔑 如果是客户端生成的ID，验证UUID格式
+
+    // 如果是客户端生成的ID，验证UUID格式
     // 如果是用户提供ID，不验证（允许自定义格式）
     if (input.id == null && !_isValidUUID(messageId)) {
       _log.warn('生成的消息ID不是有效的UUID格式: $messageId');
       // 但不抛出异常，继续使用
     }
-    
+
     if (isLocalMode && _localAgent != null) {
       _log.info('调用本地Agent sendMessage');
       final returnedId = await _localAgent.sendMessage(inputWithId);
-      
-      // 🔑 验证本地Agent没有修改ID
+
+      // 验证本地Agent没有修改ID
       if (returnedId != messageId) {
         _log.error('严重错误：本地Agent修改了消息ID！期望: $messageId, 实际: $returnedId');
         // 记录错误但继续使用客户端生成的ID
       }
-      
+
       // 将完整消息数据添加到待确认队列（使用客户端生成的messageId）
       final pendingMessage = _createPendingMessage(inputWithId, messageId);
       _pendingMessageQueue.add(pendingMessage);
-      
-      // ✅ 返回客户端生成的messageId，而不是Agent返回的ID
+
+      // 返回客户端生成的messageId，而不是Agent返回的ID
       return messageId;
     }
-    
+
     _log.info('调用RPC sendMessage');
     // 将 MessageInput 转换为 Map 以便 RPC 传输
     final messageData = inputWithId.toMap();
     _log.debug('发送的消息数据: $messageData');
     _log.debug('消息数据中的ID: ${messageData['id']}');
-    
+
     final request = SendMessageRequest(
       employeeId: employeeId,
       messageData: messageData,
     );
     final result = await _rpcUtil!.sendMessage(request);
-    
-    // ✅ 使用客户端生成的ID，而不是远程返回的ID
+
+    // 使用客户端生成的ID，而不是远程返回的ID
     // 远程服务器应该使用客户端提供的ID
     final returnedId = result['messageId'] as String? ?? '';
     _log.debug('远程返回的消息ID: $returnedId');
-    
+
     if (returnedId.isNotEmpty && returnedId != messageId) {
       _log.error('严重错误：远程Agent修改了消息ID！期望: $messageId, 实际: $returnedId');
     }
-    
+
     // 将完整消息数据添加到待确认队列
     final pendingMessage = _createPendingMessage(inputWithId, messageId);
     _pendingMessageQueue.add(pendingMessage);
-    
+
     _log.debug('返回消息ID: $messageId');
     return messageId;
   }
-  
+
   /// 验证UUID格式
   bool _isValidUUID(String uuid) {
     final uuidRegExp = RegExp(
@@ -255,14 +268,7 @@ class AgentProxy {
       _removeConfirmedMessages(messages.map((m) => m.toMap()).toList());
       return messages;
     }
-    final request = GetSessionMessagesRequest(employeeId: employeeId);
-    final result = await _rpcUtil!.getSessionMessages(request);
-    final messages =
-        (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    // 根据返回的消息ID，从消息队列中移除
-    _removeConfirmedMessages(messages);
-    // 转换为 AgentMessage 列表
-    return messages.map((m) => AgentMessage.fromMap(m)).toList();
+    return _remoteOps!.getSessionMessages();
   }
 
   /// 根据用户消息计数获取会话消息
@@ -280,17 +286,9 @@ class AgentProxy {
       _removeConfirmedMessages(messages.map((m) => m.toMap()).toList());
       return messages;
     }
-    final request = GetSessionMessagesByUserCountRequest(
-      employeeId: employeeId,
+    return _remoteOps!.getSessionMessagesByUserCount(
       userMessageLimit: userMessageLimit,
     );
-    final result = await _rpcUtil!.getSessionMessagesByUserCount(request);
-    final messages =
-        (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    // 根据返回的消息ID，从消息队列中移除
-    _removeConfirmedMessages(messages);
-    // 转换为 AgentMessage 列表
-    return messages.map((m) => AgentMessage.fromMap(m)).toList();
   }
 
   /// 分页获取会话消息
@@ -310,18 +308,10 @@ class AgentProxy {
       _removeConfirmedMessages(messages.map((m) => m.toMap()).toList());
       return messages;
     }
-    final request = GetSessionMessagesPagedRequest(
-      employeeId: employeeId,
+    return _remoteOps!.getSessionMessagesPaged(
       pageSize: pageSize,
       offset: offset,
     );
-    final result = await _rpcUtil!.getSessionMessagesPaged(request);
-    final messages =
-        (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    // 根据返回的消息ID，从消息队列中移除
-    _removeConfirmedMessages(messages);
-    // 转换为 AgentMessage 列表
-    return messages.map((m) => AgentMessage.fromMap(m)).toList();
   }
 
   /// 获取未接收消息
@@ -343,17 +333,11 @@ class AgentProxy {
         limit: limit,
       );
     }
-    final request = GetUnreceivedMessagesRequest(
-      employeeId: employeeId,
+    return _remoteOps!.getUnreceivedMessages(
       receiverDeviceId: receiverDeviceId,
       offset: offset,
       limit: limit,
     );
-    final result = await _rpcUtil!.getUnreceivedMessages(request);
-    final messages =
-        (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    // 转换为 AgentMessage 列表
-    return messages.map((m) => AgentMessage.fromMap(m)).toList();
   }
 
   /// 标记消息为已接收
@@ -372,12 +356,10 @@ class AgentProxy {
         messageReceiveList: messageReceiveList,
       );
     }
-    final request = MarkMessagesAsReceivedRequest(
-      employeeId: employeeId,
+    return _remoteOps!.markMessagesAsReceived(
       receiverDeviceId: receiverDeviceId,
       messageReceiveList: messageReceiveList,
     );
-    await _rpcUtil!.markMessagesAsReceived(request);
   }
 
   /// 增量拉取消息（基于 LSN）
@@ -394,15 +376,10 @@ class AgentProxy {
         limit: limit,
       );
     }
-    final request = GetMessagesAfterSeqRequest(
-      employeeId: employeeId,
+    return _remoteOps!.getMessagesAfterSeq(
       lastSeq: lastSeq,
       limit: limit,
     );
-    final result = await _rpcUtil!.getMessagesAfterSeq(request);
-    final messages =
-        (result['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    return messages.map((m) => AgentMessage.fromMap(m)).toList();
   }
 
   /// 获取会话的最大 seq
@@ -410,9 +387,7 @@ class AgentProxy {
     if (isLocalMode && _localAgent != null) {
       return _localAgent.getMaxSeq(employeeId: employeeId);
     }
-    final request = GetSessionMessagesRequest(employeeId: employeeId);
-    final result = await _rpcUtil!.getMaxSeq(request);
-    return result['maxSeq'] as int? ?? 0;
+    return _remoteOps!.getMaxSeq();
   }
 
   /// 获取会话的最小 seq
@@ -422,9 +397,7 @@ class AgentProxy {
     if (isLocalMode && _localAgent != null) {
       return _localAgent.getMinSeq(employeeId: employeeId);
     }
-    final request = GetMinSeqRequest(employeeId: employeeId);
-    final result = await _rpcUtil!.getMinSeq(request);
-    return result['minSeq'] as int? ?? 0;
+    return _remoteOps!.getMinSeq();
   }
 
   /// 获取清空水位线
@@ -436,9 +409,7 @@ class AgentProxy {
       // 本地模式：从 SyncWatermarkStore 读取
       return 0; // 本地模式不需要此机制，清空事件通过内存事件直接传递
     }
-    final request = GetClearSeqRequest(employeeId: employeeId);
-    final result = await _rpcUtil!.getClearSeq(request);
-    return result['clearSeq'] as int? ?? 0;
+    return _remoteOps!.getClearSeq();
   }
 
   /// 标记消息为已读
@@ -455,12 +426,10 @@ class AgentProxy {
         messageIds: messageIds,
       );
     }
-    final request = MarkMessagesAsReadRequest(
-      employeeId: employeeId,
+    return _remoteOps!.markMessagesAsRead(
       readerDeviceId: readerDeviceId,
       messageIds: messageIds,
     );
-    await _rpcUtil!.markMessagesAsRead(request);
   }
 
   /// 查询消息已读状态
@@ -475,12 +444,7 @@ class AgentProxy {
         employeeId: employeeId,
       );
     }
-    final request = GetMessagesReadStatusRequest(
-      employeeId: employeeId,
-      deviceId: deviceId,
-    );
-    final result = await _rpcUtil!.getMessagesReadStatus(request);
-    return MessagesReadStatusResult.fromMap(result);
+    return _remoteOps!.getMessagesReadStatus(deviceId: deviceId);
   }
 
   /// 清空当前会话
@@ -488,8 +452,7 @@ class AgentProxy {
     if (isLocalMode && _localAgent != null) {
       return _localAgent.clearCurrentSession();
     }
-    final request = ClearSessionRequest(employeeId: employeeId);
-    await _rpcUtil!.clearSession(request);
+    return _remoteOps!.clearCurrentSession();
   }
 
   // ===== 上下文管理 =====
@@ -539,14 +502,7 @@ class AgentProxy {
     if (isLocalMode && _localAgent != null) {
       return _localAgent.getProviderConfig();
     }
-    final request = GetProviderRequest(employeeId: employeeId);
-    final result = await _rpcUtil!.getProvider(request);
-    final configMap = result['providerConfig'] as Map<String, dynamic>?;
-    if (configMap != null) {
-      _remoteCache.providerConfig = configMap;
-      return ProviderConfig.fromMap(configMap);
-    }
-    return null;
+    return _remoteOps!.getProviderConfigAsync();
   }
 
   // ===== 技能管理 =====
@@ -577,11 +533,7 @@ class AgentProxy {
     if (isLocalMode && _localAgent != null) {
       return _localAgent.getSkillsConfig();
     }
-    final request = AgentGetSkillsRequest(employeeId: employeeId);
-    final result = await _rpcUtil!.getSkills(request);
-    final skills = (result['skills'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    _remoteCache.skillsConfig = skills;
-    return skills;
+    return _remoteOps!.getSkillsConfigAsync();
   }
 
   // ===== MCP 管理 =====
@@ -612,11 +564,7 @@ class AgentProxy {
     if (isLocalMode && _localAgent != null) {
       return _localAgent.getMcpConfigs();
     }
-    final request = GetMcpConfigsRequest(employeeId: employeeId);
-    final result = await _rpcUtil!.getMcpConfigs(request);
-    final configs = (result['mcpConfigs'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    _remoteCache.mcpConfigs = configs;
-    return configs;
+    return _remoteOps!.getMcpConfigsAsync();
   }
 
   // ===== 项目管理 =====
@@ -647,11 +595,7 @@ class AgentProxy {
     if (isLocalMode && _localAgent != null) {
       return _localAgent.getCurrentProjectUuid();
     }
-    final request = GetProjectUuidRequest(employeeId: employeeId);
-    final result = await _rpcUtil!.getProjectUuid(request);
-    final uuid = result['projectUuid'] as String?;
-    _remoteCache.projectUuid = uuid;
-    return uuid;
+    return _remoteOps!.getCurrentProjectUuidAsync();
   }
 
   /// 检查路径是否存在于目标设备上（异步版本，支持远程 RPC）
@@ -663,9 +607,7 @@ class AgentProxy {
       final file = !dir ? await File(path).exists() : false;
       return PathExistsResult(exists: dir || file, isDirectory: dir);
     }
-    final request = CheckPathExistsRequest(employeeId: employeeId, path: path);
-    final result = await _rpcUtil!.checkPathExists(request);
-    return PathExistsResult.fromMap(result);
+    return _remoteOps!.checkPathExists(path);
   }
 
   /// 列出目录内容
@@ -708,9 +650,7 @@ class AgentProxy {
         return DirectoryListingResult(items: [], error: e.toString());
       }
     }
-    final request = ListDirectoryRequest(employeeId: employeeId, path: path);
-    final result = await _rpcUtil!.listDirectory(request);
-    return DirectoryListingResult.fromMap(result);
+    return _remoteOps!.listDirectory(path);
   }
 
   /// 获取文件/目录信息
@@ -746,9 +686,7 @@ class AgentProxy {
       }
       return const FileInfoResult(exists: false);
     }
-    final request = GetFileInfoRequest(employeeId: employeeId, path: path);
-    final result = await _rpcUtil!.getFileInfo(request);
-    return FileInfoResult.fromMap(result);
+    return _remoteOps!.getFileInfo(path);
   }
 
   /// 创建目录
@@ -763,9 +701,7 @@ class AgentProxy {
         return FileOpResult(success: false, error: e.toString());
       }
     }
-    final request = CreateDirectoryRequest(employeeId: employeeId, path: path);
-    final result = await _rpcUtil!.createDirectory(request);
-    return FileOpResult.fromMap(result);
+    return _remoteOps!.createDirectory(path);
   }
 
   /// 删除文件/目录
@@ -789,9 +725,7 @@ class AgentProxy {
         return FileOpResult(success: false, error: e.toString());
       }
     }
-    final request = DeleteFileRequest(employeeId: employeeId, path: path);
-    final result = await _rpcUtil!.deleteFile(request);
-    return FileOpResult.fromMap(result);
+    return _remoteOps!.deleteFile(path);
   }
 
   /// 重命名/移动文件
@@ -813,13 +747,7 @@ class AgentProxy {
         return FileOpResult(success: false, error: e.toString());
       }
     }
-    final request = RenameFileRequest(
-      employeeId: employeeId,
-      oldPath: oldPath,
-      newPath: newPath,
-    );
-    final result = await _rpcUtil!.renameFile(request);
-    return FileOpResult.fromMap(result);
+    return _remoteOps!.renameFile(oldPath, newPath);
   }
 
   // ===== 工具管理 =====
@@ -880,9 +808,7 @@ class AgentProxy {
     if (isLocalMode && _localAgent != null) {
       return _localAgent.getStateSnapshot();
     }
-    final request = GetStateRequest(employeeId: employeeId);
-    final result = await _rpcUtil!.getState(request);
-    return AgentStateSnapshot.fromMap(result);
+    return _remoteOps!.getStateSnapshotAsync();
   }
 
   /// 获取正在调用的工具 callId 列表
@@ -941,79 +867,7 @@ class AgentProxy {
   /// 订阅远程事件流
   void _subscribeRemoteEvents(Stream<AgentEvent> stream) {
     _remoteEventSubscription?.cancel();
-    _remoteEventSubscription = stream.listen(
-      _onRemoteEvent,
-      onError: (error) {
-        // 连接错误
-      },
-      onDone: () {
-        // 连接关闭
-      },
-    );
-  }
-
-  /// 处理远程事件
-  void _onRemoteEvent(AgentEvent event) {
-    final type = event.type;
-    final data = event.data;
-    final eventEmployeeUuid = event.employeeId;
-
-    // 只处理与当前 Agent 相关的事件
-    if (eventEmployeeUuid != null && eventEmployeeUuid != employeeId) {
-      return;
-    }
-
-    // 🔑 关键改进：广播原始事件，供CachedAgentProxy监听
-    _eventController.add(event);
-
-    switch (type) {
-      case AgentEventType.agentStatusChanged:
-        final snapshot = AgentStateSnapshot.fromMap(data);
-        // 只在状态真正改变时才更新和广播
-        if (_remoteCache.status != snapshot.status) {
-          _remoteCache.snapshot = snapshot;
-          _remoteCache.status = snapshot.status;
-          _stateController.add(snapshot);
-        }
-        break;
-
-      case AgentEventType.messageStatusChanged:
-        // 消息状态变化事件，需要根据消息状态更新 Agent 状态
-        final messageStatusStr = data['status'] as String?;
-        if (messageStatusStr != null) {
-          final messageStatus = AgentMessageStatus.fromString(messageStatusStr);
-
-          // 只有在消息完成、失败、中断或撤回时才更新状态为 idle
-          // 并且当前状态不是 idle 时才触发更新
-          if ((messageStatus == AgentMessageStatus.completed ||
-                  messageStatus == AgentMessageStatus.failed ||
-                  messageStatus == AgentMessageStatus.interrupted ||
-                  messageStatus == AgentMessageStatus.revoked) &&
-              _remoteCache.status != AgentStatus.idle) {
-            // 消息处理完成，状态应该变为 idle
-            final idleSnapshot = AgentStateSnapshot(
-              status: AgentStatus.idle,
-              currentProcessingMessageId: null,
-              queuedMessageIds: data['queuedMessageIds'] as List<String>? ?? [],
-              isStreaming: false,
-              queueLength: data['queueLength'] as int? ?? 0,
-            );
-            _remoteCache.snapshot = idleSnapshot;
-            _remoteCache.status = AgentStatus.idle;
-            _stateController.add(idleSnapshot);
-          } else {
-            // 消息正在排队或处理中，或者已经是 idle 状态
-            // 保持当前状态，但可能需要更新其他信息
-            if (_remoteCache.snapshot != null) {
-              _stateController.add(_remoteCache.snapshot!);
-            }
-          }
-        }
-        break;
-
-      default:
-        break;
-    }
+    _remoteEventSubscription = _remoteOps!.subscribeRemoteEvents(stream);
   }
 
   /// 释放资源

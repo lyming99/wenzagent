@@ -1,0 +1,285 @@
+part of 'cached_agent_proxy.dart';
+
+/// 消息同步 mixin
+mixin _CachedProxyMessageSync on _CachedAgentProxyBase {
+  // ===== 消息同步 =====
+
+  /// 去抖同步远程消息（500ms 内只触发一次，避免短时间内多次调用）
+  @override
+  void _debouncedSyncMessages() {
+    // 会话清空保护期内，跳过消息同步
+    if (_sessionClearPending) {
+      _CachedAgentProxyBase._log.debug('会话清空保护期内，跳过去抖同步');
+      return;
+    }
+    _syncDebounceTimer?.cancel();
+    _syncDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+      if (!_sessionClearPending) {
+        _syncMessagesFromRemote();
+      }
+    });
+  }
+
+  /// 从远程同步消息（简化版）
+  ///
+  /// 流程：
+  /// 1. 查询服务端 clearSeq，硬删除本地 seq < clearSeq 的消息
+  /// 2. 查询本地消息 maxSeq，查询服务端 lastSeq，拉取差量消息直接写入
+  @override
+  Future<void> _syncMessagesFromRemote() async {
+    if (_isDisposed || _proxy.isLocalMode) return;
+
+    try {
+      _CachedAgentProxyBase._log.debug('开始从远程同步消息...');
+
+      // 1. 查询服务端 clearSeq，硬删除本地旧消息
+      try {
+        final remoteClearSeq = await _proxy.getClearSeq();
+        if (remoteClearSeq > 0) {
+          final deletedCount = _messageStore.deleteMessagesBeforeSeq(
+            _deviceId, _employeeId, remoteClearSeq,
+          );
+          if (deletedCount > 0) {
+            _CachedAgentProxyBase._log.info('根据 clearSeq=$remoteClearSeq 删除了 $deletedCount 条本地消息');
+            _messageStore.resetLastSeq(_deviceId, _employeeId, remoteClearSeq);
+          }
+        }
+      } catch (e) {
+        _CachedAgentProxyBase._log.error('获取远程 clearSeq 失败', e);
+      }
+
+      // 2. 查询本地消息 localLastSeq
+      final localLastSeq = _messageStore.getLastSeq(_deviceId, _employeeId);
+
+      // 3. 查询服务端 lastSeq
+      int remoteLastSeq = -1;
+      try {
+        remoteLastSeq = await _proxy.getMaxSeq();
+      } catch (e) {
+        _CachedAgentProxyBase._log.error('获取远程 lastSeq 失败', e);
+        return;
+      }
+
+      _CachedAgentProxyBase._log.debug('localLastSeq=$localLastSeq, remoteLastSeq=$remoteLastSeq');
+
+      // 4. 增量拉取：远程有更新的消息时，拉取 seq > localMaxSeq 的消息
+      if (remoteLastSeq > localLastSeq) {
+        const batchSize = 20;
+        final allNewMessages = <AgentMessage>[];
+        int currentSeq = localLastSeq;
+
+        while (true) {
+          final batch = await _proxy.getMessagesAfterSeq(
+            lastSeq: currentSeq,
+            limit: batchSize,
+          );
+
+          if (batch.isEmpty) break;
+          allNewMessages.addAll(batch);
+
+          for (final msg in batch) {
+            final seq = msg.metadata?['seq'] as int? ?? 0;
+            if (seq > currentSeq) currentSeq = seq;
+          }
+
+          if (batch.length < batchSize) break;
+        }
+        _messageStore.updateLastSeq(_deviceId, _employeeId, currentSeq);
+
+        // 5. 直接写入本地（INSERT OR REPLACE，无需比较）
+        if (allNewMessages.isNotEmpty) {
+          for (final message in allNewMessages) {
+            final deletedRaw = message.metadata?['deleted'];
+            final isDeleted = deletedRaw is bool
+                ? deletedRaw
+                : (deletedRaw is int ? deletedRaw != 0 : false);
+
+            if (isDeleted) {
+              try {
+                await _messageStore.hardDeleteMessage(
+                    _deviceId, message.id);
+              } catch (e) {
+                _CachedAgentProxyBase._log.debug('hard delete synced deleted message failed: $e');
+              }
+              continue;
+            }
+
+            final forceRead = message.role == 'assistant' &&
+                (shouldSaveAsReadCallback?.call() ?? false);
+            final chatMsg = _agentMessageToChatMessage(
+                message, forceRead: forceRead);
+            await _messageStore.addMessage(_deviceId, chatMsg);
+          }
+
+          // 清理已被远程消息取代的本地工具调用临时消息
+          await _cleanupSupersededLocalToolCalls(allNewMessages);
+
+          // 水位线已在 addMessage 内部逐条更新，此处无需重复
+          _notifyMessagesChanged();
+
+          _CachedAgentProxyBase._log.info('同步完成: 拉取 ${allNewMessages.length} 条, lastSeq=$currentSeq');
+        }
+      } else {
+        _CachedAgentProxyBase._log.debug('无新消息需要同步');
+      }
+    } catch (e) {
+      _CachedAgentProxyBase._log.error('同步远程消息失败: $e');
+    }
+
+    // 清理残留的本地工具调用临时消息
+    _cleanupStaleToolCallMessages();
+  }
+
+  /// 清理已被远程消息取代的本地工具调用临时消息
+  ///
+  /// 远程同步拉取的消息中包含官方的 assistant 消息（含 toolCalls）和
+  /// tool result 消息，与本地创建的 `local_toolcall_*` 临时消息重复。
+  /// 此方法提取远程消息中的 toolCallId，删除对应的本地临时消息。
+  @override
+  Future<void> _cleanupSupersededLocalToolCalls(
+      List<AgentMessage> syncedMessages) async {
+    if (_proxy.isLocalMode) return;
+
+    final toolCallIds = <String>{};
+    for (final msg in syncedMessages) {
+      // 从 assistant 消息的 toolCalls 字段提取
+      if (msg.toolCalls != null) {
+        for (final tc in msg.toolCalls!) {
+          if (tc.id.isNotEmpty) toolCallIds.add(tc.id);
+        }
+      }
+      // 从 tool result 消息的 toolCallId 字段提取
+      if (msg.toolCallId != null && msg.toolCallId!.isNotEmpty) {
+        toolCallIds.add(msg.toolCallId!);
+      }
+    }
+
+    if (toolCallIds.isEmpty) return;
+
+    int deletedCount = 0;
+    for (final toolCallId in toolCallIds) {
+      final localId = 'local_toolcall_$toolCallId';
+      try {
+        await _messageStore.hardDeleteMessage(_deviceId, localId);
+        deletedCount++;
+      } catch (e) {
+        _CachedAgentProxyBase._log.debug('cleanup superseded local tool call failed, message not found: $e');
+      }
+    }
+
+    if (deletedCount > 0) {
+      _CachedAgentProxyBase._log.info('已清理 $deletedCount 条被远程消息取代的本地工具调用临时消息');
+    }
+  }
+
+  /// 清理残留的本地工具调用临时消息
+  ///
+  /// 当 agent 被重启或崩溃后，之前发出的工具调用可能永远没有结果返回。
+  /// 这些残留的 `local_toolcall_*` 消息会一直处于 processing 状态。
+  /// 在每次同步完成后，将这些消息标记为 failed（无结果）。
+  @override
+  void _cleanupStaleToolCallMessages() {
+    if (_proxy.isLocalMode) return;
+
+    final staleIds = _messageStore.getStaleLocalToolCallMessages(_deviceId, _employeeId);
+    if (staleIds.isEmpty) return;
+
+    for (final uuid in staleIds) {
+      _messageStore.updateMessageStatus(
+        _deviceId, uuid, shared.MessageStatus.failed,
+        error: '工具调用无结果（agent 可能已重启）',
+      );
+    }
+    _CachedAgentProxyBase._log.info('已清理 ${staleIds.length} 条残留工具调用消息');
+  }
+
+  /// 重发待处理的标记已读队列
+  ///
+  /// 断线重连后，自动重新发送之前失败的标记已读请求。
+  /// 每条请求独立发送，成功的立即移除，失败的保留等待下次重发。
+  @override
+  Future<void> _flushMarkAsReadQueue() async {
+    if (_isDisposed || _proxy.isLocalMode) return;
+
+    final pending = _markReadQueueStore.getPending(employeeId: _employeeId);
+    if (pending.isEmpty) return;
+
+    _CachedAgentProxyBase._log.info('开始重发 ${pending.length} 条待处理的标记已读请求');
+
+    final successIds = <int>[];
+    for (final entry in pending) {
+      try {
+        await _proxy.markMessagesAsRead(
+          readerDeviceId: entry.readerDeviceId,
+          messageIds: entry.messageIds,
+        );
+        successIds.add(entry.id);
+      } catch (e) {
+        // 单条失败不影响后续发送，保留在队列中等待下次重发
+        _CachedAgentProxyBase._log.error('重发标记已读请求失败: ${entry.id}', e);
+      }
+    }
+
+    if (successIds.isNotEmpty) {
+      _markReadQueueStore.removeAll(successIds);
+      _CachedAgentProxyBase._log.info('标记已读队列已清理 ${successIds.length} 条成功记录');
+    }
+  }
+
+  /// 同步远程会话状态和权限请求
+  ///
+  /// 在初始化时查询远程 Agent 状态，如果正在等待权限，则查询并缓存权限请求。
+  /// 同时同步远程的 Provider 配置和项目 UUID 到本地缓存。
+  @override
+  Future<void> _syncRemoteStateAndPermission() async {
+    if (_isDisposed || _proxy.isLocalMode) return;
+
+    try {
+      _CachedAgentProxyBase._log.debug('开始同步远程会话状态和权限请求...');
+
+      // 1. 查询远程 Agent 状态
+      final stateSnapshot = await _proxy.getStateSnapshotAsync();
+      _CachedAgentProxyBase._log.debug('远程 Agent 状态: ${stateSnapshot.status}');
+
+      // 2. 同步远程 Provider 配置
+      try {
+        final providerConfig = await _proxy.getProviderConfigAsync();
+        if (providerConfig != null) {
+          _CachedAgentProxyBase._log.debug('远程 Provider 配置: ${providerConfig.provider} · ${providerConfig.model}');
+        } else {
+          _CachedAgentProxyBase._log.debug('远程无 Provider 配置');
+        }
+      } catch (e) {
+        _CachedAgentProxyBase._log.error('同步远程 Provider 配置失败', e);
+      }
+
+      // 3. 同步远程项目 UUID
+      try {
+        final projectUuid = await _proxy.getCurrentProjectUuidAsync();
+        _CachedAgentProxyBase._log.debug('远程项目 UUID: $projectUuid');
+      } catch (e) {
+        _CachedAgentProxyBase._log.error('同步远程项目 UUID 失败', e);
+      }
+
+      // 4. 同步远程技能配置
+      try {
+        final skills = await _proxy.getSkillsConfigAsync();
+        _CachedAgentProxyBase._log.debug('远程技能配置: ${skills.length} 个');
+      } catch (e) {
+        _CachedAgentProxyBase._log.error('同步远程技能配置失败', e);
+      }
+
+      // 5. 同步远程 MCP 配置
+      try {
+        final mcpConfigs = await _proxy.getMcpConfigsAsync();
+        _CachedAgentProxyBase._log.debug('远程 MCP 配置: ${mcpConfigs.length} 个');
+      } catch (e) {
+        _CachedAgentProxyBase._log.error('同步远程 MCP 配置失败', e);
+      }
+
+      _CachedAgentProxyBase._log.info('远程状态同步完成');
+    } catch (e) {
+      _CachedAgentProxyBase._log.error('同步远程会话状态失败', e);
+    }
+  }
+}

@@ -19,6 +19,9 @@ import '../../utils/logger.dart';
 import 'context_compressor.dart';
 import 'session_memory_manager.dart';
 
+part 'llm_stream_handler.dart';
+part 'llm_tool_calling_loop.dart';
+
 /// Tool calling 循环最大迭代次数
 const int _maxToolCallIterations = 100;
 
@@ -231,7 +234,7 @@ class LlmChatAdapter implements IChatAdapter {
     _log.debug('stream start, model: ${_providerConfig?.model}');
     () async {
       // 前置校验
-      final error = _validateStreamReady();
+      final error = validateStreamReady();
       if (error != null) {
         controller.add(StreamResponse.error(error));
         await controller.close();
@@ -254,7 +257,7 @@ class LlmChatAdapter implements IChatAdapter {
 
         final hasTools = _toolRegistry != null && !_toolRegistry!.isEmpty;
         final systemPrompt = _buildSystemPrompt();
-        await _prepareCompression(systemPrompt);
+        await prepareCompression(systemPrompt);
 
         // Tool calling 循环
         bool streamCancelled = false;
@@ -279,7 +282,7 @@ class LlmChatAdapter implements IChatAdapter {
           }
 
           // 调用 LLM 流式接口，通过 onChunk 实时推送文本
-          final llmResult = await _callLlmStream(
+          final llmResult = await callLlmStream(
             systemPrompt: systemPrompt,
             hasTools: hasTools,
             streamCancelled: streamCancelled,
@@ -326,13 +329,13 @@ class LlmChatAdapter implements IChatAdapter {
           }
           notReplyRecord.reset();
           // 有工具调用 → 记录 AI 消息（含 toolCalls）到历史
-          _recordAssistantToolCallMessage(
+          recordAssistantToolCallMessage(
             llmResult.aiContentBuffer.toString(),
             llmResult.toolCalls,
           );
 
           // 重复工具调用检测
-          final duplicateError = _checkDuplicateToolCalls(
+          final duplicateError = checkDuplicateToolCalls(
             llmResult.toolCalls,
             lastToolCallsSignature,
             consecutiveDuplicateCount,
@@ -356,7 +359,7 @@ class LlmChatAdapter implements IChatAdapter {
           }
 
           // 权限检查 + 并行执行工具
-          final execResult = await _executeToolCalls(
+          final execResult = await executeToolCalls(
             llmResult.toolCalls,
             alreadyCallsSet: alreadyCallsSet,
             streamCancelled: streamCancelled,
@@ -572,427 +575,6 @@ class LlmChatAdapter implements IChatAdapter {
     _toolRegistry = null;
     _permissionManager = null;
     _toolEventCallback = null;
-  }
-
-  // ===== streamMessage 子方法 =====
-
-  /// 前置校验，返回 null 表示通过，否则返回错误信息
-  String? _validateStreamReady() {
-    if (_chatCapability == null) {
-      _log.error('_chatCapability is null');
-      return '未配置 LLM Provider，请先调用 updateProvider()';
-    }
-    if (_isStreaming) {
-      _log.error('already streaming');
-      return '正在处理中，请等待当前请求完成';
-    }
-    if (currentEmployeeUuid == null) {
-      _log.error('currentEmployeeUuid is null');
-      return '未初始化会话，请先调用 initSession()';
-    }
-    return null;
-  }
-
-  /// 添加用户消息到会话历史
-  ///
-  /// 如果消息已被 AgentImpl.sendMessage 提前持久化（存在于内存中），
-  /// 则先从内存移除，再用当前时间重新创建并持久化，
-  /// 确保 createdAt 和 seq 反映实际发送顺序而非排队顺序。
-  @protected
-  Future<void> addUserMessage(MessageInput message) async {
-    final id = message.id ?? const Uuid().v4();
-    // 如果消息已存在于内存中（被 AgentImpl.sendMessage 提前持久化），
-    // 先从内存中移除，避免 streamMessage 时上下文混乱
-    final session = memoryManager.getSession(currentEmployeeUuid!);
-    if (session != null && session.allMessages.any((m) => m.id == id)) {
-      session.removeMessage(id);
-      _log.debug('用户消息已从内存移除，准备重新持久化: $id');
-    }
-
-    // 用当前时间创建消息，确保 createdAt 和 seq 反映实际发送顺序
-    final userMessage = shared.ChatMessage.user(
-      id: id,
-      employeeId: currentEmployeeUuid!,
-      content: message.content,
-      createdAt: DateTime.now(),
-    );
-    memoryManager.addMessage(
-      currentEmployeeUuid!,
-      deviceId!,
-      userMessage,
-    );
-  }
-
-  /// 准备上下文压缩
-  Future<void> _prepareCompression(String? systemPrompt) async {
-    if (_compressor == null) return;
-    final session = memoryManager.getSession(currentEmployeeUuid!);
-    if (session == null) return;
-    final allMsgs = session.allMessages;
-    await _compressor!.prepareCompression(
-      employeeId: currentEmployeeUuid!,
-      allMessages: allMsgs,
-      session: session,
-      systemPrompt: systemPrompt,
-    );
-  }
-
-  /// LLM 流式调用，返回 AI 文本、工具调用列表等
-  ///
-  /// 通过 [onChunk] 回调逐块推送文本给调用方。
-  Future<_LlmStreamResult> _callLlmStream({
-    required String? systemPrompt,
-    required bool hasTools,
-    required bool streamCancelled,
-    CancellationToken? cancellationToken,
-    void Function(String chunk)? onChunk,
-  }) async {
-    // 构建消息列表
-    final List<shared.ChatMessage> chatMsgs;
-    if (_compressor != null) {
-      final session = memoryManager.getSession(currentEmployeeUuid!);
-      final allMsgs = session?.allMessages ?? [];
-      chatMsgs = _compressor!.buildCompressedMessages(
-        employeeId: currentEmployeeUuid!,
-        allMessages: allMsgs,
-        systemPrompt: systemPrompt,
-      );
-    } else {
-      chatMsgs = memoryManager.buildMessages(
-        employeeId: currentEmployeeUuid!,
-        systemPrompt: systemPrompt,
-      );
-    }
-
-    final llmMessages = shared.LlmMessageMapper.toLlmDartList(chatMsgs);
-
-    // 构建工具列表
-    final List<llm.Tool>? llmTools;
-    if (hasTools && _toolRegistry != null && _providerConfig != null) {
-      llmTools = _toolRegistry!.getLlmDartTools(_providerConfig!.provider);
-    } else {
-      llmTools = null;
-    }
-    if (hasTools) {
-      _log.debug('已注册工具列表 (${_toolRegistry!.length} 个):');
-    }
-    _log.debug('calling LLM, messages count: ${llmMessages.length}, hasTools: $hasTools');
-
-    final aiContentBuffer = StringBuffer();
-    final thinkingContentBuffer = StringBuffer();
-    final toolCallAggregator = llm.ToolCallAggregator();
-    llm.ChatResponse? finalResponse;
-
-    try {
-      final stream = _chatCapability!.chatStream(
-        llmMessages,
-        tools: llmTools,
-        cancelToken: _dioCancelToken,
-      );
-
-      await for (final event in stream) {
-        if (streamCancelled || cancellationToken?.isCancelled == true) {
-          return _LlmStreamResult.cancelled();
-        }
-        switch (event) {
-          case llm.TextDeltaEvent():
-            final chunk = event.delta;
-            if (chunk.isNotEmpty) {
-              aiContentBuffer.write(chunk);
-              onChunk?.call(chunk);
-            }
-            break;
-          case llm.ToolCallDeltaEvent():
-            toolCallAggregator.addDelta(event.toolCall);
-            break;
-          case llm.ThinkingDeltaEvent():
-            if (event.delta.isNotEmpty) {
-              thinkingContentBuffer.write(event.delta);
-            }
-            break;
-          case llm.CompletionEvent():
-            finalResponse = event.response;
-            _log.debug('finalResponse:${finalResponse.text},${finalResponse.usage.toString()},${finalResponse.toolCalls}');
-            break;
-          case llm.ErrorEvent():
-            _log.warn('LLM stream error event: ${event.error}');
-            return _LlmStreamResult.error('LLM 调用异常: ${event.error.message}');
-        }
-      }
-    } catch (e) {
-      _log.error('LLM stream error', e);
-      return _LlmStreamResult.error('LLM 调用异常: $e');
-    }
-
-    if (cancellationToken?.isCancelled == true) {
-      return _LlmStreamResult.cancelled();
-    }
-
-    var aToolCalls = toolCallAggregator.completedCalls;
-    var toolCalls = finalResponse?.toolCalls ?? <llm.ToolCall>[];
-    if (toolCalls.isEmpty) {
-      toolCalls = aToolCalls;
-    }
-    return _LlmStreamResult(
-      aiContentBuffer: aiContentBuffer,
-      aiThinkingBuffer: thinkingContentBuffer,
-      isDone: aiContentBuffer.toString().trim().isNotEmpty,
-      toolCalls: toolCalls,
-    );
-  }
-
-  /// 记录 assistant 消息（含 toolCalls）到会话历史
-  void _recordAssistantToolCallMessage(
-    String aiContent,
-    List<llm.ToolCall> toolCalls,
-  ) {
-    final chatToolCalls = toolCalls
-        .map((tc) => shared.ToolCall(
-              id: tc.id,
-              name: tc.function.name,
-              arguments: _parseArguments(tc.function.arguments),
-            ))
-        .toList();
-    memoryManager.addMessage(
-      currentEmployeeUuid!,
-      deviceId!,
-      shared.ChatMessage.assistant(
-        id: const Uuid().v4(),
-        employeeId: currentEmployeeUuid!,
-        content: aiContent,
-        toolCalls: chatToolCalls,
-      ),
-    );
-  }
-
-  /// 重复工具调用检测
-  ///
-  /// 返回 null 表示无重复；返回非 null 表示检测到重复，包含更新后的签名和计数。
-  _DuplicateCheckResult? _checkDuplicateToolCalls(
-    List<llm.ToolCall> toolCalls,
-    String? lastSignature,
-    int currentCount,
-  ) {
-    const maxConsecutiveDuplicateRounds = 3;
-
-    final currentSignature = toolCalls
-        .map((tc) => '${tc.function.name}:${tc.function.arguments}')
-        .join('|');
-
-    if (currentSignature == lastSignature) {
-      final newCount = currentCount + 1;
-      _log.warn('检测到重复工具调用 (第 $newCount 次): $currentSignature');
-      return _DuplicateCheckResult(
-        updatedSignature: currentSignature,
-        updatedCount: newCount,
-        isDeadLoop: newCount >= maxConsecutiveDuplicateRounds,
-      );
-    }
-
-    return null;
-  }
-
-  /// 工具权限检查 + 并行执行
-  ///
-  /// 返回执行结果列表。如果被取消，[cancelled] 为 true。
-  Future<_ToolExecSummary> _executeToolCalls(
-    List<llm.ToolCall> toolCalls, {
-    required Set<String> alreadyCallsSet,
-    required bool streamCancelled,
-    CancellationToken? cancellationToken,
-  }) async {
-    // Phase 1: 权限检查（串行）+ 收集待执行工具
-    final pendingExecutions =
-        <({llm.ToolCall call, AgentTool tool, Map<String, dynamic> args})>[];
-    final allToolResults = <shared.ToolResult>[];
-
-    for (final toolCall in toolCalls) {
-      if (streamCancelled || cancellationToken?.isCancelled == true) {
-        return _ToolExecSummary(cancelled: true, results: []);
-      }
-      if(alreadyCallsSet.contains(toolCall.id)){
-        continue;
-      }
-      alreadyCallsSet.add(toolCall.id);
-
-      final toolName = toolCall.function.name;
-      final toolCallId = toolCall.id;
-      Map<String, dynamic> toolArguments;
-      try {
-        toolArguments =
-            jsonDecode(toolCall.function.arguments) as Map<String, dynamic>;
-      } catch (e) {
-        _log.debug('failed to parse tool arguments as JSON, using empty map: $e');
-        toolArguments = {};
-      }
-
-      // 广播工具调用开始事件
-      _toolEventCallback?.call(
-        ToolCallStartEvent(
-          toolCallId: toolCallId,
-          toolName: toolName,
-          arguments: toolArguments,
-        ),
-      );
-
-      // 查找工具
-      final tool = _toolRegistry!.getTool(toolName);
-      if (tool == null) {
-        final errorResult = '工具 "$toolName" 未注册';
-        allToolResults.add(
-          shared.ToolResult(
-            toolCallId: toolCallId,
-            content: errorResult,
-            isError: true,
-            name: toolName,
-          ),
-        );
-        _toolEventCallback?.call(
-          ToolCallResultEvent(
-            toolCallId: toolCallId,
-            toolName: toolName,
-            result: errorResult,
-            isError: true,
-          ),
-        );
-        continue;
-      }
-
-      // 权限检查（串行，因为可能需要等待用户交互）
-      if (_permissionManager != null && tool.requiresPermission) {
-        final decision = await _permissionManager!.checkPermission(
-          tool,
-          toolArguments,
-        );
-        if (decision == PermissionDecision.deny) {
-          final denyResult =
-              _permissionManager!.lastDenyMessage ??
-              '权限被拒绝: 用户拒绝了工具 "$toolName" 的执行';
-          allToolResults.add(
-            shared.ToolResult(
-              toolCallId: toolCallId,
-              content: denyResult,
-              isError: true,
-              name: toolName,
-            ),
-          );
-          _toolEventCallback?.call(
-            ToolCallResultEvent(
-              toolCallId: toolCallId,
-              toolName: toolName,
-              result: denyResult,
-              isError: true,
-            ),
-          );
-          continue;
-        }
-      }
-
-      pendingExecutions.add((call: toolCall, tool: tool, args: toolArguments));
-    }
-
-    if (pendingExecutions.isEmpty) {
-      _persistToolResults(allToolResults);
-      return _ToolExecSummary(cancelled: false, results: []);
-    }
-
-    // Phase 2: 并行执行已批准的工具
-    _runningTools.addAll(pendingExecutions.map((e) => e.tool));
-
-    final results = await Future.wait(
-      pendingExecutions.map(
-        (exec) => _executeSingleTool(exec, cancellationToken),
-      ),
-    );
-
-    _runningTools.clear();
-
-    // 如果因取消导致所有工具被终止，直接退出
-    if (results.any((r) => r.wasCancelled) &&
-        (streamCancelled || cancellationToken?.isCancelled == true)) {
-      for (final r in results) {
-        if (r.wasCancelled) {
-          allToolResults.add(
-            shared.ToolResult(
-              toolCallId: r.toolCall.id,
-              content: r.result.content,
-              isError: true,
-              name: r.toolName,
-            ),
-          );
-        }
-      }
-      _persistToolResults(allToolResults);
-      return _ToolExecSummary(cancelled: true, results: []);
-    }
-
-    // 收集执行结果
-    for (final r in results) {
-      allToolResults.add(
-        shared.ToolResult(
-          toolCallId: r.toolCall.id,
-          content: r.result.content,
-          isError: r.result.isError,
-          name: r.toolName,
-        ),
-      );
-    }
-
-    _persistToolResults(allToolResults);
-
-    return _ToolExecSummary(cancelled: false, results: allToolResults);
-  }
-
-  /// 执行单个工具调用
-  Future<_ToolExecResult> _executeSingleTool(
-    ({llm.ToolCall call, AgentTool tool, Map<String, dynamic> args}) exec,
-    CancellationToken? cancellationToken,
-  ) async {
-    final stopwatch = Stopwatch()..start();
-    final toolName = exec.tool.name;
-    ToolResult result;
-    bool wasCancelled = false;
-    try {
-      final token = cancellationToken ?? CancellationToken();
-      final executor = CancellableToolExecutor(exec.tool, token);
-      result = await executor.execute(exec.args);
-    } on ToolCancelledException {
-      result = ToolResult.error('工具调用已取消: $toolName');
-      wasCancelled = true;
-    } catch (e) {
-      result = ToolResult.error('工具执行异常: $e');
-    } finally {
-      stopwatch.stop();
-    }
-    final resultPreview = result.content.length > 100
-        ? '${result.content.substring(0, 100)}...(truncated, total ${result.content.length} chars)'
-        : result.content;
-    _log.debug(
-      '工具执行完成: $toolName, isError=${result.isError}, '
-      'duration=${stopwatch.elapsedMilliseconds}ms, result=$resultPreview',
-    );
-    return _ToolExecResult(
-      toolCall: exec.call,
-      toolName: toolName,
-      result: result,
-      durationMs: stopwatch.elapsedMilliseconds,
-      wasCancelled: wasCancelled,
-    );
-  }
-
-  /// 将工具结果合并写入会话历史
-  void _persistToolResults(List<shared.ToolResult> results) {
-    if (results.isEmpty) return;
-    final msg = shared.ChatMessage.toolResultGroup(
-      id: const Uuid().v4(),
-      employeeId: currentEmployeeUuid!,
-      results: results,
-    ).copyWith(metadata: {'toolNames': results.map((r) => r.name).toList()});
-    memoryManager.addMessage(
-      currentEmployeeUuid!,
-      deviceId!,
-      msg,
-    );
   }
 
   // ===== 其他内部方法 =====
