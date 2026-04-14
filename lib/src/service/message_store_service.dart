@@ -296,18 +296,17 @@ class MessageStoreServiceImpl implements MessageStoreService {
 
   @override
   Future<void> softDeleteBySession(String employeeId) async {
-    await _store.softDeleteBySessionForSync(employeeId);
+    await _store.softDeleteBySessionForSync(employeeId, deviceId: _deviceId ?? '');
   }
 
   @override
   int deleteMessagesBeforeSeq(String employeeId, int beforeSeq) {
-    return _store.deleteBeforeSeq(employeeId, beforeSeq);
+    return _store.deleteBeforeSeq(employeeId, beforeSeq, deviceId: _deviceId ?? '');
   }
 
   @override
   int getMaxSeq(String employeeId) {
-    // 使用指定 employee 的最大 seq（含已软删除的消息），确保清空水位线覆盖所有消息
-    return _store.getMaxSeqForEmployeeAll(employeeId);
+    return _store.getMaxSeqForEmployeeAll(employeeId, deviceId: _deviceId ?? '');
   }
 
   @override
@@ -327,17 +326,17 @@ class MessageStoreServiceImpl implements MessageStoreService {
 
   @override
   int markAsReadInDb(String employeeId) {
-    return _store.markAsReadByEmployee(employeeId);
+    return _store.markAsReadByEmployee(employeeId, deviceId: _deviceId ?? '');
   }
 
   @override
   List<String> getUnreadMessageIds(String employeeId) {
-    return _store.getUnreadMessageIds(employeeId);
+    return _store.getUnreadMessageIds(employeeId, deviceId: _deviceId ?? '');
   }
 
   @override
   List<String> getStaleLocalToolCallMessages(String employeeId) {
-    return _store.getStaleLocalToolCallMessages(employeeId);
+    return _store.getStaleLocalToolCallMessages(employeeId, deviceId: _deviceId ?? '');
   }
 
   @override

@@ -19,6 +19,20 @@ class MessageStore {
   /// 暴露 DatabaseManager，供关联 Store 复用（如 SyncWatermarkStore）
   DatabaseManager get dbManager => _dbManager;
 
+  /// 校验 deviceId 有效性，无效时抛出异常
+  ///
+  /// 设计约束：所有涉及消息和 seq 写入的操作必须传入有效的 deviceId，
+  /// 禁止 null、空字符串、'default'，以便通过日志快速定位问题。
+  void _validateDeviceId(String? deviceId, String caller) {
+    if (deviceId == null || deviceId.isEmpty || deviceId == 'default') {
+      throw StateError(
+        '[MessageStore] deviceId 无效 (value="$deviceId"), '
+        '调用来源: $caller。'
+        'deviceId 不允许为 null、空字符串或 "default"，必须传入真实设备标识。',
+      );
+    }
+  }
+
   /// 从数据库行解码为 ChatMessage
   ChatMessage _rowToMessage(Row row) {
     return MessageMapper.fromRow(row);
@@ -101,6 +115,7 @@ class MessageStore {
 
   /// 更新 sync_watermark.last_seq（MAX 语义，防止回退）
   void _updateWatermarkLastSeq(String employeeId, int seq, {String deviceId = ''}) {
+    _validateDeviceId(deviceId, '_updateWatermarkLastSeq');
     _db.execute('''
       INSERT INTO sync_watermark (employee_id, device_id, last_seq, update_time)
         VALUES (?, ?, ?, ?)
@@ -119,7 +134,8 @@ class MessageStore {
     ChatMessage message, {
     bool updateWatermark = true,
   }) async {
-    final effDeviceId = deviceId ?? '';
+    _validateDeviceId(deviceId, 'addWithDeviceId');
+    final effDeviceId = deviceId!;
     // 如果 seq 为 0，自动分配下一个序列号
     var msg = message;
     if (msg.seq == 0) {
@@ -274,7 +290,31 @@ class MessageStore {
   ///
   /// 同时从 messages 表、sync_watermark.last_seq 和 sync_watermark.clear_seq 取最大值，
   /// 确保清空消息后 seq 不会重复，也不会小于 clearSeq。
-  int getNextSeq() {
+  /// 按 device_id 隔离，保证不同设备的 seq 独立递增。
+  int getNextSeq({String deviceId = ''}) {
+    _validateDeviceId(deviceId, 'getNextSeq');
+    if (deviceId.isNotEmpty) {
+      final msgResult = _db.select(
+        'SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE device_id = ?',
+        [deviceId],
+      );
+      final msgMaxSeq = msgResult.first['max_seq'] as int;
+
+      final wmResult = _db.select(
+        'SELECT COALESCE(MAX(last_seq), 0) as max_seq FROM sync_watermark WHERE device_id = ?',
+        [deviceId],
+      );
+      final wmMaxSeq = wmResult.first['max_seq'] as int;
+
+      final clearSeqResult = _db.select(
+        'SELECT COALESCE(MAX(clear_seq), 0) as max_clear FROM sync_watermark WHERE device_id = ?',
+        [deviceId],
+      );
+      final clearMaxSeq = clearSeqResult.first['max_clear'] as int;
+
+      final currentMax = [msgMaxSeq, wmMaxSeq, clearMaxSeq].reduce((a, b) => a > b ? a : b);
+      return currentMax + 1;
+    }
     final msgResult = _db.select(
       'SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages',
     );
@@ -294,14 +334,28 @@ class MessageStore {
     return currentMax + 1;
   }
 
-  /// 获取当前最大 seq
-  int getMaxSeq() {
+  /// 获取当前最大 seq（按 device_id 隔离）
+  int getMaxSeq({String deviceId = ''}) {
+    if (deviceId.isNotEmpty) {
+      final result = _db.select(
+        'SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE device_id = ?',
+        [deviceId],
+      );
+      return result.first['max_seq'] as int;
+    }
     final result = _db.select('SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages');
     return result.first['max_seq'] as int;
   }
 
-  /// 获取指定 employee 的最大 seq
-  int getMaxSeqForEmployee(String employeeId) {
+  /// 获取指定 employee 的最大 seq（按 device_id 隔离）
+  int getMaxSeqForEmployee(String employeeId, {String deviceId = ''}) {
+    if (deviceId.isNotEmpty) {
+      final result = _db.select(
+        'SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE employee_id = ? AND device_id = ? AND deleted = 0',
+        [employeeId, deviceId],
+      );
+      return result.first['max_seq'] as int;
+    }
     final result = _db.select(
       'SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE employee_id = ? AND deleted = 0',
       [employeeId],
@@ -309,10 +363,17 @@ class MessageStore {
     return result.first['max_seq'] as int;
   }
 
-  /// 获取指定 employee 的最大 seq（含已软删除的消息）
+  /// 获取指定 employee + device 的最大 seq（含已软删除的消息）
   ///
   /// 用于服务端上报 maxSeq 给客户端增量同步使用。
-  int getMaxSeqForEmployeeAll(String employeeId) {
+  int getMaxSeqForEmployeeAll(String employeeId, {String deviceId = ''}) {
+    if (deviceId.isNotEmpty) {
+      final result = _db.select(
+        'SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE employee_id = ? AND device_id = ?',
+        [employeeId, deviceId],
+      );
+      return result.first['max_seq'] as int;
+    }
     final result = _db.select(
       'SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE employee_id = ?',
       [employeeId],
@@ -320,12 +381,15 @@ class MessageStore {
     return result.first['max_seq'] as int;
   }
 
-  /// 获取指定 employee 的最小 seq（未删除消息）
-  ///
-  /// 用于客户端同步时判断远程最早保留的消息位置，
-  /// 本地 seq < minSeq 的消息可以安全删除。
-  /// 如果没有消息返回 0。
-  int getMinSeqForEmployee(String employeeId) {
+  /// 获取指定 employee 的最小 seq（按 device_id 隔离，未删除消息）
+  int getMinSeqForEmployee(String employeeId, {String deviceId = ''}) {
+    if (deviceId.isNotEmpty) {
+      final result = _db.select(
+        'SELECT COALESCE(MIN(seq), 0) as min_seq FROM messages WHERE employee_id = ? AND device_id = ? AND deleted = 0',
+        [employeeId, deviceId],
+      );
+      return result.first['min_seq'] as int;
+    }
     final result = _db.select(
       'SELECT COALESCE(MIN(seq), 0) as min_seq FROM messages WHERE employee_id = ? AND deleted = 0',
       [employeeId],
@@ -340,8 +404,16 @@ class MessageStore {
   Future<List<ChatMessage>> getMessagesAfterSeq(
     String employeeId,
     int lastSeq, {
+    String deviceId = '',
     int limit = 20,
   }) async {
+    if (deviceId.isNotEmpty) {
+      final resultSet = _db.select(
+        'SELECT * FROM messages WHERE employee_id = ? AND device_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?',
+        [employeeId, deviceId, lastSeq, limit],
+      );
+      return resultSet.map(_rowToMessage).toList();
+    }
     final resultSet = _db.select(
       'SELECT * FROM messages WHERE employee_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?',
       [employeeId, lastSeq, limit],
@@ -367,8 +439,15 @@ class MessageStore {
     return result.first['cnt'] as int;
   }
 
-  /// 获取指定员工的未读消息 ID 列表（assistant 且 is_read=0 且 deleted=0）
-  List<String> getUnreadMessageIds(String employeeId) {
+  /// 获取指定员工的未读消息 ID 列表（按 device_id 隔离）
+  List<String> getUnreadMessageIds(String employeeId, {String deviceId = ''}) {
+    if (deviceId.isNotEmpty) {
+      final resultSet = _db.select(
+        'SELECT uuid FROM messages WHERE employee_id = ? AND device_id = ? AND role = ? AND is_read = 0 AND deleted = 0 ORDER BY create_time ASC',
+        [employeeId, deviceId, 'assistant'],
+      );
+      return resultSet.map((row) => row['uuid'] as String).toList();
+    }
     final resultSet = _db.select(
       'SELECT uuid FROM messages WHERE employee_id = ? AND role = ? AND is_read = 0 AND deleted = 0 ORDER BY create_time ASC',
       [employeeId, 'assistant'],
@@ -376,10 +455,15 @@ class MessageStore {
     return resultSet.map((row) => row['uuid'] as String).toList();
   }
 
-  /// 获取指定员工中仍处于 processing 状态的本地工具调用消息 ID 列表
-  ///
-  /// 用于清理 agent 重启后残留的临时工具调用消息。
-  List<String> getStaleLocalToolCallMessages(String employeeId) {
+  /// 获取指定员工中仍处于 processing 状态的本地工具调用消息 ID 列表（按 device_id 隔离）
+  List<String> getStaleLocalToolCallMessages(String employeeId, {String deviceId = ''}) {
+    if (deviceId.isNotEmpty) {
+      final resultSet = _db.select(
+        "SELECT uuid FROM messages WHERE employee_id = ? AND device_id = ? AND uuid LIKE 'local_toolcall_%' AND processing_status = 'processing' AND deleted = 0",
+        [employeeId, deviceId],
+      );
+      return resultSet.map((row) => row['uuid'] as String).toList();
+    }
     final resultSet = _db.select(
       "SELECT uuid FROM messages WHERE employee_id = ? AND uuid LIKE 'local_toolcall_%' AND processing_status = 'processing' AND deleted = 0",
       [employeeId],
@@ -489,11 +573,18 @@ class MessageStore {
   /// 用于清空水位线场景：服务端设置 clear_seq 后，
   /// 客户端同步时删除本地所有 seq < clearSeq 的消息。
   /// 返回被删除的消息数量。
-  int deleteBeforeSeq(String employeeId, int beforeSeq) {
-    _db.execute(
-      'DELETE FROM messages WHERE employee_id = ? AND seq < ?',
-      [employeeId, beforeSeq],
-    );
+  int deleteBeforeSeq(String employeeId, int beforeSeq, {String deviceId = ''}) {
+    if (deviceId.isNotEmpty) {
+      _db.execute(
+        'DELETE FROM messages WHERE employee_id = ? AND device_id = ? AND seq < ?',
+        [employeeId, deviceId, beforeSeq],
+      );
+    } else {
+      _db.execute(
+        'DELETE FROM messages WHERE employee_id = ? AND seq < ?',
+        [employeeId, beforeSeq],
+      );
+    }
     final result = _db.select('SELECT changes() as affected');
     return result.first['affected'] as int;
   }

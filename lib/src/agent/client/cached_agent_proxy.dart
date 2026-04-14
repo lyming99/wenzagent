@@ -192,45 +192,6 @@ class CachedAgentProxy {
     _syncCompleter = null;
   }
 
-  /// 合并未接收消息
-  Future<void> _mergeUnreceivedMessages(List<AgentMessage> unreceivedMessages) async {
-    print('[CachedAgentProxy] 开始写入远程消息...');
-
-    for (final message in unreceivedMessages) {
-      // 检查消息是否已被远程删除
-      final deletedRaw = message.metadata?['deleted'];
-      final isDeleted = deletedRaw is bool
-          ? deletedRaw
-          : (deletedRaw is int ? deletedRaw != 0 : false);
-
-      if (isDeleted) {
-        // 已删除的消息：硬删除本地对应记录（若存在），避免垃圾数据积累
-        try {
-          await _messageStore.hardDeleteMessage(message.id, deviceId: _deviceId);
-          print('[CachedAgentProxy] 已删除本地消息（远程已删除）: ${message.id}');
-        } catch (_) {
-          // 本地不存在则忽略
-        }
-        continue;
-      }
-
-      // 正常消息：写入数据库
-      final forceRead = message.role == 'assistant' &&
-          (shouldSaveAsReadCallback?.call() ?? false);
-      final chatMsg = _agentMessageToChatMessage(message, forceRead: forceRead);
-      await _messageStore.addMessage(chatMsg, deviceId: _deviceId);
-    }
-
-    // 清理已被远程消息取代的本地工具调用临时消息
-    await _cleanupSupersededLocalToolCalls(unreceivedMessages);
-
-    // 通知界面
-    _notifyMessagesChanged();
-
-    print('[CachedAgentProxy] 远程消息写入完成，共 ${unreceivedMessages.length} 条');
-  }
-
-
 
 
   /// 初始化事件监听
@@ -725,44 +686,52 @@ class CachedAgentProxy {
     });
   }
 
-  /// 从远程同步消息（基于 LSN 增量同步）
+  /// 从远程同步消息（简化版）
   ///
   /// 流程：
-  /// 1. 查询远程 maxSeq，如果大于本地水位线，则拉取基于本地 max 水位线的消息
-  /// 2. 查询远程 minSeq，删除本地小于 minSeq 的消息
+  /// 1. 查询服务端 clearSeq，硬删除本地 seq < clearSeq 的消息
+  /// 2. 查询本地消息 maxSeq，查询服务端 lastSeq，拉取差量消息直接写入
   Future<void> _syncMessagesFromRemote() async {
     if (_isDisposed || _proxy.isLocalMode) return;
 
     try {
-      print('[CachedAgentProxy] 开始从远程同步消息（LSN 增量）...');
+      print('[CachedAgentProxy] 开始从远程同步消息...');
 
-      // 1. 读取本地水位线
-      final lastSeq = _messageStore.getLastSeq(_employeeId);
-
-      // 2. 获取服务端 maxSeq
-      int remoteMaxSeq = -1;
-      bool maxSeqObtained = false;
+      // 1. 查询服务端 clearSeq，硬删除本地旧消息
       try {
-        remoteMaxSeq = await _proxy.getMaxSeq();
-        maxSeqObtained = true;
+        final remoteClearSeq = await _proxy.getClearSeq();
+        if (remoteClearSeq > 0) {
+          final deletedCount = _messageStore.deleteMessagesBeforeSeq(
+            _employeeId, remoteClearSeq,
+          );
+          if (deletedCount > 0) {
+            print('[CachedAgentProxy] 根据 clearSeq=$remoteClearSeq 删除了 $deletedCount 条本地消息');
+            _messageStore.resetLastSeq(_employeeId, remoteClearSeq);
+          }
+        }
       } catch (e) {
-        print('[CachedAgentProxy] 获取远程 maxSeq 失败: $e');
+        print('[CachedAgentProxy] 获取远程 clearSeq 失败: $e');
       }
 
-      print('[CachedAgentProxy] 本地水位线: lastSeq=$lastSeq, '
-          '远程 maxSeq=${maxSeqObtained ? remoteMaxSeq : "获取失败"}');
+      // 2. 查询本地消息 maxSeq
+      final localMaxSeq = _messageStore.getMaxSeq(_employeeId);
 
-      // maxSeq 获取失败时跳过本次同步，等待下次触发
-      if (!maxSeqObtained) {
-        print('[CachedAgentProxy] 无法获取服务端 maxSeq，跳过本次同步');
+      // 3. 查询服务端 lastSeq
+      int remoteLastSeq = -1;
+      try {
+        remoteLastSeq = await _proxy.getMaxSeq();
+      } catch (e) {
+        print('[CachedAgentProxy] 获取远程 lastSeq 失败: $e');
         return;
       }
 
-      // 4. 增量拉取：远程 maxSeq > 本地水位线时，拉取 seq > lastSeq 的消息
-      if (remoteMaxSeq > lastSeq) {
+      print('[CachedAgentProxy] localMaxSeq=$localMaxSeq, remoteLastSeq=$remoteLastSeq');
+
+      // 4. 增量拉取：远程有更新的消息时，拉取 seq > localMaxSeq 的消息
+      if (remoteLastSeq > localMaxSeq) {
         const batchSize = 20;
         final allNewMessages = <AgentMessage>[];
-        int currentSeq = lastSeq;
+        int currentSeq = localMaxSeq;
 
         while (true) {
           final batch = await _proxy.getMessagesAfterSeq(
@@ -773,7 +742,6 @@ class CachedAgentProxy {
           if (batch.isEmpty) break;
           allNewMessages.addAll(batch);
 
-          // 取本批次最大 seq 作为下一批的起点
           for (final msg in batch) {
             final seq = msg.metadata?['seq'] as int? ?? 0;
             if (seq > currentSeq) currentSeq = seq;
@@ -782,26 +750,44 @@ class CachedAgentProxy {
           if (batch.length < batchSize) break;
         }
 
-        print('[CachedAgentProxy] 从远程获取到 ${allNewMessages.length} 条新消息');
-
-        // 5. 合并消息到本地
+        // 5. 直接写入本地（INSERT OR REPLACE，无需比较）
         if (allNewMessages.isNotEmpty) {
-          await _mergeUnreceivedMessages(allNewMessages);
+          for (final message in allNewMessages) {
+            final deletedRaw = message.metadata?['deleted'];
+            final isDeleted = deletedRaw is bool
+                ? deletedRaw
+                : (deletedRaw is int ? deletedRaw != 0 : false);
 
-          // 6. 更新本地水位线
+            if (isDeleted) {
+              try {
+                await _messageStore.hardDeleteMessage(message.id, deviceId: _deviceId);
+              } catch (_) {}
+              continue;
+            }
+
+            final forceRead = message.role == 'assistant' &&
+                (shouldSaveAsReadCallback?.call() ?? false);
+            final chatMsg = _agentMessageToChatMessage(message, forceRead: forceRead);
+            await _messageStore.addMessage(chatMsg, deviceId: _deviceId);
+          }
+
+          // 清理已被远程消息取代的本地工具调用临时消息
+          await _cleanupSupersededLocalToolCalls(allNewMessages);
+
+          // 更新本地水位线
           _messageStore.updateLastSeq(_employeeId, currentSeq);
-          print('[CachedAgentProxy] 水位线已更新: lastSeq=$currentSeq');
+          _notifyMessagesChanged();
+
+          print('[CachedAgentProxy] 同步完成: 拉取 ${allNewMessages.length} 条, lastSeq=$currentSeq');
         }
       } else {
-        print('[CachedAgentProxy] 本地水位线($lastSeq) >= 远程 maxSeq($remoteMaxSeq)，无需增量拉取');
+        print('[CachedAgentProxy] 无新消息需要同步');
       }
-
-      print('[CachedAgentProxy] 消息同步完成');
     } catch (e, st) {
       print('[CachedAgentProxy] 同步远程消息失败: $e\n$st');
     }
 
-    // 8. 清理残留的本地工具调用临时消息（agent 重启后未返回结果的工具调用）
+    // 清理残留的本地工具调用临时消息
     _cleanupStaleToolCallMessages();
   }
 

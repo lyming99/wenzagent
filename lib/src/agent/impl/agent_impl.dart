@@ -699,7 +699,9 @@ class AgentImpl implements IAgent {
     int limit = 20,
   }) async {
     final store = MessageStore(deviceId: deviceId);
-    final chatMessages = await store.getMessagesAfterSeq(employeeId, lastSeq, limit: limit);
+    final chatMessages = await store.getMessagesAfterSeq(
+      employeeId, lastSeq, deviceId: deviceId, limit: limit,
+    );
 
     final messages = chatMessages.map((cm) {
       final map = cm.toJson();
@@ -717,7 +719,7 @@ class AgentImpl implements IAgent {
     }).toList();
 
     print(
-      '[AgentImpl] getMessagesAfterSeq: employeeId=$employeeId, lastSeq=$lastSeq, 返回 ${messages.length} 条',
+      '[AgentImpl] getMessagesAfterSeq: employeeId=$employeeId, deviceId=$deviceId, lastSeq=$lastSeq, 返回 ${messages.length} 条',
     );
     return messages;
   }
@@ -725,13 +727,13 @@ class AgentImpl implements IAgent {
   @override
   Future<int> getMaxSeq({required String employeeId}) async {
     final store = MessageStore(deviceId: deviceId);
-    return store.getMaxSeqForEmployeeAll(employeeId);
+    return store.getMaxSeqForEmployeeAll(employeeId, deviceId: deviceId);
   }
 
   @override
   Future<int> getMinSeq({required String employeeId}) async {
     final store = MessageStore(deviceId: deviceId);
-    final minSeq = store.getMinSeqForEmployee(employeeId);
+    final minSeq = store.getMinSeqForEmployee(employeeId, deviceId: deviceId);
     if (minSeq > 0) return minSeq;
     // 无未删除消息时回退到 clear_seq
     final watermarkStore = SyncWatermarkStore(deviceId: deviceId);
