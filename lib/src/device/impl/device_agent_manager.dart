@@ -10,6 +10,7 @@ import '../../agent/entity/entity.dart';
 import '../../agent/i_agent.dart';
 import '../../agent/impl/agent_impl.dart';
 import '../../agent/tool/builtin/schedule_task_tool.dart';
+import '../../persistence/stores/mark_read_queue_store.dart';
 import '../../agent/tool/permission_rule.dart';
 import '../../entity/lan_message.dart';
 import '../../host/host_rpc_methods.dart';
@@ -27,13 +28,24 @@ import 'device_state_holder.dart';
 class DeviceAgentManager {
   final String _deviceId;
   String? _topic;
-  late final EmployeeManager _employeeManager = EmployeeManager.getInstance(_deviceId);
-  late final SessionManager _sessionManager = SessionManager.getInstance(_deviceId);
-  late final MessageStoreService _messageStoreService = MessageStoreService.getInstance(_deviceId);
-  late final DeviceConnectionManager _connectionManager = DeviceConnectionManager.getInstance(_deviceId);
-  late final DeviceStateHolder _stateHolder = DeviceStateHolder.getInstance(_deviceId);
-  late final DeviceNotificationManager _notificationManager = DeviceNotificationManager.getInstance(_deviceId);
-  late final DataSyncManager _dataSyncManager = DataSyncManager.getInstance(_deviceId);
+  late final EmployeeManager _employeeManager = EmployeeManager.getInstance(
+    _deviceId,
+  );
+  late final SessionManager _sessionManager = SessionManager.getInstance(
+    _deviceId,
+  );
+  late final MessageStoreService _messageStoreService =
+      MessageStoreService.getInstance(_deviceId);
+  late final DeviceConnectionManager _connectionManager =
+      DeviceConnectionManager.getInstance(_deviceId);
+  late final DeviceStateHolder _stateHolder = DeviceStateHolder.getInstance(
+    _deviceId,
+  );
+  late final DeviceNotificationManager _notificationManager =
+      DeviceNotificationManager.getInstance(_deviceId);
+  late final DataSyncManager _dataSyncManager = DataSyncManager.getInstance(
+    _deviceId,
+  );
 
   /// 本地 Agent 实例缓存
   final Map<String, IAgent> _localAgents = {};
@@ -48,15 +60,16 @@ class DeviceAgentManager {
   final Set<String> _syncingRemoteKeys = {};
 
   /// Agent 事件订阅
-  final Map<String, StreamSubscription<AgentEvent>> _agentEventSubscriptions = {};
+  final Map<String, StreamSubscription<AgentEvent>> _agentEventSubscriptions =
+      {};
 
   /// 定时任务管理器
   late final ScheduledTaskManagerImpl _scheduledTaskManager =
       ScheduledTaskManagerImpl(deviceId: _deviceId);
 
   DeviceAgentManager._({required String deviceId, String? topic})
-      : _deviceId = deviceId,
-        _topic = topic {
+    : _deviceId = deviceId,
+      _topic = topic {
     _scheduledTaskManager.getAgent = (employeeId) async {
       return _localAgents[employeeId];
     };
@@ -92,11 +105,15 @@ class DeviceAgentManager {
   // ===== 公开访问 =====
 
   Map<String, IAgent> get localAgents => _localAgents;
+
   int get localAgentCount => _localAgents.length;
+
   Map<String, CachedAgentProxy> get localProxies => _localProxies;
+
   Map<String, CachedAgentProxy> get remoteProxies => _remoteProxies;
 
   List<String> get localAgentProxyIds => _localProxies.keys.toList();
+
   List<String> get remoteAgentProxyIds => _remoteProxies.keys.toList();
 
   ScheduledTaskManagerImpl get scheduledTaskManager => _scheduledTaskManager;
@@ -113,8 +130,11 @@ class DeviceAgentManager {
   }) async {
     final sw = Stopwatch()..start();
     // 先检查会话是否已被有效删除，避免 getOrCreateSession 自动恢复已删除的会话
-    AiEmployeeSessionEntity? existingSession = await _sessionManager.getSession(employeeId);
-    final bool isSessionEffectivelyDeleted = existingSession != null &&
+    AiEmployeeSessionEntity? existingSession = await _sessionManager.getSession(
+      employeeId,
+    );
+    final bool isSessionEffectivelyDeleted =
+        existingSession != null &&
         existingSession.deleted == 1 &&
         existingSession.isEffectivelyDeleted();
 
@@ -126,7 +146,9 @@ class DeviceAgentManager {
           ? Future.value(employee)
           : _employeeManager.getEmployee(employeeId),
     ]);
-    print('[DeviceAgentManager] Future.wait (session+employee): ${sw.elapsedMilliseconds}ms');
+    print(
+      '[DeviceAgentManager] Future.wait (session+employee): ${sw.elapsedMilliseconds}ms',
+    );
     var session = results[0] as AiEmployeeSessionEntity?;
     employee = results[1] as AiEmployeeEntity?;
     if (employee == null) {
@@ -141,13 +163,15 @@ class DeviceAgentManager {
 
     // 确定目标设备ID
     String targetDeviceId;
-    if (employee.currentDeviceId != null && employee.currentDeviceId!.isNotEmpty) {
+    if (employee.currentDeviceId != null &&
+        employee.currentDeviceId!.isNotEmpty) {
       targetDeviceId = employee.currentDeviceId!;
     } else if (deviceId != null && deviceId.isNotEmpty) {
       targetDeviceId = deviceId;
     } else {
       targetDeviceId = _deviceId;
-      if (employee.currentDeviceId == null || employee.currentDeviceId!.isEmpty) {
+      if (employee.currentDeviceId == null ||
+          employee.currentDeviceId!.isEmpty) {
         await _employeeManager.updateCurrentDeviceId(employeeId, _deviceId);
       }
     }
@@ -159,7 +183,9 @@ class DeviceAgentManager {
 
       sw.reset();
       final agent = await _getOrCreateLocalAgent(employeeId, employee, session);
-      print('[DeviceAgentManager] _getOrCreateLocalAgent: ${sw.elapsedMilliseconds}ms');
+      print(
+        '[DeviceAgentManager] _getOrCreateLocalAgent: ${sw.elapsedMilliseconds}ms',
+      );
       final proxy = AgentProxy.local(
         employeeId: employeeId,
         deviceId: targetDeviceId,
@@ -171,11 +197,17 @@ class DeviceAgentManager {
         messageStore: _messageStoreService,
         deviceId: targetDeviceId,
         employeeId: employeeId,
+        markReadQueueStore: MarkReadQueueStore(deviceId: _deviceId),
         onMarkAsRead: (empId, fromDevId) {
-          _stateHolder.notificationHub.markAllAsRead(employeeId: empId, fromDeviceId: fromDevId);
+          _stateHolder.notificationHub.markAllAsRead(
+            employeeId: empId,
+            fromDeviceId: fromDevId,
+          );
           _broadcastReadStatus(employeeId: empId, fromDeviceId: fromDevId);
           // DB 更新后用 SQL 统计修正内存缓存
-          _notificationManager.markMessagesAsReadInDb(empId, fromDevId).then((dbUnreadCount) {
+          _notificationManager.markMessagesAsReadInDb(empId, fromDevId).then((
+            dbUnreadCount,
+          ) {
             if (dbUnreadCount >= 0) {
               _stateHolder.notificationHub.restoreUnreadCount(
                 employeeId: empId,
@@ -184,7 +216,8 @@ class DeviceAgentManager {
             }
           });
         },
-        shouldSaveAsReadCallback: () => _notificationManager.isSessionOpen(employeeId: employeeId),
+        shouldSaveAsReadCallback: () =>
+            _notificationManager.isSessionOpen(employeeId: employeeId),
       );
 
       _localProxies[employeeId] = cachedProxy;
@@ -215,18 +248,26 @@ class DeviceAgentManager {
           _connectionManager.invokeRemote(targetDeviceId, method, params),
       remoteEventStream: _stateHolder.onAgentEvent,
     );
-    print('[DeviceAgentManager] AgentProxy.remote created: ${sw.elapsedMilliseconds}ms');
+    print(
+      '[DeviceAgentManager] AgentProxy.remote created: ${sw.elapsedMilliseconds}ms',
+    );
 
     cachedProxy = CachedAgentProxy(
       proxy: proxy,
       messageStore: _messageStoreService,
       deviceId: targetDeviceId,
       employeeId: employeeId,
+      markReadQueueStore: MarkReadQueueStore(deviceId: _deviceId),
       onMarkAsRead: (empId, fromDevId) {
-        _stateHolder.notificationHub.markAllAsRead(employeeId: empId, fromDeviceId: fromDevId);
+        _stateHolder.notificationHub.markAllAsRead(
+          employeeId: empId,
+          fromDeviceId: fromDevId,
+        );
         _broadcastReadStatus(employeeId: empId, fromDeviceId: fromDevId);
         // DB 更新后用 SQL 统计修正内存缓存
-        _notificationManager.markMessagesAsReadInDb(empId, fromDevId).then((dbUnreadCount) {
+        _notificationManager.markMessagesAsReadInDb(empId, fromDevId).then((
+          dbUnreadCount,
+        ) {
           if (dbUnreadCount >= 0) {
             _stateHolder.notificationHub.restoreUnreadCount(
               employeeId: empId,
@@ -235,7 +276,8 @@ class DeviceAgentManager {
           }
         });
       },
-      shouldSaveAsReadCallback: () => _notificationManager.isSessionOpen(employeeId: employeeId),
+      shouldSaveAsReadCallback: () =>
+          _notificationManager.isSessionOpen(employeeId: employeeId),
     );
 
     _remoteProxies[key] = cachedProxy;
@@ -255,7 +297,8 @@ class DeviceAgentManager {
   ///
   /// [keepLocalAgent] 如果为 true，保留本地 Agent 实例和事件订阅不销毁。
   /// 用于设备切换场景：切换设备时只需要清理远程代理缓存，不中断本地运行的 Agent。
-  Future<void> destroyAgentProxy(String employeeId, {
+  Future<void> destroyAgentProxy(
+    String employeeId, {
     String? targetDeviceId,
     bool keepLocalAgent = false,
   }) async {
@@ -314,10 +357,16 @@ class DeviceAgentManager {
     return null;
   }
 
-  List<CachedAgentProxy> getLocalAgentProxies() => _localProxies.values.toList();
-  List<CachedAgentProxy> getRemoteAgentProxies() => _remoteProxies.values.toList();
-  List<CachedAgentProxy> getAllAgentProxies() =>
-      [..._localProxies.values, ..._remoteProxies.values];
+  List<CachedAgentProxy> getLocalAgentProxies() =>
+      _localProxies.values.toList();
+
+  List<CachedAgentProxy> getRemoteAgentProxies() =>
+      _remoteProxies.values.toList();
+
+  List<CachedAgentProxy> getAllAgentProxies() => [
+    ..._localProxies.values,
+    ..._remoteProxies.values,
+  ];
 
   /// 确保 RPC 调用所需的本地 Agent 存在（懒加载）
   Future<IAgent> ensureLocalAgentForRpc(String employeeId) async {
@@ -345,7 +394,8 @@ class DeviceAgentManager {
       }
     }
 
-    final session = await _sessionManager.getSession(employeeId) ??
+    final session =
+        await _sessionManager.getSession(employeeId) ??
         AiEmployeeSessionEntity(
           employeeId: employeeId,
           createTime: DateTime.now(),
@@ -401,11 +451,14 @@ class DeviceAgentManager {
 
     if (employee.permissionConfig != null &&
         employee.permissionConfig!.isNotEmpty) {
-      final config =
-          PermissionConfig.fromJsonString(employee.permissionConfig!);
+      final config = PermissionConfig.fromJsonString(
+        employee.permissionConfig!,
+      );
       manager.configure(config);
-      print('[DeviceAgentManager] Permission config reloaded for $employeeId'
-          ' (${config.whitelist.length} whitelist, ${config.blacklist.length} blacklist rules)');
+      print(
+        '[DeviceAgentManager] Permission config reloaded for $employeeId'
+        ' (${config.whitelist.length} whitelist, ${config.blacklist.length} blacklist rules)',
+      );
     }
   }
 
@@ -471,8 +524,6 @@ class DeviceAgentManager {
     lanClient.sendLanMessage(msg);
   }
 
-
-
   /// 处理收到的广播消息（客户端侧）
   ///
   /// 收到广播消息后：
@@ -486,8 +537,10 @@ class DeviceAgentManager {
   }) async {
     if (messageMaps.isEmpty) return;
 
-    print('[DeviceAgentManager] 收到来自设备 $fromDeviceId 的广播消息通知'
-        '（员工: $employeeId, ${messageMaps.length} 条）');
+    print(
+      '[DeviceAgentManager] 收到来自设备 $fromDeviceId 的广播消息通知'
+      '（员工: $employeeId, ${messageMaps.length} 条）',
+    );
 
     final messages = messageMaps.map((m) => AgentMessage.fromMap(m)).toList();
 
@@ -509,7 +562,9 @@ class DeviceAgentManager {
         (a, b) => a.createdAt.isAfter(b.createdAt) ? a : b,
       );
       _notificationManager.updateLatestMessageCache(
-        employeeId, fromDeviceId, latestMsg,
+        employeeId,
+        fromDeviceId,
+        latestMsg,
       );
     }
 
@@ -564,7 +619,10 @@ class DeviceAgentManager {
     _syncingRemoteKeys.add(cacheKey);
 
     try {
-      await _dataSyncManager.syncEmployeeToDevice(employeeId: employeeId, targetDeviceId: targetDeviceId);
+      await _dataSyncManager.syncEmployeeToDevice(
+        employeeId: employeeId,
+        targetDeviceId: targetDeviceId,
+      );
       await cachedProxy.syncFromRemote();
     } catch (e) {
       print('[DeviceAgentManager] 后台同步远程代理失败: $e');
@@ -589,7 +647,11 @@ class DeviceAgentManager {
       throw StateError('员工 $employeeId 的 currentDeviceId 为空，无法创建 Agent');
     }
 
-    agent = AgentImpl(employeeId: employeeId, deviceId: deviceId, chatAdapter: chatAdapter);
+    agent = AgentImpl(
+      employeeId: employeeId,
+      deviceId: deviceId,
+      chatAdapter: chatAdapter,
+    );
     await agent.initialize(employeeId: employeeId);
 
     _injectScheduleTaskCallbacks(agent, employeeId);
@@ -634,12 +696,14 @@ class DeviceAgentManager {
 
     // 设置项目
     if (employee.projectUuid != null && employee.projectUuid!.isNotEmpty) {
-      await agent.setProject(ProjectData(
-        projectUuid: employee.projectUuid,
-        projectName: employee.projectName,
-        projectContext: employee.projectContext,
-        workPath: employee.workPath,
-      ));
+      await agent.setProject(
+        ProjectData(
+          projectUuid: employee.projectUuid,
+          projectName: employee.projectName,
+          projectContext: employee.projectContext,
+          workPath: employee.workPath,
+        ),
+      );
     }
 
     // 注入权限配置
@@ -655,23 +719,30 @@ class DeviceAgentManager {
 
     if (employee.permissionConfig != null &&
         employee.permissionConfig!.isNotEmpty) {
-      final config =
-          PermissionConfig.fromJsonString(employee.permissionConfig!);
+      final config = PermissionConfig.fromJsonString(
+        employee.permissionConfig!,
+      );
       manager.configure(config);
-      print('[DeviceAgentManager] Permission config injected for ${employee.uuid}'
-          ' (${config.whitelist.length} whitelist, ${config.blacklist.length} blacklist rules)');
+      print(
+        '[DeviceAgentManager] Permission config injected for ${employee.uuid}'
+        ' (${config.whitelist.length} whitelist, ${config.blacklist.length} blacklist rules)',
+      );
     }
 
     manager.onConfigChanged = (newConfig) async {
       try {
-        final updatedEmployee = await _employeeManager.getEmployee(employee.uuid);
+        final updatedEmployee = await _employeeManager.getEmployee(
+          employee.uuid,
+        );
         if (updatedEmployee != null) {
           final saved = updatedEmployee.copyWith(
             permissionConfig: newConfig.toJsonString(),
             updateTime: DateTime.now(),
           );
           await _employeeManager.updateEmployee(saved);
-          print('[DeviceAgentManager] Permission config saved for ${employee.uuid}');
+          print(
+            '[DeviceAgentManager] Permission config saved for ${employee.uuid}',
+          );
         }
       } catch (e) {
         print('[DeviceAgentManager] Failed to save permission config: $e');
@@ -718,15 +789,20 @@ class DeviceAgentManager {
     };
 
     scheduleTool.onListTasks = ({String? employeeId}) async {
-      final tasks = await _scheduledTaskManager
-          .getTasks(employeeId: employeeId ?? agentEmployeeId);
-      return tasks.map((t) => <String, dynamic>{
-        'taskId': t.uuid,
-        'name': t.name,
-        'schedule': t.scheduleExpression,
-        'nextExecutionAt': t.nextExecutionAt?.toIso8601String(),
-        'enabled': t.isEnabled,
-      }).toList();
+      final tasks = await _scheduledTaskManager.getTasks(
+        employeeId: employeeId ?? agentEmployeeId,
+      );
+      return tasks
+          .map(
+            (t) => <String, dynamic>{
+              'taskId': t.uuid,
+              'name': t.name,
+              'schedule': t.scheduleExpression,
+              'nextExecutionAt': t.nextExecutionAt?.toIso8601String(),
+              'enabled': t.isEnabled,
+            },
+          )
+          .toList();
     };
 
     scheduleTool.onCancelTask = (taskId) async {
@@ -738,7 +814,9 @@ class DeviceAgentManager {
       }
     };
 
-    print('[DeviceAgentManager] ScheduleTaskTool callbacks injected for $agentEmployeeId');
+    print(
+      '[DeviceAgentManager] ScheduleTaskTool callbacks injected for $agentEmployeeId',
+    );
   }
 
   static String _parseScheduleType(String expression) {
@@ -748,10 +826,7 @@ class DeviceAgentManager {
     return 'interval';
   }
 
-  void _setupAdapter(
-    LlmChatAdapter adapter,
-    String employeeId,
-  ) {
+  void _setupAdapter(LlmChatAdapter adapter, String employeeId) {
     adapter.configurePersistence(
       messageStore: _messageStoreService,
       deviceId: _deviceId,
@@ -759,7 +834,7 @@ class DeviceAgentManager {
     adapter.deviceId = _deviceId;
 
     adapter.shouldMarkAsRead = (empId) =>
-      _notificationManager.currentOpenSession?.employeeId == empId;
+        _notificationManager.currentOpenSession?.employeeId == empId;
 
     // 会话清空回调：设置 clearSeq = lastSeq + 清理通知
     adapter.onSessionCleared = (empId, maxSeq) async {
@@ -775,7 +850,8 @@ class DeviceAgentManager {
     // Provider 配置变更回调
     adapter.onProviderConfigChanged = (providerConfig) async {
       await _sessionManager.updateDeviceConfig(
-        employeeId, _deviceId,
+        employeeId,
+        _deviceId,
         providerConfig: jsonEncode(providerConfig),
       );
     };
@@ -787,12 +863,14 @@ class DeviceAgentManager {
       broadcastAgentEvent(employeeId, event);
 
       // 始终添加到本地 eventController，确保本地 UI 能接收到所有事件
-      _stateHolder.eventController.add(AgentEvent(
-        type: event.type,
-        data: event.data,
-        employeeId: employeeId,
-        fromDeviceId: _deviceId,
-      ));
+      _stateHolder.eventController.add(
+        AgentEvent(
+          type: event.type,
+          data: event.data,
+          employeeId: employeeId,
+          fromDeviceId: _deviceId,
+        ),
+      );
 
       final type = event.type;
       final data = event.data;
@@ -814,45 +892,58 @@ class DeviceAgentManager {
               content: content,
               createdAt: DateTime.now(),
               status: status,
-              metadata: Map<String, dynamic>.from(data)..['deviceId'] = _deviceId,
+              metadata: Map<String, dynamic>.from(data)
+                ..['deviceId'] = _deviceId,
             );
             _stateHolder.notificationHub.onLocalMessage(
               message: msg,
               employeeId: employeeId,
             );
-            _notificationManager.updateLatestMessageCache(employeeId, _deviceId, msg);
+            _notificationManager.updateLatestMessageCache(
+              employeeId,
+              _deviceId,
+              msg,
+            );
           }
         }
       }
 
       if (status == 'completed') {
-        agent.getSessionMessagesByUserCount(userMessageLimit: 1).then((messages) {
-          if (messages.isEmpty) return;
-          final lastAssistant = messages.lastWhere(
-            (m) => m.role == 'assistant',
-            orElse: () => messages.last,
-          );
-          final msg = AgentMessage(
-            id: lastAssistant.id,
-            role: lastAssistant.role,
-            type: lastAssistant.type,
-            content: lastAssistant.content,
-            createdAt: lastAssistant.createdAt,
-            status: status,
-            metadata: Map<String, dynamic>.from(data)..['deviceId'] = _deviceId,
-          );
-          final autoRead = _stateHolder.notificationHub.shouldAutoMarkAsReadCallback?.call(
+        agent
+            .getSessionMessagesByUserCount(userMessageLimit: 1)
+            .then((messages) {
+              if (messages.isEmpty) return;
+              final lastAssistant = messages.lastWhere(
+                (m) => m.role == 'assistant',
+                orElse: () => messages.last,
+              );
+              final msg = AgentMessage(
+                id: lastAssistant.id,
+                role: lastAssistant.role,
+                type: lastAssistant.type,
+                content: lastAssistant.content,
+                createdAt: lastAssistant.createdAt,
+                status: status,
+                metadata: Map<String, dynamic>.from(data)
+                  ..['deviceId'] = _deviceId,
+              );
+              final autoRead =
+                  _stateHolder.notificationHub.shouldAutoMarkAsReadCallback
+                      ?.call(employeeId: employeeId, fromDeviceId: _deviceId) ??
+                  false;
+              _stateHolder.notificationHub.onLocalMessage(
+                message: msg,
                 employeeId: employeeId,
-                fromDeviceId: _deviceId,
-              ) ?? false;
-          _stateHolder.notificationHub.onLocalMessage(
-            message: msg,
-            employeeId: employeeId,
-            markUnread: !autoRead,
-            autoRead: autoRead,
-          );
-          _notificationManager.updateLatestMessageCache(employeeId, _deviceId, msg);
-        }).catchError((_) {});
+                markUnread: !autoRead,
+                autoRead: autoRead,
+              );
+              _notificationManager.updateLatestMessageCache(
+                employeeId,
+                _deviceId,
+                msg,
+              );
+            })
+            .catchError((_) {});
       }
     });
     _agentEventSubscriptions[employeeId] = subscription;

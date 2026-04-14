@@ -103,6 +103,7 @@ void main() {
       messageStore: messageStore,
       deviceId: deviceId,
       employeeId: employeeId,
+      markReadQueueStore: MarkReadQueueStore(deviceId: deviceId),
     );
     
     await cachedProxy.initialize();

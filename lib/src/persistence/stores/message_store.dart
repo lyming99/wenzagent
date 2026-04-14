@@ -439,11 +439,17 @@ class MessageStore {
   /// 获取指定员工中仍处于 processing 状态的本地工具调用消息 ID 列表（按 device_id 隔离）
   List<String> getStaleLocalToolCallMessages(String employeeId, {String deviceId = ''}) {
     if (deviceId.isNotEmpty) {
-      final resultSet = _db.select(
-        "SELECT uuid FROM messages WHERE employee_id = ? AND device_id = ? AND uuid LIKE 'local_toolcall_%' AND processing_status = 'processing' AND deleted = 0",
-        [employeeId, deviceId],
-      );
-      return resultSet.map((row) => row['uuid'] as String).toList();
+      try {
+        print("[MessageStore] getStaleLocalToolCallMessages");
+        final resultSet = _db.select(
+                "SELECT uuid FROM messages WHERE employee_id = ? AND device_id = ? AND uuid LIKE 'local_toolcall_%' AND processing_status = 'processing' AND deleted = 0",
+                [employeeId, deviceId],
+              );
+        print("[MessageStore] success");
+        return resultSet.map((row) => row['uuid'] as String).toList();
+      } catch (e) {
+        print(e);
+      }
     }
     final resultSet = _db.select(
       "SELECT uuid FROM messages WHERE employee_id = ? AND uuid LIKE 'local_toolcall_%' AND processing_status = 'processing' AND deleted = 0",

@@ -135,6 +135,7 @@ class DeviceRpcHandler {
 
     // 获取最大 seq
     rpcServer.register(AgentRpcConfig.methodGetMaxSeq, (params) async {
+      print('[DeviceRpcHandler] RPC getMaxSeq');
       final request = GetSessionMessagesRequest.fromMap(params);
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
       final maxSeq = await agent.getMaxSeq(employeeId: request.employeeId);

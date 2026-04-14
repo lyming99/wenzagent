@@ -53,6 +53,7 @@ void main() async {
     messageStore: messageStore,
     deviceId: deviceId,
     employeeId: employeeId,
+    markReadQueueStore: MarkReadQueueStore(deviceId: deviceId),
   );
 
   // ============================================================
