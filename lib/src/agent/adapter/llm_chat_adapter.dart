@@ -121,8 +121,7 @@ class LlmChatAdapter implements IChatAdapter {
   /// 提供商配置
   ProviderConfig? _providerConfig;
 
-  /// 会话记忆管理器（protected，供子类访问）
-  @protected
+  /// 会话记忆管理器
   final SessionMemoryManager memoryManager = SessionMemoryManager();
 
   /// 当前员工 UUID（同时作为会话 ID）
@@ -130,7 +129,6 @@ class LlmChatAdapter implements IChatAdapter {
   String? currentEmployeeUuid;
 
   /// 当前设备 ID（用于区分不同设备的消息记录）
-  @protected
   String? deviceId;
 
   /// 当前上下文
@@ -172,8 +170,10 @@ class LlmChatAdapter implements IChatAdapter {
     memoryManager.shouldMarkAsRead = callback;
   }
 
-  /// 会话清空回调（由 DeviceAgentManager 注入，用于设置 clearSeq 和清理通知）
-  Future<void> Function(String employeeId)? onSessionCleared;
+  /// 会话清空回调（由 DeviceAgentManager 注入，用于设置 clearSeq/lastSeq 和清理通知）
+  ///
+  /// [maxSeq] 清空前消息的最大 seq，用于设置 clearSeq = lastSeq = maxSeq
+  Future<void> Function(String employeeId, int maxSeq)? onSessionCleared;
 
   /// Provider 配置变更回调（由 DeviceAgentManager 注入）
   void Function(Map<String, dynamic> providerConfig)? onProviderConfigChanged;
@@ -449,9 +449,12 @@ class LlmChatAdapter implements IChatAdapter {
   @override
   Future<void> clearCurrentSession() async {
     if (currentEmployeeUuid != null) {
-      await memoryManager.clearSessionFromDb(currentEmployeeUuid!);
-      _compressor?.clearCache(currentEmployeeUuid!);
-      await onSessionCleared?.call(currentEmployeeUuid!);
+      final empId = currentEmployeeUuid!;
+      // 在删除前获取 maxSeq，用于设置 clearSeq = lastSeq
+      final maxSeq = memoryManager.getMaxSeq(empId);
+      await memoryManager.clearSessionFromDb(empId);
+      _compressor?.clearCache(empId);
+      await onSessionCleared?.call(empId, maxSeq);
     }
   }
 
@@ -596,17 +599,33 @@ class LlmChatAdapter implements IChatAdapter {
   }
 
   /// 添加用户消息到会话历史
+  ///
+  /// 如果消息已被 AgentImpl.sendMessage 提前持久化（存在于内存中），
+  /// 则先从内存移除，再用当前时间重新创建并持久化，
+  /// 确保 createdAt 和 seq 反映实际发送顺序而非排队顺序。
   @protected
   Future<void> addUserMessage(MessageInput message) async {
     final id = message.id ?? const Uuid().v4();
+    final effDeviceId = deviceId ?? 'default';
+
+    // 如果消息已存在于内存中（被 AgentImpl.sendMessage 提前持久化），
+    // 先从内存中移除，避免 streamMessage 时上下文混乱
+    final session = memoryManager.getSession(currentEmployeeUuid!);
+    if (session != null && session.allMessages.any((m) => m.id == id)) {
+      session.removeMessage(id);
+      print('[LlmChatAdapter] 用户消息已从内存移除，准备重新持久化: $id');
+    }
+
+    // 用当前时间创建消息，确保 createdAt 和 seq 反映实际发送顺序
     final userMessage = shared.ChatMessage.user(
       id: id,
       employeeId: currentEmployeeUuid!,
       content: message.content,
+      createdAt: DateTime.now(),
     );
     memoryManager.addMessage(
       currentEmployeeUuid!,
-      deviceId ?? 'default',
+      effDeviceId,
       userMessage,
     );
   }

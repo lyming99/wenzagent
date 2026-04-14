@@ -658,11 +658,16 @@ class CachedAgentProxy {
     });
 
     _pendingPermissionRequests.clear();
+
+    // 在删除前获取本地 maxSeq，用于设置 clearSeq = lastSeq = maxSeq
+    final maxSeq = _messageStore.getMaxSeq(_employeeId);
     await _messageStore.deleteMessages(_employeeId, deviceId: _deviceId);
-    _messageStore.resetLastSeq(_employeeId, 0);
+    if (maxSeq > 0) {
+      _messageStore.resetLastSeq(_employeeId, maxSeq);
+    }
     _notifyMessagesChanged();
 
-    print('[CachedAgentProxy] 本地会话已清空，水位线已重置');
+    print('[CachedAgentProxy] 本地会话已清空，水位线: clearSeq=lastSeq=$maxSeq');
   }
 
   /// 处理状态变更

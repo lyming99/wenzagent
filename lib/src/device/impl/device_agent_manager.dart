@@ -756,16 +756,17 @@ class DeviceAgentManager {
       messageStore: _messageStoreService,
       deviceId: _deviceId,
     );
+    adapter.deviceId = _deviceId;
 
     adapter.shouldMarkAsRead = (empId) =>
       _notificationManager.currentOpenSession?.employeeId == empId;
 
-    // 会话清空回调：设置 clearSeq + 清理通知
-    adapter.onSessionCleared = (empId) async {
-      final watermarkStore = SyncWatermarkStore(deviceId: _deviceId);
-      final maxSeq = _messageStoreService.getMaxSeq(empId);
+    // 会话清空回调：设置 clearSeq = lastSeq + 清理通知
+    adapter.onSessionCleared = (empId, maxSeq) async {
       if (maxSeq > 0) {
+        final watermarkStore = SyncWatermarkStore(deviceId: _deviceId);
         watermarkStore.setClearSeq(empId, maxSeq, deviceId: _deviceId);
+        watermarkStore.resetLastSeq(empId, maxSeq, deviceId: _deviceId);
       }
       _stateHolder.notificationHub.markAllAsRead(employeeId: empId);
       _notificationManager.clearLatestMessageCache(empId);

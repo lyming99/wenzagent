@@ -513,6 +513,22 @@ class AgentImpl implements IAgent {
       messageData['type'] = messageData['type'] as String? ?? 'text';
       messageData['createdAt'] = DateTime.now().toIso8601String();
 
+      // 立即通过 memoryManager 持久化用户消息（分配 seq 并写入 DB），
+      // 确保在返回 RPC 响应前消息已持久化，避免同步导致消息被清空
+      if (_chatAdapter case final LlmChatAdapter adapter) {
+        final userMessage = ChatMessage.user(
+          id: finalMessageId,
+          employeeId: employeeId,
+          content: input.content,
+        );
+        adapter.memoryManager.addMessage(
+          employeeId,
+          deviceId,
+          userMessage,
+        );
+        print('[AgentImpl] 用户消息已提前持久化: $finalMessageId');
+      }
+
       print('[AgentImpl] 提交消息到处理器，最终消息ID: $finalMessageId');
       // 提交到处理器
       await _processor?.submitMessage(finalMessageId, messageData);

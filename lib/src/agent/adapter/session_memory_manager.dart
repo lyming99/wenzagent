@@ -320,6 +320,11 @@ class SessionMemoryManager {
     }
   }
 
+  /// 获取指定 employee 的最大 seq（含已软删除的消息）
+  int getMaxSeq(String employeeId) {
+    return _messageStore?.getMaxSeq(employeeId) ?? 0;
+  }
+
   /// 更新消息状态（写 DB）
   Future<void> updateMessageStatusInDb(
     String messageId, String status, {String? error}
