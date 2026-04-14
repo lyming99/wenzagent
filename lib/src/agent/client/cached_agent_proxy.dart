@@ -772,7 +772,7 @@ class CachedAgentProxy {
 
           if (batch.length < batchSize) break;
         }
-        _messageStore.updateLastSeq(deviceId, employeeId, localLastSeq);
+        _messageStore.updateLastSeq(deviceId, employeeId, currentSeq);
 
         // 5. 直接写入本地（INSERT OR REPLACE，无需比较）
         if (allNewMessages.isNotEmpty) {

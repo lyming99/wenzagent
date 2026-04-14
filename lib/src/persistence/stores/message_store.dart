@@ -119,19 +119,18 @@ class MessageStore {
     _db.execute('''
       INSERT INTO sync_watermark (employee_id, device_id, last_seq, update_time)
         VALUES (?, ?, ?, ?)
-        ON CONFLICT(employee_id, device_id) DO UPDATE SET
-          last_seq = MAX(last_seq, excluded.last_seq),
-          update_time = excluded.update_time
+      ON CONFLICT(employee_id, device_id) DO UPDATE SET
+        last_seq = MAX(last_seq, excluded.last_seq),
+        update_time = excluded.update_time
     ''', [employeeId, deviceId, seq, DateTime.now().millisecondsSinceEpoch]);
   }
 
   /// 使用明确 deviceId 添加消息（upsert）
   ///
-  /// seq 分配流程：
-  /// 1. 查询水位表 lastSeq（含 clearSeq 上界）
-  /// 2. 从水位线分配新 seq = max(messages, watermark, clearSeq) + 1
-  /// 3. INSERT OR REPLACE 写入消息
-  /// 4. 更新水位表 lastSeq
+  /// seq 分配策略（修复多设备并发冲突）：
+  /// - 如果消息携带有效 seq > 0（来自服务端/远程同步），直接使用该 seq，
+  ///   并更新水位线（MAX 语义保证不回退）。
+  /// - 如果消息 seq == 0（本地新消息），从本地水位线分配新 seq。
   ///
   /// [updateWatermark] 是否更新同步水位线，默认 true。
   /// 本地临时消息（localOnly）应传 false，避免本地分配的 seq 污染同步水位线。
@@ -142,9 +141,18 @@ class MessageStore {
   }) async {
     _validateDeviceId(deviceId, 'addWithDeviceId');
     final effDeviceId = deviceId!;
-    // 始终从本地水位线分配 seq，忽略远程携带的 seq
-    final newSeq = getNextSeq(deviceId: effDeviceId);
-    final msg = message.copyWith(seq: newSeq);
+
+    // seq 分配策略：
+    // - 远程同步消息携带有效 seq > 0 → 保留原始 seq（服务端是 seq 的权威来源）
+    // - 本地新消息 seq == 0 → 从本地水位线分配新 seq
+    final int effectiveSeq;
+    if (message.seq > 0) {
+      effectiveSeq = message.seq;
+    } else {
+      effectiveSeq = getNextSeq(deviceId: effDeviceId);
+    }
+    final msg = message.copyWith(seq: effectiveSeq);
+
     _db.execute('''
       INSERT OR REPLACE INTO messages (
         uuid, employee_id, device_id, role, type, content,
@@ -153,6 +161,7 @@ class MessageStore {
         is_read, deleted, create_time, update_time, seq
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', _messageToParams(msg, effDeviceId));
+
     if (updateWatermark) {
       _updateWatermarkLastSeq(msg.employeeId, msg.seq, deviceId: effDeviceId);
     }
@@ -295,6 +304,9 @@ class MessageStore {
   /// 同时从 messages 表、sync_watermark.last_seq 和 sync_watermark.clear_seq 取最大值，
   /// 确保清空消息后 seq 不会重复，也不会小于 clearSeq。
   /// 按 device_id 隔离，保证不同设备的 seq 独立递增。
+  ///
+  /// 注意：此方法仅用于本地新消息（seq == 0）的分配。
+  /// 远程同步消息应保留其原始 seq，不调用此方法。
   int getNextSeq({required String deviceId}) {
     _validateDeviceId(deviceId, 'getNextSeq');
     final msgResult = _db.select(
@@ -406,7 +418,7 @@ class MessageStore {
     return resultSet.map(_rowToMessage).toList();
   }
 
-  /// 统计指定员工的未读消息数量（assistant 且 is_read=0）
+  /// 统计指定员工的未读消息数量（assistant 且 is_read=0 且 deleted=0）
   ///
   /// [deviceId] 可选，传入时仅统计指定设备的消息，不传则统计所有设备。
   int getUnreadCount(String employeeId, {String? deviceId}) {
@@ -529,9 +541,9 @@ class MessageStore {
     _db.execute('''
       INSERT INTO sync_watermark (employee_id, device_id, last_seq, update_time)
         SELECT employee_id, COALESCE(device_id, ''), ?, ? FROM messages WHERE uuid = ?
-        ON CONFLICT(employee_id, device_id) DO UPDATE SET
-          last_seq = MAX(last_seq, excluded.last_seq),
-          update_time = excluded.update_time
+      ON CONFLICT(employee_id, device_id) DO UPDATE SET
+        last_seq = MAX(last_seq, excluded.last_seq),
+        update_time = excluded.update_time
     ''', [newSeq, now, uuid]);
   }
 
