@@ -56,18 +56,18 @@ void main() {
           createdAt: DateTime.now().add(Duration(seconds: i)),
           deviceId: deviceId,
         );
-        await messageStore.addMessage(msg, deviceId: deviceId);
+        await messageStore.addMessage(deviceId, msg);
       }
 
       // 验证消息存在
-      var messages = await messageStore.getMessages(employeeId);
+      var messages = await messageStore.getMessages(deviceId, employeeId);
       expect(messages.length, equals(5));
 
       // 删除会话
-      await messageStore.deleteMessages(employeeId, deviceId: deviceId);
+      await messageStore.deleteMessages(deviceId, employeeId);
 
       // 验证消息已清空
-      messages = await messageStore.getMessages(employeeId);
+      messages = await messageStore.getMessages(deviceId, employeeId);
       expect(messages, isEmpty);
     });
 
@@ -83,11 +83,11 @@ void main() {
           createdAt: DateTime.now().add(Duration(seconds: i)),
           deviceId: deviceId,
         );
-        await messageStore.addMessage(msg, deviceId: deviceId);
+        await messageStore.addMessage(deviceId, msg);
       }
 
       // 使用不同的 deviceId 删除（不应影响原 deviceId 的消息）
-      await messageStore.deleteMessages(employeeId, deviceId: 'other-device');
+      await messageStore.deleteMessages('other-device', employeeId);
 
       // 验证原 deviceId 的消息仍然存在
       final messages = await messageStore.getMessagesWithDeviceId(
@@ -100,7 +100,7 @@ void main() {
   group('unread count tracking', () {
     test('assistant messages increase unread count', () async {
       // 初始未读为 0
-      expect(messageStore.getUnreadCount(employeeId), equals(0));
+      expect(messageStore.getUnreadCount(deviceId, employeeId), equals(0));
 
       // 添加未读 assistant 消息
       for (int i = 1; i <= 5; i++) {
@@ -114,11 +114,11 @@ void main() {
           deviceId: deviceId,
           isRead: false,
         );
-        await messageStore.addMessage(msg, deviceId: deviceId, updateWatermark: false);
+        await messageStore.addMessage(deviceId, msg, updateWatermark: false);
       }
 
       // 验证未读数
-      expect(messageStore.getUnreadCount(employeeId), equals(5));
+      expect(messageStore.getUnreadCount(deviceId, employeeId), equals(5));
     });
 
     test('user messages do not increase unread count', () async {
@@ -134,11 +134,11 @@ void main() {
           deviceId: deviceId,
           isRead: false,
         );
-        await messageStore.addMessage(msg, deviceId: deviceId, updateWatermark: false);
+        await messageStore.addMessage(deviceId, msg, updateWatermark: false);
       }
 
       // 未读数应为 0（只统计 assistant 消息）
-      expect(messageStore.getUnreadCount(employeeId), equals(0));
+      expect(messageStore.getUnreadCount(deviceId, employeeId), equals(0));
     });
 
     test('markAsReadInDb clears unread count', () async {
@@ -154,16 +154,16 @@ void main() {
           deviceId: deviceId,
           isRead: false,
         );
-        await messageStore.addMessage(msg, deviceId: deviceId, updateWatermark: false);
+        await messageStore.addMessage(deviceId, msg, updateWatermark: false);
       }
 
-      expect(messageStore.getUnreadCount(employeeId), equals(4));
+      expect(messageStore.getUnreadCount(deviceId, employeeId), equals(4));
 
       // 标记已读（通过 rawStore 直接调用，指定 deviceId）
       rawStore.markAsReadByEmployee(employeeId, deviceId: deviceId);
 
       // 验证未读数为 0
-      expect(messageStore.getUnreadCount(employeeId), equals(0));
+      expect(messageStore.getUnreadCount(deviceId, employeeId), equals(0));
     });
 
     test('mixed read/unread messages tracked correctly', () async {
@@ -179,7 +179,7 @@ void main() {
           deviceId: deviceId,
           isRead: true,
         );
-        await messageStore.addMessage(msg, deviceId: deviceId, updateWatermark: false);
+        await messageStore.addMessage(deviceId, msg, updateWatermark: false);
       }
 
       for (int i = 3; i <= 5; i++) {
@@ -193,11 +193,11 @@ void main() {
           deviceId: deviceId,
           isRead: false,
         );
-        await messageStore.addMessage(msg, deviceId: deviceId, updateWatermark: false);
+        await messageStore.addMessage(deviceId, msg, updateWatermark: false);
       }
 
       // 未读数应为 3
-      expect(messageStore.getUnreadCount(employeeId), equals(3));
+      expect(messageStore.getUnreadCount(deviceId, employeeId), equals(3));
     });
   });
 
@@ -214,17 +214,17 @@ void main() {
           createdAt: DateTime(2024, 1, 1, 12, 0, i),
           deviceId: deviceId,
         );
-        await messageStore.addMessage(msg, deviceId: deviceId);
+        await messageStore.addMessage(deviceId, msg);
       }
 
-      final latest = await messageStore.getLastMessage(employeeId);
+      final latest = await messageStore.getLastMessage(deviceId, employeeId);
       expect(latest, isNotNull);
       expect(latest!.content, equals('Message 3'));
       expect(latest.id, equals('latest-test-3'));
     });
 
     test('getLastMessage returns null when no messages exist', () async {
-      final latest = await messageStore.getLastMessage('non-existent-employee');
+      final latest = await messageStore.getLastMessage(deviceId, 'non-existent-employee');
       expect(latest, isNull);
     });
 
@@ -239,9 +239,9 @@ void main() {
         createdAt: DateTime(2024, 1, 1, 12, 0, 0),
         deviceId: deviceId,
       );
-      await messageStore.addMessage(msg1, deviceId: deviceId);
+      await messageStore.addMessage(deviceId, msg1);
 
-      var latest = await messageStore.getLastMessage(employeeId);
+      var latest = await messageStore.getLastMessage(deviceId, employeeId);
       expect(latest!.content, equals('Initial'));
 
       // 插入更新消息
@@ -254,9 +254,9 @@ void main() {
         createdAt: DateTime(2024, 1, 1, 12, 0, 10),
         deviceId: deviceId,
       );
-      await messageStore.addMessage(msg2, deviceId: deviceId);
+      await messageStore.addMessage(deviceId, msg2);
 
-      latest = await messageStore.getLastMessage(employeeId);
+      latest = await messageStore.getLastMessage(deviceId, employeeId);
       expect(latest!.content, equals('Newer'));
     });
   });
@@ -272,17 +272,17 @@ void main() {
         createdAt: DateTime.now(),
         deviceId: deviceId,
       );
-      await messageStore.addMessage(msg, deviceId: deviceId);
+      await messageStore.addMessage(deviceId, msg);
 
       // 验证消息存在
-      var found = await messageStore.getMessage('to-hard-delete', deviceId: deviceId);
+      var found = await messageStore.getMessage(deviceId, 'to-hard-delete');
       expect(found, isNotNull);
 
       // 硬删除
-      await messageStore.hardDeleteMessage('to-hard-delete', deviceId: deviceId);
+      await messageStore.hardDeleteMessage(deviceId, 'to-hard-delete');
 
       // 验证消息已删除
-      found = await messageStore.getMessage('to-hard-delete', deviceId: deviceId);
+      found = await messageStore.getMessage(deviceId, 'to-hard-delete');
       expect(found, isNull);
     });
   });
@@ -299,10 +299,10 @@ void main() {
           createdAt: DateTime.now().add(Duration(seconds: i)),
           deviceId: deviceId,
         );
-        await messageStore.addMessage(msg, deviceId: deviceId);
+        await messageStore.addMessage(deviceId, msg);
       }
 
-      expect(messageStore.getUnreadCount(employeeId), equals(0));
+      expect(messageStore.getUnreadCount(deviceId, employeeId), equals(0));
 
       final count = await rawStore.count(deviceId, employeeId);
       expect(count, equals(5));
@@ -325,10 +325,10 @@ void main() {
           deviceId: deviceId,
           isRead: false,
         );
-        await messageStore.addMessage(msg, deviceId: deviceId, updateWatermark: false);
+        await messageStore.addMessage(deviceId, msg, updateWatermark: false);
       }
 
-      final unreadIds = messageStore.getUnreadMessageIds(employeeId);
+      final unreadIds = messageStore.getUnreadMessageIds(deviceId, employeeId);
       expect(unreadIds.length, equals(3));
 
       // 验证按时间升序排列

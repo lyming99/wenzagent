@@ -113,7 +113,7 @@ void main() {
     await cachedProxy.dispose();
     await localProxy.dispose();
     await agent.dispose();
-    await messageStore.deleteMessages(employeeId, deviceId: deviceId);
+    await messageStore.deleteMessages(deviceId, employeeId);
   });
   
   tearDownAll(() async {

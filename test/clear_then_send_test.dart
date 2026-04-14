@@ -136,7 +136,7 @@ void main() {
 
     // 写入客户端 DB
     for (final msg in newMessages) {
-      await clientStore.addMessage(msg, deviceId: deviceIdB);
+      await clientStore.addMessage(deviceIdB, msg);
     }
     // 更新客户端水位线
     clientWatermark.resetLastSeq(employeeId, currentSeq, deviceId: deviceIdB);
@@ -170,10 +170,10 @@ void main() {
         createdAt: DateTime.now(),
         deviceId: deviceIdA,
       );
-      await serverStore.addMessage(newMsg, deviceId: deviceIdA);
+      await serverStore.addMessage(deviceIdA, newMsg);
 
       // 4. 验证新消息 seq > clearSeq
-      final saved = await serverStore.getMessage('msg-new-1', deviceId: deviceIdA);
+      final saved = await serverStore.getMessage(deviceIdA, 'msg-new-1');
       expect(saved, isNotNull);
       expect(saved!.seq, greaterThan(clearSeq));
 
@@ -197,7 +197,7 @@ void main() {
           createdAt: DateTime.now().add(Duration(seconds: i)),
           deviceId: deviceIdA,
         );
-        await serverStore.addMessage(msg, deviceId: deviceIdA);
+        await serverStore.addMessage(deviceIdA, msg);
       }
 
       final all = await serverStore.getMessagesWithDeviceId(deviceIdA, employeeId);
@@ -239,7 +239,7 @@ void main() {
         createdAt: DateTime.now(),
         deviceId: deviceIdA,
       );
-      await serverStore.addMessage(newMsg, deviceId: deviceIdA);
+      await serverStore.addMessage(deviceIdA, newMsg);
 
       // 7. 客户端同步
       final syncedNew = await _clientSync();
@@ -283,7 +283,7 @@ void main() {
           createdAt: DateTime.now().add(Duration(seconds: i + 1)),
           deviceId: deviceIdA,
         );
-        await serverStore.addMessage(msg, deviceId: deviceIdA);
+        await serverStore.addMessage(deviceIdA, msg);
       }
 
       // 5. 客户端同步
@@ -320,7 +320,7 @@ void main() {
       memMgr.addMessage(employeeId, deviceIdA, prePersistedMsg);
 
       // 验证预持久化成功
-      var dbMsg = await serverStore.getMessage('msg-test-1', deviceId: deviceIdA);
+      var dbMsg = await serverStore.getMessage(deviceIdA, 'msg-test-1');
       expect(dbMsg, isNotNull);
       final preSeq = dbMsg!.seq;
       expect(preSeq, greaterThan(0));
@@ -341,7 +341,7 @@ void main() {
       memMgr.addMessage(employeeId, deviceIdA, rebuiltMsg);
 
       // 3. 验证 DB 中只有一条记录
-      dbMsg = await serverStore.getMessage('msg-test-1', deviceId: deviceIdA);
+      dbMsg = await serverStore.getMessage(deviceIdA, 'msg-test-1');
       expect(dbMsg, isNotNull);
       final newSeq = dbMsg!.seq;
       expect(newSeq, greaterThan(preSeq), reason: '重建后 seq 应大于预持久化的 seq');
@@ -384,7 +384,7 @@ void main() {
       ));
 
       // 验证 DB 中的 createdAt 已更新
-      final dbMsg = await serverStore.getMessage('msg-time-test', deviceId: deviceIdA);
+      final dbMsg = await serverStore.getMessage(deviceIdA, 'msg-time-test');
       expect(dbMsg, isNotNull);
       // DB 中的时间应接近 newTime（允许 1 秒误差）
       expect(
@@ -459,7 +459,7 @@ void main() {
         deviceId: deviceIdB,
         seq: 0, // 本地缓存没有 seq
       );
-      await clientStore.addMessage(localMsg, deviceId: deviceIdB, updateWatermark: false);
+      await clientStore.addMessage(deviceIdB, localMsg, updateWatermark: false);
 
       // 2. 服务端处理消息并持久化（有 seq）
       final serverMsg = ChatMessage(
@@ -471,9 +471,9 @@ void main() {
         createdAt: DateTime.now(),
         deviceId: deviceIdA,
       );
-      await serverStore.addMessage(serverMsg, deviceId: deviceIdA);
+      await serverStore.addMessage(deviceIdA, serverMsg);
 
-      final serverSaved = await serverStore.getMessage('msg-local-cached', deviceId: deviceIdA);
+      final serverSaved = await serverStore.getMessage(deviceIdA, 'msg-local-cached');
       expect(serverSaved, isNotNull);
       expect(serverSaved!.seq, greaterThan(0));
 
@@ -481,7 +481,7 @@ void main() {
       await _clientSync();
 
       // 4. 验证本地消息被替换（有正确的 seq）
-      final clientSaved = await clientStore.getMessage('msg-local-cached', deviceId: deviceIdB);
+      final clientSaved = await clientStore.getMessage(deviceIdB, 'msg-local-cached');
       expect(clientSaved, isNotNull);
       expect(clientSaved!.seq, equals(serverSaved.seq));
       expect(clientSaved.seq, greaterThan(0));
@@ -515,7 +515,7 @@ void main() {
         createdAt: DateTime.now(),
         deviceId: deviceIdA,
       );
-      await serverStore.addMessage(userMsg, deviceId: deviceIdA);
+      await serverStore.addMessage(deviceIdA, userMsg);
 
       // === 阶段4：AI 回复 ===
       final aiMsg = ChatMessage(
@@ -527,7 +527,7 @@ void main() {
         createdAt: DateTime.now().add(const Duration(seconds: 1)),
         deviceId: deviceIdA,
       );
-      await serverStore.addMessage(aiMsg, deviceId: deviceIdA);
+      await serverStore.addMessage(deviceIdA, aiMsg);
 
       // === 阶段5：客户端同步 ===
       final synced = await _clientSync();

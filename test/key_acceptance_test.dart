@@ -124,7 +124,7 @@ void main() {
         createdAt: DateTime.now(),
         deviceId: deviceIdA,
       );
-      await messageStore.addMessage(secondMsg, deviceId: deviceIdA);
+      await messageStore.addMessage(deviceIdA, secondMsg);
 
       messages = await messageStore.getMessagesWithDeviceId(
           deviceIdA, employeeId);
@@ -144,7 +144,7 @@ void main() {
           createdAt: DateTime.now().add(Duration(seconds: i)),
           deviceId: deviceIdA,
         );
-        await messageStore.addMessage(msg, deviceId: deviceIdA);
+        await messageStore.addMessage(deviceIdA, msg);
       }
 
       final maxSeq = rawStore.getMaxSeqForEmployeeAll(employeeId);
@@ -153,7 +153,7 @@ void main() {
       // 服务端设置 clearSeq
       watermarkStore.setClearSeq(employeeId, clearSeqValue, deviceId: deviceIdA);
       // 服务端硬删除消息
-      await messageStore.deleteMessages(employeeId, deviceId: deviceIdA);
+      await messageStore.deleteMessages(deviceIdA, employeeId);
 
       // 模拟客户端B：有之前同步的本地消息
       final clientStoreB = MessageStoreServiceImpl(deviceId: deviceIdB);
@@ -169,8 +169,8 @@ void main() {
           deviceId: deviceIdB,
           seq: i,
         );
-        await clientStoreB.addMessage(msg,
-            deviceId: deviceIdB, updateWatermark: false);
+        await clientStoreB.addMessage(deviceIdB, msg,
+            updateWatermark: false);
       }
 
       // 客户端B同步：读取clearSeq，删除本地消息
@@ -205,8 +205,8 @@ void main() {
           deviceId: deviceIdA,
           isRead: i <= 2, // 前2条已读
         );
-        await messageStore.addMessage(msg,
-            deviceId: deviceIdA, updateWatermark: false);
+        await messageStore.addMessage(deviceIdA, msg,
+            updateWatermark: false);
       }
 
       // 模拟重启：创建新实例
@@ -237,13 +237,13 @@ void main() {
           deviceId: deviceIdA,
           isRead: false,
         );
-        await messageStore.addMessage(msg,
-            deviceId: deviceIdA, updateWatermark: false);
+        await messageStore.addMessage(deviceIdA, msg,
+            updateWatermark: false);
       }
 
       // 模拟重启
       final restarted = MessageStoreServiceImpl(deviceId: deviceIdA);
-      expect(restarted.getUnreadCount(employeeId), equals(3));
+      expect(restarted.getUnreadCount(deviceIdA, employeeId), equals(3));
 
       MessageStoreService.removeInstance(deviceIdA);
     });
@@ -258,11 +258,11 @@ void main() {
         createdAt: DateTime.now(),
         deviceId: deviceIdA,
       );
-      await messageStore.addMessage(msg, deviceId: deviceIdA);
+      await messageStore.addMessage(deviceIdA, msg);
 
       // 模拟重启
       final restarted = MessageStoreServiceImpl(deviceId: deviceIdA);
-      final latest = await restarted.getLastMessage(employeeId);
+      final latest = await restarted.getLastMessage(deviceIdA, employeeId);
       expect(latest, isNotNull);
       expect(latest!.content, equals('Latest before restart'));
 
@@ -296,7 +296,7 @@ void main() {
           createdAt: DateTime.now().add(Duration(seconds: i)),
           deviceId: deviceIdA,
         );
-        await storeA.addMessage(msg, deviceId: deviceIdA);
+        await storeA.addMessage(deviceIdA, msg);
       }
 
       // Device B 插入2条
@@ -310,7 +310,7 @@ void main() {
           createdAt: DateTime.now().add(Duration(seconds: i)),
           deviceId: deviceIdB,
         );
-        await storeB.addMessage(msg, deviceId: deviceIdB);
+        await storeB.addMessage(deviceIdB, msg);
       }
 
       // Device A 只看到自己的消息
@@ -330,7 +330,7 @@ void main() {
       }
 
       // 删除Device A的消息不影响Device B
-      await storeA.deleteMessages(employeeId, deviceId: deviceIdA);
+      await storeA.deleteMessages(deviceIdA, employeeId);
 
       final messagesBAfterDelete =
           await storeB.getMessagesWithDeviceId(deviceIdB, employeeId);
@@ -356,17 +356,17 @@ void main() {
           deviceId: deviceIdA,
           isRead: false,
         );
-        await storeA.addMessage(msg,
-            deviceId: deviceIdA, updateWatermark: false);
+        await storeA.addMessage(deviceIdA, msg,
+            updateWatermark: false);
       }
 
       // 未读数 = 3 (只统计deviceIdA下的assistant消息)
-      expect(storeA.getUnreadCount(employeeId), equals(3));
+      expect(storeA.getUnreadCount(deviceIdA, employeeId), equals(3));
 
       // 标记已读（指定deviceId）
       storeARaw.markAsReadByEmployee(employeeId, deviceId: deviceIdA);
 
-      expect(storeA.getUnreadCount(employeeId), equals(0));
+      expect(storeA.getUnreadCount(deviceIdA, employeeId), equals(0));
 
       MessageStoreService.removeInstance(deviceIdA);
     });
@@ -383,7 +383,7 @@ void main() {
         createdAt: DateTime.now(),
         deviceId: deviceIdA,
       );
-      await messageStore.addMessage(msg, deviceId: deviceIdA);
+      await messageStore.addMessage(deviceIdA, msg);
 
       final seqBeforeStatusUpdate =
           rawStore.getMaxSeqForEmployeeAll(employeeId);
@@ -393,8 +393,7 @@ void main() {
           MessageStatus.processing);
 
       // 验证seq已更新
-      final updatedMsg = await messageStore.getMessage('status-sync-msg',
-          deviceId: deviceIdA);
+      final updatedMsg = await messageStore.getMessage(deviceIdA, 'status-sync-msg');
       expect(updatedMsg, isNotNull);
       expect(updatedMsg!.seq, greaterThan(seqBeforeStatusUpdate));
       expect(updatedMsg.status, equals(MessageStatus.processing));
@@ -405,8 +404,7 @@ void main() {
       await rawStore.updateStatus(
           deviceIdA, 'status-sync-msg', MessageStatus.completed);
 
-      final completedMsg = await messageStore.getMessage('status-sync-msg',
-          deviceId: deviceIdA);
+      final completedMsg = await messageStore.getMessage(deviceIdA, 'status-sync-msg');
       expect(completedMsg!.seq, greaterThan(seqBeforeComplete));
       expect(completedMsg.status, equals(MessageStatus.completed));
     });
@@ -426,8 +424,8 @@ void main() {
         deviceId: deviceIdA,
         status: MessageStatus.processing,
       );
-      await messageStore.addMessage(toolMsg,
-          deviceId: deviceIdA, updateWatermark: false);
+      await messageStore.addMessage(deviceIdA, toolMsg,
+          updateWatermark: false);
 
       final seqBefore = rawStore.getMaxSeqForEmployeeAll(employeeId);
 
@@ -438,8 +436,7 @@ void main() {
 
       // 验证seq已更新
       final updatedToolMsg = await messageStore.getMessage(
-          'local_toolcall_test-call-123',
-          deviceId: deviceIdA);
+          deviceIdA, 'local_toolcall_test-call-123');
       expect(updatedToolMsg!.seq, greaterThan(seqBefore));
       expect(updatedToolMsg.status, equals(MessageStatus.completed));
     });
@@ -459,8 +456,8 @@ void main() {
           deviceId: deviceIdA,
           isRead: false,
         );
-        await messageStore.addMessage(msg,
-            deviceId: deviceIdA, updateWatermark: false);
+        await messageStore.addMessage(deviceIdA, msg,
+            updateWatermark: false);
       }
 
       final seqBeforeMarkRead =
@@ -475,7 +472,7 @@ void main() {
       expect(seqAfterMarkRead, greaterThan(seqBeforeMarkRead));
 
       // 验证所有消息已读
-      expect(messageStore.getUnreadCount(employeeId), equals(0));
+      expect(messageStore.getUnreadCount(deviceIdA, employeeId), equals(0));
 
       // 验证消息可通过增量同步拉取（seq > seqBeforeMarkRead）
       final syncMessages =
@@ -499,9 +496,9 @@ void main() {
         createdAt: DateTime(2024, 1, 1, 12, 0, 0),
         deviceId: deviceIdA,
       );
-      await messageStore.addMessage(msg1, deviceId: deviceIdA);
+      await messageStore.addMessage(deviceIdA, msg1);
 
-      var latest = await messageStore.getLastMessage(employeeId);
+      var latest = await messageStore.getLastMessage(deviceIdA, employeeId);
       expect(latest!.content, equals('First message'));
 
       // 插入新消息
@@ -514,9 +511,9 @@ void main() {
         createdAt: DateTime(2024, 1, 1, 12, 0, 10),
         deviceId: deviceIdA,
       );
-      await messageStore.addMessage(msg2, deviceId: deviceIdA);
+      await messageStore.addMessage(deviceIdA, msg2);
 
-      latest = await messageStore.getLastMessage(employeeId);
+      latest = await messageStore.getLastMessage(deviceIdA, employeeId);
       expect(latest!.content, equals('Second message'));
     });
 
@@ -533,11 +530,11 @@ void main() {
           deviceId: deviceIdA,
           isRead: false,
         );
-        await messageStore.addMessage(msg,
-            deviceId: deviceIdA, updateWatermark: false);
+        await messageStore.addMessage(deviceIdA, msg,
+            updateWatermark: false);
       }
 
-      expect(messageStore.getUnreadCount(employeeId), equals(0));
+      expect(messageStore.getUnreadCount(deviceIdA, employeeId), equals(0));
 
       // 插入 assistant 消息
       for (int i = 1; i <= 2; i++) {
@@ -551,11 +548,11 @@ void main() {
           deviceId: deviceIdA,
           isRead: false,
         );
-        await messageStore.addMessage(msg,
-            deviceId: deviceIdA, updateWatermark: false);
+        await messageStore.addMessage(deviceIdA, msg,
+            updateWatermark: false);
       }
 
-      expect(messageStore.getUnreadCount(employeeId), equals(2));
+      expect(messageStore.getUnreadCount(deviceIdA, employeeId), equals(2));
 
       // 已读的 assistant 不计入
       final readMsg = ChatMessage(
@@ -568,10 +565,10 @@ void main() {
         deviceId: deviceIdA,
         isRead: true,
       );
-      await messageStore.addMessage(readMsg,
-          deviceId: deviceIdA, updateWatermark: false);
+      await messageStore.addMessage(deviceIdA, readMsg,
+          updateWatermark: false);
 
-      expect(messageStore.getUnreadCount(employeeId), equals(2));
+      expect(messageStore.getUnreadCount(deviceIdA, employeeId), equals(2));
     });
 
     test('deleted messages excluded from unread count', () async {
@@ -585,15 +582,15 @@ void main() {
         deviceId: deviceIdA,
         isRead: false,
       );
-      await messageStore.addMessage(msg,
-          deviceId: deviceIdA, updateWatermark: false);
+      await messageStore.addMessage(deviceIdA, msg,
+          updateWatermark: false);
 
-      expect(messageStore.getUnreadCount(employeeId), equals(1));
+      expect(messageStore.getUnreadCount(deviceIdA, employeeId), equals(1));
 
       // 软删除
-      await messageStore.softDeleteMessage('deleted-unread');
+      await messageStore.softDeleteMessage(deviceIdA, 'deleted-unread');
 
-      expect(messageStore.getUnreadCount(employeeId), equals(0));
+      expect(messageStore.getUnreadCount(deviceIdA, employeeId), equals(0));
     });
   });
 
@@ -609,7 +606,7 @@ void main() {
           createdAt: DateTime.now().add(Duration(seconds: i)),
           deviceId: deviceIdA,
         );
-        await messageStore.addMessage(msg, deviceId: deviceIdA);
+        await messageStore.addMessage(deviceIdA, msg);
       }
 
       // 验证消息存在
@@ -618,7 +615,7 @@ void main() {
       expect(messages.length, equals(5));
 
       // 删除会话
-      await messageStore.deleteMessages(employeeId, deviceId: deviceIdA);
+      await messageStore.deleteMessages(deviceIdA, employeeId);
 
       // 验证消息已清空
       messages = await messageStore.getMessagesWithDeviceId(
@@ -626,11 +623,11 @@ void main() {
       expect(messages, isEmpty);
 
       // 验证最新消息为null
-      final latest = await messageStore.getLastMessage(employeeId);
+      final latest = await messageStore.getLastMessage(deviceIdA, employeeId);
       expect(latest, isNull);
 
       // 验证未读数归零
-      expect(messageStore.getUnreadCount(employeeId), equals(0));
+      expect(messageStore.getUnreadCount(deviceIdA, employeeId), equals(0));
     });
   });
 
@@ -647,12 +644,12 @@ void main() {
         deviceId: deviceIdA,
         isRead: false,
       );
-      await messageStore.addMessage(msg, deviceId: deviceIdA);
+      await messageStore.addMessage(deviceIdA, msg);
 
       final seqBefore = rawStore.getMaxSeqForEmployeeAll(employeeId);
 
       // 软删除
-      await messageStore.softDeleteMessage('soft-delete-sync');
+      await messageStore.softDeleteMessage(deviceIdA, 'soft-delete-sync');
 
       // 验证消息在常规查询中不可见
       final visibleMessages = await messageStore.getMessagesWithDeviceId(
@@ -680,7 +677,7 @@ void main() {
           createdAt: DateTime.now().add(Duration(seconds: i)),
           deviceId: deviceIdA,
         );
-        await messageStore.addMessage(msg, deviceId: deviceIdA);
+        await messageStore.addMessage(deviceIdA, msg);
       }
 
       final lastSeq = watermarkStore.getLastSeq(employeeId, deviceId: deviceIdA);
@@ -702,7 +699,7 @@ void main() {
         createdAt: DateTime.now(),
         deviceId: deviceIdA,
       );
-      await messageStore.addMessage(newMsg, deviceId: deviceIdA);
+      await messageStore.addMessage(deviceIdA, newMsg);
 
       // 客户端增量拉取
       final newMessages = await clientRawStore.getMessagesAfterSeq(

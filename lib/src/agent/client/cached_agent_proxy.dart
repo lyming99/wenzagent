@@ -735,8 +735,8 @@ class CachedAgentProxy {
         print('[CachedAgentProxy] 获取远程 clearSeq 失败: $e');
       }
 
-      // 2. 查询本地消息 maxSeq
-      final localMaxSeq = _messageStore.getMaxSeq(_deviceId, _employeeId);
+      // 2. 查询本地消息 localLastSeq
+      final localLastSeq = _messageStore.getLastSeq(_deviceId, _employeeId);
 
       // 3. 查询服务端 lastSeq
       int remoteLastSeq = -1;
@@ -748,13 +748,13 @@ class CachedAgentProxy {
       }
 
       print(
-          '[CachedAgentProxy] localMaxSeq=$localMaxSeq, remoteLastSeq=$remoteLastSeq');
+          '[CachedAgentProxy] localLastSeq=$localLastSeq, remoteLastSeq=$remoteLastSeq');
 
       // 4. 增量拉取：远程有更新的消息时，拉取 seq > localMaxSeq 的消息
-      if (remoteLastSeq > localMaxSeq) {
+      if (remoteLastSeq > localLastSeq) {
         const batchSize = 20;
         final allNewMessages = <AgentMessage>[];
-        int currentSeq = localMaxSeq;
+        int currentSeq = localLastSeq;
 
         while (true) {
           final batch = await _proxy.getMessagesAfterSeq(
@@ -772,6 +772,7 @@ class CachedAgentProxy {
 
           if (batch.length < batchSize) break;
         }
+        _messageStore.updateLastSeq(deviceId, employeeId, currentSeq);
 
         // 5. 直接写入本地（INSERT OR REPLACE，无需比较）
         if (allNewMessages.isNotEmpty) {
