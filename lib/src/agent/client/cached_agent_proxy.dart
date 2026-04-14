@@ -59,9 +59,6 @@ class CachedAgentProxy {
   /// 避免重启 app 后从 DB 恢复未读数量。
   final bool Function()? shouldSaveAsReadCallback;
 
-
-
-
   /// 缓存状态（仅远程模式使用）
   CacheState _cacheState = CacheState.idle;
   final StreamController<CacheState> _cacheStateController =

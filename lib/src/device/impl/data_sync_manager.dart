@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import '../../host/host_rpc_methods.dart';
 import '../../persistence/persistence.dart';
 import '../../service/service.dart';
@@ -44,77 +42,45 @@ class DataSyncManager {
   }
 
   static void removeInstance(String deviceId) {
-    final instance = _instances.remove(deviceId);
-    instance?._dispose();
-  }
-
-  // ===== 防抖 =====
-
-  Timer? _employeeSyncTimer;
-  Timer? _sessionSyncTimer;
-  Timer? _fullSyncTimer;
-  static const _debounceDuration = Duration(seconds: 2);
-
-  void _dispose() {
-    _employeeSyncTimer?.cancel();
-    _sessionSyncTimer?.cancel();
-    _fullSyncTimer?.cancel();
+    _instances.remove(deviceId);
   }
 
   // ===== 公开方法 =====
 
-  /// 从其他设备同步员工数据（防抖）
+  /// 从其他设备同步员工数据
   Future<void> syncEmployeesFromDevices() async {
-    _employeeSyncTimer?.cancel();
-    final completer = Completer<void>();
-    _employeeSyncTimer = Timer(_debounceDuration, () async {
-      final changedIds = await _doSyncEmployeesFromDevices();
-      if (changedIds.isNotEmpty) {
-        _stateHolder.notifyDataSynced(DataSyncEvent(
-          changedEmployeeIds: changedIds,
-        ));
-      }
-      completer.complete();
-    });
-    return completer.future;
+    final changedIds = await _doSyncEmployeesFromDevices();
+    if (changedIds.isNotEmpty) {
+      _stateHolder.notifyDataSynced(DataSyncEvent(
+        changedEmployeeIds: changedIds,
+      ));
+    }
   }
 
-  /// 从其他设备同步会话数据（防抖）
+  /// 从其他设备同步会话数据
   Future<void> syncSessionsFromDevices() async {
-    _sessionSyncTimer?.cancel();
-    final completer = Completer<void>();
-    _sessionSyncTimer = Timer(_debounceDuration, () async {
-      final changedIds = await _doSyncSessionsFromDevices();
-      if (changedIds.isNotEmpty) {
-        _stateHolder.notifyDataSynced(DataSyncEvent(
-          changedSessionIds: changedIds,
-        ));
-      }
-      completer.complete();
-    });
-    return completer.future;
+    final changedIds = await _doSyncSessionsFromDevices();
+    if (changedIds.isNotEmpty) {
+      _stateHolder.notifyDataSynced(DataSyncEvent(
+        changedSessionIds: changedIds,
+      ));
+    }
   }
 
-  /// 同步全部数据（员工+会话，防抖）
+  /// 同步全部数据（员工+会话，并行执行）
   Future<void> syncAllFromDevices() async {
-    _fullSyncTimer?.cancel();
-    final completer = Completer<void>();
-    _fullSyncTimer = Timer(_debounceDuration, () async {
-      final results = await Future.wait([
-        _doSyncEmployeesFromDevices(),
-        _doSyncSessionsFromDevices(),
-      ]);
-      final changedEmployeeIds = results[0];
-      final changedSessionIds = results[1];
-      if (changedEmployeeIds.isNotEmpty || changedSessionIds.isNotEmpty) {
-        _stateHolder.notifyDataSynced(DataSyncEvent(
-          changedEmployeeIds: changedEmployeeIds,
-          changedSessionIds: changedSessionIds,
-        ));
-      }
-      completer.complete();
-    });
-    return completer.future;
+    final results = await Future.wait([
+      _doSyncEmployeesFromDevices(),
+      _doSyncSessionsFromDevices(),
+    ]);
+    final changedEmployeeIds = results[0];
+    final changedSessionIds = results[1];
+    if (changedEmployeeIds.isNotEmpty || changedSessionIds.isNotEmpty) {
+      _stateHolder.notifyDataSynced(DataSyncEvent(
+        changedEmployeeIds: changedEmployeeIds,
+        changedSessionIds: changedSessionIds,
+      ));
+    }
   }
 
   /// 从指定设备同步单个员工数据
