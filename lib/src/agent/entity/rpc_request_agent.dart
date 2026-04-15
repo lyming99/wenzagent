@@ -365,3 +365,186 @@ class GetMcpConfigsRequest {
     );
   }
 }
+
+// ===== Todo 管理 =====
+
+/// 获取活跃 todo 项请求
+class GetActiveTodosRequest {
+  final String employeeId;
+
+  const GetActiveTodosRequest({required this.employeeId});
+
+  Map<String, dynamic> toMap() => {'employeeId': employeeId};
+
+  factory GetActiveTodosRequest.fromMap(Map<String, dynamic> map) {
+    return GetActiveTodosRequest(employeeId: map['employeeId'] as String);
+  }
+}
+
+/// 获取已完成 todo 项请求
+class GetCompletedTodosRequest {
+  final String employeeId;
+  final int limit;
+
+  const GetCompletedTodosRequest({
+    required this.employeeId,
+    this.limit = 50,
+  });
+
+  Map<String, dynamic> toMap() =>
+      {'employeeId': employeeId, 'limit': limit};
+
+  factory GetCompletedTodosRequest.fromMap(Map<String, dynamic> map) {
+    return GetCompletedTodosRequest(
+      employeeId: map['employeeId'] as String,
+      limit: map['limit'] as int? ?? 50,
+    );
+  }
+}
+
+/// 获取 todo 分组请求
+class GetTodoGroupsRequest {
+  final String employeeId;
+
+  const GetTodoGroupsRequest({required this.employeeId});
+
+  Map<String, dynamic> toMap() => {'employeeId': employeeId};
+
+  factory GetTodoGroupsRequest.fromMap(Map<String, dynamic> map) {
+    return GetTodoGroupsRequest(employeeId: map['employeeId'] as String);
+  }
+}
+
+/// 获取 todo 统计请求
+class GetTodoStatsRequest {
+  final String employeeId;
+
+  const GetTodoStatsRequest({required this.employeeId});
+
+  Map<String, dynamic> toMap() => {'employeeId': employeeId};
+
+  factory GetTodoStatsRequest.fromMap(Map<String, dynamic> map) {
+    return GetTodoStatsRequest(employeeId: map['employeeId'] as String);
+  }
+}
+
+// ===== Todo 写操作请求 =====
+
+/// 更新 todo 状态请求
+class UpdateTodoStatusRequest {
+  final String employeeId;
+  final String todoId;
+  final String status;
+
+  const UpdateTodoStatusRequest({
+    required this.employeeId,
+    required this.todoId,
+    required this.status,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'employeeId': employeeId,
+        'todoId': todoId,
+        'status': status,
+      };
+
+  factory UpdateTodoStatusRequest.fromMap(Map<String, dynamic> map) {
+    return UpdateTodoStatusRequest(
+      employeeId: map['employeeId'] as String,
+      todoId: map['todoId'] as String,
+      status: map['status'] as String,
+    );
+  }
+}
+
+/// 更新 todo 内容请求
+class UpdateTodoContentRequest {
+  final String employeeId;
+  final String todoId;
+  final String content;
+
+  const UpdateTodoContentRequest({
+    required this.employeeId,
+    required this.todoId,
+    required this.content,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'employeeId': employeeId,
+        'todoId': todoId,
+        'content': content,
+      };
+
+  factory UpdateTodoContentRequest.fromMap(Map<String, dynamic> map) {
+    return UpdateTodoContentRequest(
+      employeeId: map['employeeId'] as String,
+      todoId: map['todoId'] as String,
+      content: map['content'] as String,
+    );
+  }
+}
+
+/// 删除 todo 请求
+class DeleteTodoRequest {
+  final String employeeId;
+  final String todoId;
+
+  const DeleteTodoRequest({
+    required this.employeeId,
+    required this.todoId,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'employeeId': employeeId,
+        'todoId': todoId,
+      };
+
+  factory DeleteTodoRequest.fromMap(Map<String, dynamic> map) {
+    return DeleteTodoRequest(
+      employeeId: map['employeeId'] as String,
+      todoId: map['todoId'] as String,
+    );
+  }
+}
+
+/// 清除已完成 todo 请求
+class ClearCompletedTodosRequest {
+  final String employeeId;
+
+  const ClearCompletedTodosRequest({required this.employeeId});
+
+  Map<String, dynamic> toMap() => {'employeeId': employeeId};
+
+  factory ClearCompletedTodosRequest.fromMap(Map<String, dynamic> map) {
+    return ClearCompletedTodosRequest(
+      employeeId: map['employeeId'] as String,
+    );
+  }
+}
+
+/// 移动 todo 到分组请求
+class MoveTodoToGroupRequest {
+  final String employeeId;
+  final String todoId;
+  final String? groupId;
+
+  const MoveTodoToGroupRequest({
+    required this.employeeId,
+    required this.todoId,
+    this.groupId,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'employeeId': employeeId,
+        'todoId': todoId,
+        'groupId': groupId,
+      };
+
+  factory MoveTodoToGroupRequest.fromMap(Map<String, dynamic> map) {
+    return MoveTodoToGroupRequest(
+      employeeId: map['employeeId'] as String,
+      todoId: map['todoId'] as String,
+      groupId: map['groupId'] as String?,
+    );
+  }
+}

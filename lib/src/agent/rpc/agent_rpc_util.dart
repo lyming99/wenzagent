@@ -249,4 +249,71 @@ class AgentRpcUtil {
   ) async {
     return _rpcCall(AgentRpcConfig.methodGetCallingToolIds, request.toMap());
   }
+
+  // ===== Agent Todo 管理 =====
+
+  /// 获取活跃 todo 项
+  Future<Map<String, dynamic>> getActiveTodos(
+    GetActiveTodosRequest request,
+  ) async {
+    return _rpcCall(AgentRpcConfig.methodGetActiveTodos, request.toMap());
+  }
+
+  /// 获取已完成 todo 项
+  Future<Map<String, dynamic>> getCompletedTodos(
+    GetCompletedTodosRequest request,
+  ) async {
+    return _rpcCall(AgentRpcConfig.methodGetCompletedTodos, request.toMap());
+  }
+
+  /// 获取 todo 分组
+  Future<Map<String, dynamic>> getTodoGroups(
+    GetTodoGroupsRequest request,
+  ) async {
+    return _rpcCall(AgentRpcConfig.methodGetTodoGroups, request.toMap());
+  }
+
+  /// 获取 todo 统计
+  Future<Map<String, dynamic>> getTodoStats(
+    GetTodoStatsRequest request,
+  ) async {
+    return _rpcCall(AgentRpcConfig.methodGetTodoStats, request.toMap());
+  }
+
+  // ===== Agent Todo 写操作 =====
+
+  /// 更新 todo 状态
+  Future<Map<String, dynamic>> updateTodoStatus(
+    UpdateTodoStatusRequest request,
+  ) async {
+    return _rpcCall(AgentRpcConfig.methodUpdateTodoStatus, request.toMap());
+  }
+
+  /// 更新 todo 内容
+  Future<Map<String, dynamic>> updateTodoContent(
+    UpdateTodoContentRequest request,
+  ) async {
+    return _rpcCall(AgentRpcConfig.methodUpdateTodoContent, request.toMap());
+  }
+
+  /// 删除 todo
+  Future<Map<String, dynamic>> deleteTodo(
+    DeleteTodoRequest request,
+  ) async {
+    return _rpcCall(AgentRpcConfig.methodDeleteTodo, request.toMap());
+  }
+
+  /// 清除已完成 todo
+  Future<Map<String, dynamic>> clearCompletedTodos(
+    ClearCompletedTodosRequest request,
+  ) async {
+    return _rpcCall(AgentRpcConfig.methodClearCompletedTodos, request.toMap());
+  }
+
+  /// 移动 todo 到分组
+  Future<Map<String, dynamic>> moveTodoToGroup(
+    MoveTodoToGroupRequest request,
+  ) async {
+    return _rpcCall(AgentRpcConfig.methodMoveTodoToGroup, request.toMap());
+  }
 }

@@ -858,6 +858,82 @@ class AgentProxy {
     return (result['callingToolIds'] as List?)?.cast<String>() ?? [];
   }
 
+  // ===== Todo 管理 =====
+
+  /// 获取活跃 todo 项（pending + in_progress）
+  Future<List<Map<String, dynamic>>> getActiveTodos() async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.getActiveTodos();
+    }
+    return _remoteOps!.getActiveTodos();
+  }
+
+  /// 获取已完成 todo 项
+  Future<List<Map<String, dynamic>>> getCompletedTodos({int limit = 50}) async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.getCompletedTodos(limit: limit);
+    }
+    return _remoteOps!.getCompletedTodos(limit: limit);
+  }
+
+  /// 获取 todo 分组
+  Future<List<Map<String, dynamic>>> getTodoGroups() async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.getTodoGroups();
+    }
+    return _remoteOps!.getTodoGroups();
+  }
+
+  /// 获取 todo 统计信息
+  Future<Map<String, dynamic>> getTodoStats() async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.getTodoStats();
+    }
+    return _remoteOps!.getTodoStats();
+  }
+
+  // ===== Todo 写操作 =====
+
+  /// 更新 todo 状态
+  Future<void> updateTodoStatus(String todoId, String status) async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.updateTodoStatus(todoId, status);
+    }
+    return _remoteOps!.updateTodoStatus(todoId, status);
+  }
+
+  /// 更新 todo 内容
+  Future<void> updateTodoContent(String todoId, String content) async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.updateTodoContent(todoId, content);
+    }
+    return _remoteOps!.updateTodoContent(todoId, content);
+  }
+
+  /// 删除 todo 项
+  Future<void> deleteTodo(String todoId) async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.deleteTodo(todoId);
+    }
+    return _remoteOps!.deleteTodo(todoId);
+  }
+
+  /// 清除所有已完成 todo
+  Future<void> clearCompletedTodos() async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.clearCompletedTodos();
+    }
+    return _remoteOps!.clearCompletedTodos();
+  }
+
+  /// 移动 todo 到分组
+  Future<void> moveTodoToGroup(String todoId, String? groupId) async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent.moveTodoToGroup(todoId, groupId);
+    }
+    return _remoteOps!.moveTodoToGroup(todoId, groupId);
+  }
+
   bool get isSending {
     if (isLocalMode && _localAgent != null) {
       return _localAgent.isSending;

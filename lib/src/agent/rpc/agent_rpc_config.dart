@@ -85,6 +85,21 @@ class AgentRpcConfig {
   static const String methodGetCallingToolIds = 'agentGetCallingToolIds';
   static const String methodSubscribeState = 'agentSubscribeState';
 
+  // ===== Agent Todo 管理 =====
+
+  static const String methodGetActiveTodos = 'agentGetActiveTodos';
+  static const String methodGetCompletedTodos = 'agentGetCompletedTodos';
+  static const String methodGetTodoGroups = 'agentGetTodoGroups';
+  static const String methodGetTodoStats = 'agentGetTodoStats';
+
+  // ===== Agent Todo 写操作 =====
+
+  static const String methodUpdateTodoStatus = 'agentUpdateTodoStatus';
+  static const String methodUpdateTodoContent = 'agentUpdateTodoContent';
+  static const String methodDeleteTodo = 'agentDeleteTodo';
+  static const String methodClearCompletedTodos = 'agentClearCompletedTodos';
+  static const String methodMoveTodoToGroup = 'agentMoveTodoToGroup';
+
   // ===== Agent 生命周期 =====
 
   static const String methodPing = 'agentPing';

@@ -28,7 +28,6 @@ abstract class _AgentImplBase implements IAgent {
   Map<String, Map<String, DateTime>> get _messageReceiveStatus;
   Map<String, Map<String, DateTime>> get _messageReadStatus;
   Set<String> get _callingToolIds;
-  List<TodoItem> get _todoList;
   AgentStatus get _status;
   set _status(AgentStatus value);
   int get _refCount;
@@ -131,10 +130,6 @@ class AgentImpl extends _AgentImplBase
   /// toolCallStart 时加入，toolCallResult 时移除
   @override
   final Set<String> _callingToolIds = {};
-
-  /// 待办列表（Agent 实例级别，跨轮次保持）
-  @override
-  final List<TodoItem> _todoList = [];
 
   // ===== 内部状态 =====
 
@@ -493,11 +488,181 @@ class AgentImpl extends _AgentImplBase
   // ===== 内部方法 =====
 
   /// 注入 TodoManageTool 回调
+  ///
+  /// 基于 TodoStore 注入所有异步回调，所有 todo 操作直接读写 SQLite。
   void _injectTodoManageCallbacks() {
     final todoTool = _toolRegistry.getTool('todo_manage');
-    if (todoTool is TodoManageTool) {
-      todoTool.getTodoList = () => _todoList;
-    }
+    if (todoTool is! TodoManageTool) return;
+
+    final todoStore = TodoStore(deviceId: deviceId);
+
+    // 注入 employeeId
+    todoTool.employeeId = employeeId;
+
+    // 活跃 todo 查询
+    todoTool.getActiveTodos = (eid) async {
+      return todoStore.findActiveByEmployee(eid);
+    };
+
+    // 已完成 todo 查询
+    todoTool.getCompletedTodos = (eid, {limit = 50}) async {
+      return todoStore.findCompletedByEmployee(eid, limit: limit);
+    };
+
+    // 保存 todo 项
+    todoTool.saveTodo = (item) async {
+      todoStore.save(item);
+    };
+
+    // 更新 todo 状态
+    todoTool.updateTodoStatus = (id, status) async {
+      todoStore.updateStatus(id, status);
+    };
+
+    // 更新 todo 内容
+    todoTool.updateTodoContent = (id, content) async {
+      if (content != null) {
+        todoStore.updateContent(id, content);
+      }
+    };
+
+    // 软删除 todo 项
+    todoTool.removeTodo = (id) async {
+      todoStore.softDelete(id);
+    };
+
+    // 批量删除已完成项
+    todoTool.clearCompletedTodos = (eid) async {
+      todoStore.deleteCompletedByEmployee(eid);
+    };
+
+    // 移动到分组
+    todoTool.moveTodoToGroup = (id, groupId) async {
+      todoStore.moveToGroup(id, groupId);
+    };
+
+    // 获取所有分组
+    todoTool.getGroups = (eid) async {
+      return todoStore.findGroupsByEmployee(eid);
+    };
+
+    // 按名称查找分组
+    todoTool.findGroupByName = (eid, name) async {
+      return todoStore.findGroupByName(eid, name);
+    };
+
+    // 保存分组
+    todoTool.saveGroup = (group) async {
+      todoStore.saveGroup(group);
+    };
+
+    // 软删除分组
+    todoTool.removeGroup = (id) async {
+      todoStore.softDeleteGroup(id);
+    };
+
+    // 重命名分组
+    todoTool.renameGroupFn = (id, newName) async {
+      todoStore.renameGroup(id, newName);
+    };
+
+    // 广播事件
+    todoTool.broadcastEvent = (type, data) {
+      final eventType = type == 'todoChanged'
+          ? AgentEventType.todoChanged
+          : AgentEventType.todoGroupChanged;
+      _eventController.add(
+        AgentEvent(
+          type: eventType,
+          data: data,
+          employeeId: employeeId,
+        ),
+      );
+    };
+  }
+
+  // ===== IAgent: Todo 管理 =====
+
+  @override
+  Future<List<Map<String, dynamic>>> getActiveTodos() async {
+    final store = TodoStore(deviceId: deviceId);
+    final items = store.findActiveByEmployee(employeeId);
+    return items.map((e) => e.toMap()).toList();
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getCompletedTodos({int limit = 50}) async {
+    final store = TodoStore(deviceId: deviceId);
+    final items = store.findCompletedByEmployee(employeeId, limit: limit);
+    return items.map((e) => e.toMap()).toList();
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getTodoGroups() async {
+    final store = TodoStore(deviceId: deviceId);
+    final groups = store.findGroupsByEmployee(employeeId);
+    return groups.map((e) => e.toMap()).toList();
+  }
+
+  @override
+  Future<Map<String, dynamic>> getTodoStats() async {
+    final store = TodoStore(deviceId: deviceId);
+    return store.countByStatus(employeeId);
+  }
+
+  @override
+  Future<void> updateTodoStatus(String todoId, String status) async {
+    final store = TodoStore(deviceId: deviceId);
+    store.updateStatus(todoId, status);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.todoChanged,
+      data: {'action': 'updated', 'todoId': todoId, 'status': status},
+      employeeId: employeeId,
+    ));
+  }
+
+  @override
+  Future<void> updateTodoContent(String todoId, String content) async {
+    final store = TodoStore(deviceId: deviceId);
+    store.updateContent(todoId, content);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.todoChanged,
+      data: {'action': 'updated', 'todoId': todoId},
+      employeeId: employeeId,
+    ));
+  }
+
+  @override
+  Future<void> deleteTodo(String todoId) async {
+    final store = TodoStore(deviceId: deviceId);
+    store.softDelete(todoId);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.todoChanged,
+      data: {'action': 'removed', 'todoId': todoId},
+      employeeId: employeeId,
+    ));
+  }
+
+  @override
+  Future<void> clearCompletedTodos() async {
+    final store = TodoStore(deviceId: deviceId);
+    store.deleteCompletedByEmployee(employeeId);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.todoChanged,
+      data: {'action': 'cleared'},
+      employeeId: employeeId,
+    ));
+  }
+
+  @override
+  Future<void> moveTodoToGroup(String todoId, String? groupId) async {
+    final store = TodoStore(deviceId: deviceId);
+    store.moveToGroup(todoId, groupId);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.todoChanged,
+      data: {'action': 'moved', 'todoId': todoId, 'groupId': groupId},
+      employeeId: employeeId,
+    ));
   }
 
   /// 注入 SpawnSubAgentTool 回调

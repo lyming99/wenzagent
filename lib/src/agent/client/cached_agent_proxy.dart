@@ -839,6 +839,44 @@ class CachedAgentProxy extends _CachedAgentProxyBase
   Future<List<String>> getCallingToolIdsAsync() =>
       _proxy.getCallingToolIdsAsync();
 
+  // ===== Todo 管理 =====
+
+  /// 获取活跃 todo 项
+  Future<List<Map<String, dynamic>>> getActiveTodos() =>
+      _proxy.getActiveTodos();
+
+  /// 获取已完成 todo 项
+  Future<List<Map<String, dynamic>>> getCompletedTodos({int limit = 50}) =>
+      _proxy.getCompletedTodos(limit: limit);
+
+  /// 获取 todo 分组
+  Future<List<Map<String, dynamic>>> getTodoGroups() =>
+      _proxy.getTodoGroups();
+
+  /// 获取 todo 统计信息
+  Future<Map<String, dynamic>> getTodoStats() =>
+      _proxy.getTodoStats();
+
+  // ===== Todo 写操作 =====
+
+  /// 更新 todo 状态
+  Future<void> updateTodoStatus(String todoId, String status) =>
+      _proxy.updateTodoStatus(todoId, status);
+
+  /// 更新 todo 内容
+  Future<void> updateTodoContent(String todoId, String content) =>
+      _proxy.updateTodoContent(todoId, content);
+
+  /// 删除 todo 项
+  Future<void> deleteTodo(String todoId) => _proxy.deleteTodo(todoId);
+
+  /// 清除所有已完成 todo
+  Future<void> clearCompletedTodos() => _proxy.clearCompletedTodos();
+
+  /// 移动 todo 到分组
+  Future<void> moveTodoToGroup(String todoId, String? groupId) =>
+      _proxy.moveTodoToGroup(todoId, groupId);
+
   // ===== 基础属性 =====
 
   String get employeeId => _employeeId;

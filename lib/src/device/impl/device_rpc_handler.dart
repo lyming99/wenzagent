@@ -563,6 +563,70 @@ class DeviceRpcHandler {
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
       return {'tools': agent.getRegisteredTools()};
     });
+
+    // Todo 管理
+    rpcServer.register(AgentRpcConfig.methodGetActiveTodos, (params) async {
+      final request = GetActiveTodosRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      final todos = await agent.getActiveTodos();
+      return {'todos': todos};
+    });
+
+    rpcServer.register(AgentRpcConfig.methodGetCompletedTodos, (params) async {
+      final request = GetCompletedTodosRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      final todos = await agent.getCompletedTodos(limit: request.limit);
+      return {'todos': todos};
+    });
+
+    rpcServer.register(AgentRpcConfig.methodGetTodoGroups, (params) async {
+      final request = GetTodoGroupsRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      final groups = await agent.getTodoGroups();
+      return {'groups': groups};
+    });
+
+    rpcServer.register(AgentRpcConfig.methodGetTodoStats, (params) async {
+      final request = GetTodoStatsRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      return await agent.getTodoStats();
+    });
+
+    // Todo 写操作
+    rpcServer.register(AgentRpcConfig.methodUpdateTodoStatus, (params) async {
+      final request = UpdateTodoStatusRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      await agent.updateTodoStatus(request.todoId, request.status);
+      return {'success': true};
+    });
+
+    rpcServer.register(AgentRpcConfig.methodUpdateTodoContent, (params) async {
+      final request = UpdateTodoContentRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      await agent.updateTodoContent(request.todoId, request.content);
+      return {'success': true};
+    });
+
+    rpcServer.register(AgentRpcConfig.methodDeleteTodo, (params) async {
+      final request = DeleteTodoRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      await agent.deleteTodo(request.todoId);
+      return {'success': true};
+    });
+
+    rpcServer.register(AgentRpcConfig.methodClearCompletedTodos, (params) async {
+      final request = ClearCompletedTodosRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      await agent.clearCompletedTodos();
+      return {'success': true};
+    });
+
+    rpcServer.register(AgentRpcConfig.methodMoveTodoToGroup, (params) async {
+      final request = MoveTodoToGroupRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      await agent.moveTodoToGroup(request.todoId, request.groupId);
+      return {'success': true};
+    });
   }
 
   void _registerHostMethods(RemoteCallServer rpcServer) {

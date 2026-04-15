@@ -221,6 +221,85 @@ class _RemoteOps {
     return result;
   }
 
+  // ===== Todo 管理 =====
+
+  /// 获取活跃 todo 项
+  Future<List<Map<String, dynamic>>> getActiveTodos() async {
+    final request = GetActiveTodosRequest(employeeId: _employeeId);
+    final result = await _rpcUtil.getActiveTodos(request);
+    return (result['todos'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
+
+  /// 获取已完成 todo 项
+  Future<List<Map<String, dynamic>>> getCompletedTodos({int limit = 50}) async {
+    final request = GetCompletedTodosRequest(
+      employeeId: _employeeId,
+      limit: limit,
+    );
+    final result = await _rpcUtil.getCompletedTodos(request);
+    return (result['todos'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
+
+  /// 获取 todo 分组
+  Future<List<Map<String, dynamic>>> getTodoGroups() async {
+    final request = GetTodoGroupsRequest(employeeId: _employeeId);
+    final result = await _rpcUtil.getTodoGroups(request);
+    return (result['groups'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
+
+  /// 获取 todo 统计
+  Future<Map<String, dynamic>> getTodoStats() async {
+    final request = GetTodoStatsRequest(employeeId: _employeeId);
+    return await _rpcUtil.getTodoStats(request);
+  }
+
+  // ===== Todo 写操作 =====
+
+  /// 更新 todo 状态
+  Future<void> updateTodoStatus(String todoId, String status) async {
+    final request = UpdateTodoStatusRequest(
+      employeeId: _employeeId,
+      todoId: todoId,
+      status: status,
+    );
+    await _rpcUtil.updateTodoStatus(request);
+  }
+
+  /// 更新 todo 内容
+  Future<void> updateTodoContent(String todoId, String content) async {
+    final request = UpdateTodoContentRequest(
+      employeeId: _employeeId,
+      todoId: todoId,
+      content: content,
+    );
+    await _rpcUtil.updateTodoContent(request);
+  }
+
+  /// 删除 todo
+  Future<void> deleteTodo(String todoId) async {
+    final request = DeleteTodoRequest(
+      employeeId: _employeeId,
+      todoId: todoId,
+    );
+    await _rpcUtil.deleteTodo(request);
+  }
+
+  /// 清除已完成 todo
+  Future<void> clearCompletedTodos() async {
+    final request = ClearCompletedTodosRequest(employeeId: _employeeId);
+    await _rpcUtil.clearCompletedTodos(request);
+  }
+
+  /// 移动 todo 到分组
+  Future<void> moveTodoToGroup(String todoId, String? groupId) async {
+    final request = MoveTodoToGroupRequest(
+      employeeId: _employeeId,
+      todoId: todoId,
+      groupId: groupId,
+    );
+    await _rpcUtil.moveTodoToGroup(request);
+  }
+
   /// 清空当前会话
   Future<void> clearCurrentSession() async {
     final request = ClearSessionRequest(employeeId: _employeeId);

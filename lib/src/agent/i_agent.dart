@@ -339,4 +339,52 @@ abstract class IAgent {
   /// 前端可用于判断哪些工具尚在运行中，避免重复提交或显示加载状态。
   /// 返回的是不可变副本。
   List<String> getCallingToolIds();
+
+  // ===== Todo 管理 =====
+
+  /// 获取活跃 todo 项（pending + in_progress）
+  ///
+  /// 返回序列化后的 Map 列表
+  Future<List<Map<String, dynamic>>> getActiveTodos();
+
+  /// 获取已完成的 todo 项
+  ///
+  /// [limit] 最大返回数量，默认 50
+  Future<List<Map<String, dynamic>>> getCompletedTodos({int limit = 50});
+
+  /// 获取所有 todo 分组
+  Future<List<Map<String, dynamic>>> getTodoGroups();
+
+  /// 获取 todo 统计信息
+  ///
+  /// 返回各状态的数量统计
+  Future<Map<String, dynamic>> getTodoStats();
+
+  // ===== Todo 写操作 =====
+
+  /// 更新 todo 状态
+  ///
+  /// [todoId] todo 项 ID
+  /// [status] 新状态（pending / in_progress / completed）
+  Future<void> updateTodoStatus(String todoId, String status);
+
+  /// 更新 todo 内容
+  ///
+  /// [todoId] todo 项 ID
+  /// [content] 新内容
+  Future<void> updateTodoContent(String todoId, String content);
+
+  /// 删除 todo 项（软删除）
+  ///
+  /// [todoId] todo 项 ID
+  Future<void> deleteTodo(String todoId);
+
+  /// 清除所有已完成的 todo 项
+  Future<void> clearCompletedTodos();
+
+  /// 移动 todo 到分组
+  ///
+  /// [todoId] todo 项 ID
+  /// [groupId] 目标分组 ID（null 表示移至未分组）
+  Future<void> moveTodoToGroup(String todoId, String? groupId);
 }
