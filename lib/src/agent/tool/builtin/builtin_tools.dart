@@ -1,6 +1,7 @@
 import '../agent_tool.dart';
-import 'command_execute_tool.dart';
+import 'bg_command_tool.dart';
 import 'code_symbols_tool.dart';
+import 'command_execute_tool.dart';
 import 'content_search_tool.dart';
 import 'directory_create_tool.dart';
 import 'env_info_tool.dart';
@@ -13,8 +14,8 @@ import 'file_search_tool.dart';
 import 'file_write_tool.dart';
 import 'git_operations_tool.dart';
 import 'schedule_task_tool.dart';
-import 'todo_manage_tool.dart';
 import 'spawn_sub_agent_tool.dart';
+import 'todo_manage_tool.dart';
 import 'web_fetch_tool.dart';
 import 'web_search_tool.dart';
 
@@ -33,6 +34,7 @@ class BuiltinTools {
       FileSearchTool(),
       ContentSearchTool(),
       CommandExecuteTool(),
+      BgCommandTool(),
       GitOperationsTool(),
       FileInfoTool(),
       FileDeleteTool(),

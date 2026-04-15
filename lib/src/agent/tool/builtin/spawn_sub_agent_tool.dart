@@ -24,6 +24,7 @@ class SpawnSubAgentTool extends AgentTool {
     'content_search',
     'file_info',
     'command_execute',
+    'bg_command',
     'code_symbols',
   ];
 
@@ -81,7 +82,7 @@ class SpawnSubAgentTool extends AgentTool {
             },
             'description':
                 'List of tool names the sub-agent is allowed to use. '
-                'Default: ["file_read", "file_list", "file_search", "content_search", "file_info", "command_execute","code_symbols"]. '
+                'Default: ["file_read", "file_list", "file_search", "content_search", "file_info", "command_execute", "bg_command", "code_symbols"]. '
                 'The sub-agent cannot use "spawn_sub_agent" to prevent recursion.',
           },
           'max_turns': {

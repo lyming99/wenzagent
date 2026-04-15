@@ -6,7 +6,9 @@ import '../agent/adapter/sub_agent_llm_chat_adapter.dart';
 import '../agent/agent_state.dart';
 import '../agent/entity/entity.dart';
 import '../agent/tool/agent_tool.dart';
+import '../agent/tool/builtin/bg_command_tool.dart';
 import '../agent/tool/builtin/builtin_tools.dart';
+import '../agent/tool/builtin/command_session_pool.dart';
 import '../agent/tool/tool_registry.dart';
 import '../utils/logger.dart';
 import 'entity/agent_runtime_config.dart';
@@ -83,6 +85,11 @@ class SubAgentExecutor {
   /// 由调用方注入，读取指定路径的文件内容。
   /// 返回 null 表示文件不存在或读取失败。
   Future<String?> Function(String filePath)? readFileContent;
+
+  /// 主 Agent 的命令会话池引用（由 AgentImpl 注入）
+  ///
+  /// 允许子 Agent 查询/操作主 Agent 的后台命令会话。
+  CommandSessionPool? commandSessionPool;
 
   /// 执行子 Agent 任务
   ///
@@ -169,6 +176,14 @@ class SubAgentExecutor {
       final effectiveTools = tools ?? BuiltinTools.readOnly();
       registry.registerTools(effectiveTools);
       adapter.setToolRegistry(registry);
+
+      // 注入主 Agent 的 CommandSessionPool 到子 Agent 的 BgCommandTool
+      if (commandSessionPool != null) {
+        final bgTool = registry.getTool('bg_command');
+        if (bgTool is BgCommandTool) {
+          bgTool.pool = commandSessionPool;
+        }
+      }
 
       // 设置权限转发
       if (requestPermission != null) {

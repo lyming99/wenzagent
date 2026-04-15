@@ -6,6 +6,8 @@ import 'package:uuid/uuid.dart';
 import 'package:wenzagent/wenzagent.dart';
 
 import '../../utils/logger.dart';
+import '../tool/builtin/bg_command_tool.dart';
+import '../tool/builtin/command_session_pool.dart';
 
 part 'agent_impl_messaging.dart';
 part 'agent_impl_skill.dart';
@@ -98,6 +100,9 @@ class AgentImpl extends _AgentImplBase
 
   /// 获取权限管理器（供 AgentFactory 注入配置使用）
   ToolPermissionManager get permissionManager => _permissionManager;
+
+  /// 后台命令会话池
+  CommandSessionPool? _commandSessionPool;
 
   /// 待处理的权限请求 Completer
   @override
@@ -212,6 +217,10 @@ class AgentImpl extends _AgentImplBase
 
     // 注入 SpawnSubAgentTool 回调（工具注册器引用）
     _injectSpawnSubAgentCallbacks();
+
+    // 创建后台命令会话池并注入到 BgCommandTool
+    _commandSessionPool = CommandSessionPool();
+    _injectBgCommandCallbacks();
 
     // 技能系统由 warmup 后台加载，不在 initialize 中阻塞
 
@@ -360,6 +369,9 @@ class AgentImpl extends _AgentImplBase
 
     _processor?.dispose();
     _processor = null;
+
+    _commandSessionPool?.dispose();
+    _commandSessionPool = null;
 
     await _skillManager?.dispose();
     _skillManager = null;
@@ -721,6 +733,30 @@ class AgentImpl extends _AgentImplBase
 
     _AgentImplBase._log.info(
       'SpawnSubAgentTool fully injected (executor + registry) for $agentEmployeeId',
+    );
+  }
+
+  /// 注入 BgCommandTool 的 CommandSessionPool 引用
+  void _injectBgCommandCallbacks() {
+    final bgTool = _toolRegistry.getTool('bg_command');
+    if (bgTool is! BgCommandTool) {
+      _AgentImplBase._log.warn(
+        'BgCommandTool not found in registry for injection. '
+        'Available tools: ${_toolRegistry.toolNames}',
+      );
+      return;
+    }
+
+    bgTool.pool = _commandSessionPool;
+
+    // 将 pool 引用也注入到 SubAgentExecutor，使子 Agent 可查询主 Agent 的后台会话
+    final spawnTool = _toolRegistry.getTool('spawn_sub_agent');
+    if (spawnTool is SpawnSubAgentTool && spawnTool.executor != null) {
+      spawnTool.executor!.commandSessionPool = _commandSessionPool;
+    }
+
+    _AgentImplBase._log.info(
+      'BgCommandTool injected with pool for $employeeId',
     );
   }
 
