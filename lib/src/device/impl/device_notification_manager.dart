@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../agent/entity/agent_message.dart';
 import '../../agent/notification/agent_notification_hub.dart';
 import '../../entity/lan_message.dart';
@@ -108,10 +110,13 @@ class DeviceNotificationManager {
   // ===== 已读管理 =====
 
   void markAllMessagesAsRead({required String employeeId, String? fromDeviceId}) {
-    _stateHolder.notificationHub.markAllAsRead(employeeId: employeeId, fromDeviceId: fromDeviceId);
-    _broadcastReadStatus(employeeId: employeeId, fromDeviceId: fromDeviceId);
-    // DB 标记已读（O(1) messages UPDATE + O(1) summary UPDATE）
+    // 1. 先写 DB（messages + summary），确保广播时数据已是最新
     _messageStoreService.markAsReadInDb(_deviceId, employeeId);
+    // 2. 更新内存层
+    _stateHolder.notificationHub.markAllAsRead(employeeId: employeeId, fromDeviceId: fromDeviceId);
+    // 3. 广播到远程设备（携带已读后的最新摘要）
+    _broadcastReadStatus(employeeId: employeeId, fromDeviceId: fromDeviceId);
+    // 4. 通知 agent 层
     _notifyAgentReadStatus(employeeId: employeeId, fromDeviceId: fromDeviceId);
   }
 
@@ -294,10 +299,18 @@ class DeviceNotificationManager {
     final lanClient = _connectionManager.lanClient;
     if (lanClient == null || !lanClient.isConnected) return;
 
+    // 发送完整摘要数据，使远程设备能正确更新 session summary
+    final summary = _messageStoreService.getLatestMessageSummary(_deviceId, employeeId);
+
     final msg = LanMessage(
-      type: LanMessageType.agentMessageReadStatus,
+      type: LanMessageType.agentSessionSummaryChanged,
       fromId: _deviceId,
-      content: '{"employeeId":"$employeeId","fromDeviceId":"$fromDeviceId","readerDeviceId":"$_deviceId"}',
+      content: jsonEncode({
+        'employeeId': employeeId,
+        'fromDeviceId': fromDeviceId,
+        'readerDeviceId': _deviceId,
+        'summary': summary?.toMap(),
+      }),
       topic: _topic,
     );
 

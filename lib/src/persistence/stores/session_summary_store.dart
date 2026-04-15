@@ -121,7 +121,7 @@ class SessionSummaryStore {
         employee_id, device_id, unread_count,
         last_msg_id, last_msg_role, last_msg_content,
         last_msg_time, last_msg_seq, update_time
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(employee_id, device_id) DO UPDATE SET
         unread_count = unread_count + ?,
         last_msg_id   = CASE WHEN ? > COALESCE(session_summary.last_msg_time, 0)
@@ -273,9 +273,14 @@ class SessionSummaryStore {
     );
   }
 
-  /// 从远程数据覆盖本地摘要（权威数据源同步）
+  /// 从远程数据合并本地摘要（仅当远程数据更新时覆盖最新消息字段）
+  ///
+  /// 合并策略：
+  /// - 最新消息字段（last_msg_*）：仅当远程 lastMsgTime 更新时才覆盖
+  /// - 未读数：取本地和远程的最大值，避免因同步时序丢失未读
   void upsertFromRemote(SessionSummaryEntity remote) {
     final now = DateTime.now().millisecondsSinceEpoch;
+    final remoteMsgTime = remote.lastMsgTime ?? 0;
     _db.execute('''
       INSERT INTO session_summary (
         employee_id, device_id, unread_count,
@@ -283,20 +288,28 @@ class SessionSummaryStore {
         last_msg_time, last_msg_seq, update_time
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(employee_id, device_id) DO UPDATE SET
-        unread_count = ?,
-        last_msg_id = ?,
-        last_msg_role = ?,
-        last_msg_content = ?,
-        last_msg_time = ?,
-        last_msg_seq = ?,
+        unread_count = MAX(COALESCE(session_summary.unread_count, 0), ?),
+        last_msg_id = CASE WHEN ? > COALESCE(session_summary.last_msg_time, 0)
+                           THEN ? ELSE session_summary.last_msg_id END,
+        last_msg_role = CASE WHEN ? > COALESCE(session_summary.last_msg_time, 0)
+                             THEN ? ELSE session_summary.last_msg_role END,
+        last_msg_content = CASE WHEN ? > COALESCE(session_summary.last_msg_time, 0)
+                                THEN ? ELSE session_summary.last_msg_content END,
+        last_msg_time = MAX(COALESCE(session_summary.last_msg_time, 0), ?),
+        last_msg_seq = CASE WHEN ? > COALESCE(session_summary.last_msg_time, 0)
+                            THEN ? ELSE session_summary.last_msg_seq END,
         update_time = ?
     ''', [
       remote.employeeId, remote.deviceId, remote.unreadCount,
       remote.lastMsgId, remote.lastMsgRole, remote.lastMsgContent,
-      remote.lastMsgTime, remote.lastMsgSeq, now,
+      remoteMsgTime, remote.lastMsgSeq, now,
       remote.unreadCount,
-      remote.lastMsgId, remote.lastMsgRole, remote.lastMsgContent,
-      remote.lastMsgTime, remote.lastMsgSeq, now,
+      remoteMsgTime, remote.lastMsgId,
+      remoteMsgTime, remote.lastMsgRole,
+      remoteMsgTime, remote.lastMsgContent,
+      remoteMsgTime,
+      remoteMsgTime, remote.lastMsgSeq,
+      now,
     ]);
   }
 

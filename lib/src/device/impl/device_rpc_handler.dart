@@ -711,10 +711,10 @@ class DeviceRpcHandler {
       return {'count': messages.length};
     });
 
-    // 获取所有会话摘要
+    // 获取所有会话摘要（仅返回本机 deviceId 的数据）
     rpcServer.register(HostRpcConfig.methodGetSessionSummaries, (params) async {
       final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-      final summaries = summaryStore.getAllSummaries();
+      final summaries = summaryStore.getAllSummaries(deviceId: _deviceId);
       return {'summaries': summaries.map((s) => s.toMap()).toList()};
     });
 

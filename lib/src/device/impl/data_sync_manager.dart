@@ -329,19 +329,8 @@ class DataSyncManager {
             .map((s) => SessionSummaryEntity.fromMap(s as Map<String, dynamic>))
             .toList();
         for (final summary in summaries) {
-          // 以 (employeeId, 本机deviceId) 为 key 写入本地
-          final localSummary = SessionSummaryEntity(
-            employeeId: summary.employeeId,
-            deviceId: _deviceId,
-            unreadCount: summary.unreadCount,
-            lastMsgId: summary.lastMsgId,
-            lastMsgRole: summary.lastMsgRole,
-            lastMsgContent: summary.lastMsgContent,
-            lastMsgTime: summary.lastMsgTime,
-            lastMsgSeq: summary.lastMsgSeq,
-            updateTime: summary.updateTime,
-          );
-          summaryStore.upsertFromRemote(localSummary);
+          // 保留远程摘要的原始 deviceId（employeeId + deviceId 隔离）
+          summaryStore.upsertFromRemote(summary);
         }
       } catch (e) {
         _log.debug('syncSessionSummaries from device ${device.id} failed: $e');

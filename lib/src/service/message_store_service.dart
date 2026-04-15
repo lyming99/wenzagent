@@ -171,6 +171,9 @@ abstract class MessageStoreService {
 
   /// 强制重置同步水位线（不受 MAX 语义限制，用于清空会话场景）
   void resetLastSeq(String deviceId, String employeeId, int lastSeq);
+
+  /// 从远程数据合并本地摘要（智能合并：仅当远程数据更新时覆盖，未读数取最大值）
+  void upsertSummaryFromRemote(SessionSummaryEntity remote);
 }
 
 /// 消息存储服务实现
@@ -534,6 +537,12 @@ class MessageStoreServiceImpl implements MessageStoreService {
   /// 从 JSON Map 创建消息
   ChatMessage fromJson(Map<String, dynamic> json) {
     return ChatMessage.fromJson(json);
+  }
+
+  /// 从远程数据合并本地摘要（智能合并：仅当远程数据更新时覆盖，未读数取最大值）
+  @override
+  void upsertSummaryFromRemote(SessionSummaryEntity remote) {
+    _summaryStore.upsertFromRemote(remote);
   }
 
   /// 释放资源

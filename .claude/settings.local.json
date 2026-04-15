@@ -12,7 +12,8 @@
       "Bash(git -C:*)",
       "Bash(pushd:*)",
       "WebSearch",
-      "Bash(del:*)"
+      "Bash(del:*)",
+      "mcp__wenzflow__create_task"
     ]
   }
 }

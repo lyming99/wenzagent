@@ -292,10 +292,9 @@ mixin _CachedProxyMessageSync on _CachedAgentProxyBase {
     try {
       final result = await _proxy.getSessionSummary();
       if (result != null) {
-        // 1. 更新本地 session_summary 表
+        // 1. 更新本地 session_summary 表（通过已初始化的 _messageStore）
         final summary = SessionSummaryEntity.fromMap(result);
-        final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-        summaryStore.upsertFromRemote(SessionSummaryEntity(
+        _messageStore.upsertSummaryFromRemote(SessionSummaryEntity(
           employeeId: _employeeId,
           deviceId: _deviceId,
           unreadCount: summary.unreadCount,

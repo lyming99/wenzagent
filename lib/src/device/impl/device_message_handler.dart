@@ -494,20 +494,9 @@ class DeviceMessageHandler {
 
       final summary = SessionSummaryEntity.fromMap(summaryData);
 
-      // 持久化到本地 session_summary（覆盖为远程权威值）
-      final localSummary = SessionSummaryEntity(
-        employeeId: employeeId,
-        deviceId: _deviceId,
-        unreadCount: summary.unreadCount,
-        lastMsgId: summary.lastMsgId,
-        lastMsgRole: summary.lastMsgRole,
-        lastMsgContent: summary.lastMsgContent,
-        lastMsgTime: summary.lastMsgTime,
-        lastMsgSeq: summary.lastMsgSeq,
-        updateTime: summary.updateTime,
-      );
+      // 保留远程摘要的原始 deviceId（employeeId + deviceId 隔离）
       final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-      summaryStore.upsertFromRemote(localSummary);
+      summaryStore.upsertFromRemote(summary);
 
       // 通知内存层更新未读计数
       _stateHolder.notificationHub.restoreUnreadCount(
