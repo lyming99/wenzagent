@@ -73,6 +73,23 @@ extension _ToolCallingLoop on LlmChatAdapter {
         return _ToolExecSummary(cancelled: true, results: []);
       }
       if(alreadyCallsSet.contains(toolCall.id)){
+        // 重复 tool call ID：生成错误 result 确保序列完整，而非直接跳过
+        LlmChatAdapter._log.warn('检测到重复 toolCallId: ${toolCall.id}, 生成跳过结果');
+        final skipResult = shared.ToolResult(
+          toolCallId: toolCall.id,
+          content: '工具调用已跳过: 重复的 toolCallId ${toolCall.id}',
+          isError: true,
+          name: toolCall.function.name,
+        );
+        allToolResults.add(skipResult);
+        _toolEventCallback?.call(
+          ToolCallResultEvent(
+            toolCallId: toolCall.id,
+            toolName: toolCall.function.name,
+            result: skipResult.content,
+            isError: true,
+          ),
+        );
         continue;
       }
       alreadyCallsSet.add(toolCall.id);

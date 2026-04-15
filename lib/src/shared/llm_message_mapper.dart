@@ -232,6 +232,114 @@ class LlmMessageMapper {
     return result;
   }
 
+  // ── 消息序列校验 ──
+
+  /// 校验并修复消息序列，确保每个 tool result 都能匹配到前述 assistant 的 tool_call_id
+  ///
+  /// 在消息发送给 LLM 前调用。处理以下异常场景：
+  /// - 异步工具执行期间消息注入导致的顺序错乱
+  /// - alreadyCallsSet 跳过执行但 assistant 消息已记录
+  /// - 上下文压缩后保留孤立 tool result
+  static List<ChatMessage> sanitizeForLlm(List<ChatMessage> messages) {
+    if (messages.isEmpty) return messages;
+
+    final result = <ChatMessage>[];
+    final expectedIds = <String>{};
+
+    for (final msg in messages) {
+      if (msg.role == MessageRole.assistant &&
+          msg.toolCalls != null &&
+          msg.toolCalls!.isNotEmpty) {
+        // 如果之前有未匹配的 tool_call_id，清除上一条 assistant 的 toolCalls
+        if (expectedIds.isNotEmpty) {
+          _stripLastAssistantToolCalls(result);
+          expectedIds.clear();
+        }
+        // 记录本轮所有 tool_call_id
+        for (final tc in msg.toolCalls!) {
+          expectedIds.add(tc.id);
+        }
+        result.add(msg);
+      } else if (msg.role == MessageRole.tool) {
+        if (msg.isToolResultGroup) {
+          // 分组 tool result：只保留 expectedIds 中存在的
+          final validResults = msg.toolResults!
+              .where((r) => expectedIds.contains(r.toolCallId))
+              .toList();
+          for (final r in validResults) {
+            expectedIds.remove(r.toolCallId);
+          }
+          if (validResults.isEmpty) {
+            _log.warn('sanitizeForLlm: 丢弃孤立 tool result group (无匹配 toolCallId)');
+            continue;
+          }
+          if (validResults.length == msg.toolResults!.length) {
+            result.add(msg);
+          } else {
+            _log.warn(
+              'sanitizeForLlm: 部分 tool result 孤立，保留 ${validResults.length}/${msg.toolResults!.length} 条',
+            );
+            result.add(
+              ChatMessage.toolResultGroup(
+                id: msg.id,
+                employeeId: msg.employeeId,
+                results: validResults,
+                createdAt: msg.createdAt,
+                deviceId: msg.deviceId,
+              ),
+            );
+          }
+        } else {
+          // 单条 tool result
+          final toolCallId = msg.toolCallId ?? '';
+          if (toolCallId.isEmpty || !expectedIds.contains(toolCallId)) {
+            _log.warn('sanitizeForLlm: 丢弃孤立 tool result (toolCallId=$toolCallId)');
+            continue;
+          }
+          expectedIds.remove(toolCallId);
+          result.add(msg);
+        }
+      } else {
+        // user / system 等非 tool 消息
+        if (expectedIds.isNotEmpty) {
+          _log.warn(
+            'sanitizeForLlm: 遇到非 tool 消息但有未匹配的 toolCallIds，清除上一条 assistant toolCalls',
+          );
+          _stripLastAssistantToolCalls(result);
+          expectedIds.clear();
+        }
+        result.add(msg);
+      }
+    }
+
+    // 序列末尾：处理残留未匹配的 expectedIds
+    if (expectedIds.isNotEmpty) {
+      _log.warn(
+        'sanitizeForLlm: 序列末尾仍有未匹配的 toolCallIds: $expectedIds，清除最后一条 assistant toolCalls',
+      );
+      _stripLastAssistantToolCalls(result);
+    }
+
+    return result;
+  }
+
+  /// 从 result 列表中找到最后一条含 toolCalls 的 assistant 消息，
+  /// 用 copyWith(clearToolCalls: true, type: 'text') 去掉其 toolCalls
+  static void _stripLastAssistantToolCalls(List<ChatMessage> result) {
+    for (var i = result.length - 1; i >= 0; i--) {
+      final msg = result[i];
+      if (msg.role == MessageRole.assistant &&
+          msg.toolCalls != null &&
+          msg.toolCalls!.isNotEmpty) {
+        result[i] = msg.copyWith(
+          clearToolCalls: true,
+          type: 'text',
+        );
+        return;
+      }
+    }
+  }
+
   // ── 内部工具 ──
 
   /// 解析工具参数 JSON 字符串为 Map

@@ -90,7 +90,8 @@ extension _StreamHandler on LlmChatAdapter {
       );
     }
 
-    final llmMessages = shared.LlmMessageMapper.toLlmDartList(chatMsgs);
+    final sanitized = shared.LlmMessageMapper.sanitizeForLlm(chatMsgs);
+    final llmMessages = shared.LlmMessageMapper.toLlmDartList(sanitized);
 
     // 构建工具列表
     final List<llm.Tool>? llmTools;
