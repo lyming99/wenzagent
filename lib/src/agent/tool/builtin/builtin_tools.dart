@@ -1,14 +1,22 @@
 import '../agent_tool.dart';
 import 'command_execute_tool.dart';
+import 'code_symbols_tool.dart';
 import 'content_search_tool.dart';
 import 'directory_create_tool.dart';
+import 'env_info_tool.dart';
 import 'file_delete_tool.dart';
 import 'file_info_tool.dart';
 import 'file_list_tool.dart';
+import 'file_patch_tool.dart';
 import 'file_read_tool.dart';
 import 'file_search_tool.dart';
 import 'file_write_tool.dart';
+import 'git_operations_tool.dart';
 import 'schedule_task_tool.dart';
+import 'todo_manage_tool.dart';
+import 'spawn_sub_agent_tool.dart';
+import 'web_fetch_tool.dart';
+import 'web_search_tool.dart';
 
 /// 内置工具集合
 ///
@@ -25,10 +33,18 @@ class BuiltinTools {
       FileSearchTool(),
       ContentSearchTool(),
       CommandExecuteTool(),
+      GitOperationsTool(),
       FileInfoTool(),
       FileDeleteTool(),
       DirectoryCreateTool(),
       ScheduleTaskTool(),
+      SpawnSubAgentTool(),
+      WebFetchTool(),
+      WebSearchTool(),
+      EnvInfoTool(),
+      FilePatchTool(),
+      CodeSymbolsTool(),
+      TodoManageTool(),
     ];
   }
 
@@ -40,6 +56,8 @@ class BuiltinTools {
       FileSearchTool(),
       ContentSearchTool(),
       FileInfoTool(),
+      EnvInfoTool(),
+      WebSearchTool(),
     ];
   }
 
@@ -54,6 +72,7 @@ class BuiltinTools {
       FileInfoTool(),
       FileDeleteTool(),
       DirectoryCreateTool(),
+      FilePatchTool(),
     ];
   }
 }

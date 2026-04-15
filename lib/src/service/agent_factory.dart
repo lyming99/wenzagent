@@ -1,13 +1,16 @@
 ﻿import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:uuid/uuid.dart';
 
 import '../agent/adapter/llm_chat_adapter.dart';
+import '../agent/agent_state.dart';
 import '../agent/entity/entity.dart';
 import '../agent/i_agent.dart';
 import '../agent/impl/agent_impl.dart';
 import '../agent/tool/builtin/schedule_task_tool.dart';
+import '../agent/tool/builtin/spawn_sub_agent_tool.dart';
 import '../agent/tool/permission_rule.dart';
 import '../persistence/persistence.dart';
 import '../utils/logger.dart';
@@ -15,6 +18,8 @@ import 'employee_manager.dart';
 import 'message_store_service.dart';
 import 'skill_manager.dart';
 import 'scheduled_task_manager.dart';
+import 'sub_agent_executor.dart';
+import 'entity/agent_runtime_config.dart';
 
 /// Agent生命周期类型
 enum AgentLifecycleType { created, destroyed }
@@ -152,6 +157,9 @@ class AgentFactoryImpl implements AgentFactory {
     // 注入 ScheduleTaskTool 回调
     _injectScheduleTaskCallbacks(agent, employeeId);
 
+    // 注入 SpawnSubAgentTool 回调
+    _injectSpawnSubAgentCallbacks(agent, employeeId);
+
     // 注入权限配置（从员工实体的 permissionConfig 字段）
     _injectPermissionConfig(agent, employee);
 
@@ -230,6 +238,59 @@ class AgentFactoryImpl implements AgentFactory {
     };
 
     _log.debug('ScheduleTaskTool callbacks injected for $agentEmployeeId');
+  }
+
+  /// 将 SubAgentExecutor 的回调注入到 Agent 的 SpawnSubAgentTool
+  void _injectSpawnSubAgentCallbacks(IAgent agent, String employeeId) {
+    final impl = agent as AgentImpl;
+    final spawnTool = impl.toolRegistry.getTool('spawn_sub_agent');
+    if (spawnTool is! SpawnSubAgentTool) return;
+
+    final agentEmployeeId = employeeId;
+
+    // 创建 SubAgentExecutor 并注入回调
+    final executor = SubAgentExecutor();
+    executor.getAgentConfig = (eid) async {
+      final a = _agents[eid];
+      if (a == null) return null;
+
+      final config = AgentRuntimeConfig(
+        providerConfig: a.getProviderConfig()?.toMap(),
+        systemPrompt: a.getCurrentContext()?['systemPrompt'] as String?,
+        projectContext: null,
+      );
+
+      return config;
+    };
+
+    // 权限请求转发：通过主 Agent 的 PermissionManager 转发
+    executor.requestPermission = (request) async {
+      final manager = impl.permissionManager;
+      // 主 Agent 的 onPermissionRequest 回调会将请求广播到用户
+      if (manager.onPermissionRequest == null) {
+        return PermissionDecision.deny;
+      }
+      return manager.onPermissionRequest!(request);
+    };
+
+    // 文件读取回调
+    executor.readFileContent = (filePath) async {
+      try {
+        final file = await File(filePath).readAsString();
+        return file;
+      } catch (e) {
+        return null;
+      }
+    };
+
+    spawnTool.executor = executor;
+    spawnTool.employeeId = agentEmployeeId;
+    spawnTool.getAvailableTools = () {
+      return impl.toolRegistry.tools;
+    };
+    spawnTool.readFileContent = executor.readFileContent;
+
+    _log.debug('SpawnSubAgentTool callbacks injected for $agentEmployeeId');
   }
 
   /// 注入权限配置到 Agent 的 PermissionManager

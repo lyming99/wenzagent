@@ -28,6 +28,7 @@ abstract class _AgentImplBase implements IAgent {
   Map<String, Map<String, DateTime>> get _messageReceiveStatus;
   Map<String, Map<String, DateTime>> get _messageReadStatus;
   Set<String> get _callingToolIds;
+  List<TodoItem> get _todoList;
   AgentStatus get _status;
   set _status(AgentStatus value);
   int get _refCount;
@@ -131,6 +132,10 @@ class AgentImpl extends _AgentImplBase
   @override
   final Set<String> _callingToolIds = {};
 
+  /// 待办列表（Agent 实例级别，跨轮次保持）
+  @override
+  final List<TodoItem> _todoList = [];
+
   // ===== 内部状态 =====
 
   /// 当前 Agent 状态
@@ -206,6 +211,9 @@ class AgentImpl extends _AgentImplBase
     if (enableBuiltinTools) {
       _toolRegistry.registerTools(BuiltinTools.all());
     }
+
+    // 注入 TodoManageTool 回调
+    _injectTodoManageCallbacks();
 
     // 技能系统由 warmup 后台加载，不在 initialize 中阻塞
 
@@ -480,6 +488,14 @@ class AgentImpl extends _AgentImplBase
   Stream<AgentEvent> get onEvent => _eventController.stream;
 
   // ===== 内部方法 =====
+
+  /// 注入 TodoManageTool 回调
+  void _injectTodoManageCallbacks() {
+    final todoTool = _toolRegistry.getTool('todo_manage');
+    if (todoTool is TodoManageTool) {
+      todoTool.getTodoList = () => _todoList;
+    }
+  }
 
   /// 同步处理器状态到 Agent 状态
   void _syncProcessorStatus(AgentStatus processorStatus) {
