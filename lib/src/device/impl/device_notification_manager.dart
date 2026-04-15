@@ -110,8 +110,10 @@ class DeviceNotificationManager {
   // ===== 已读管理 =====
 
   void markAllMessagesAsRead({required String employeeId, String? fromDeviceId}) {
+    // 使用 fromDeviceId（消息所在设备）而非本机 _deviceId，确保远程会话也能正确更新 DB
+    final targetDeviceId = fromDeviceId ?? _deviceId;
     // 1. 先写 DB（messages + summary），确保广播时数据已是最新
-    _messageStoreService.markAsReadInDb(_deviceId, employeeId);
+    _messageStoreService.markAsReadInDb(targetDeviceId, employeeId);
     // 2. 更新内存层
     _stateHolder.notificationHub.markAllAsRead(employeeId: employeeId, fromDeviceId: fromDeviceId);
     // 3. 广播到远程设备（携带已读后的最新摘要）
@@ -274,9 +276,10 @@ class DeviceNotificationManager {
   /// 返回值为摘要表中该员工剩余的未读消息数量，调用方可用其修正内存缓存。
   Future<int> markMessagesAsReadInDb(String employeeId, String? fromDeviceId) async {
     try {
-      _messageStoreService.markAsReadInDb(_deviceId, employeeId);
+      final targetDeviceId = fromDeviceId ?? _deviceId;
+      _messageStoreService.markAsReadInDb(targetDeviceId, employeeId);
       // 从摘要表读取未读数量（O(1)）
-      return _messageStoreService.getUnreadCount(_deviceId, employeeId);
+      return _messageStoreService.getUnreadCount(targetDeviceId, employeeId);
     } catch (e) {
       _log.debug('markMessagesAsReadInDb failed: $e');
       return -1;
@@ -299,8 +302,10 @@ class DeviceNotificationManager {
     final lanClient = _connectionManager.lanClient;
     if (lanClient == null || !lanClient.isConnected) return;
 
+    // 使用 fromDeviceId（消息所在设备）查找摘要，确保远程会话也能获取正确的摘要
+    final targetDeviceId = fromDeviceId ?? _deviceId;
     // 发送完整摘要数据，使远程设备能正确更新 session summary
-    final summary = _messageStoreService.getLatestMessageSummary(_deviceId, employeeId);
+    final summary = _messageStoreService.getLatestMessageSummary(targetDeviceId, employeeId);
 
     final msg = LanMessage(
       type: LanMessageType.agentSessionSummaryChanged,

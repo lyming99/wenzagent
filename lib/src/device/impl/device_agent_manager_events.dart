@@ -166,8 +166,9 @@ extension DeviceAgentManagerEvents on DeviceAgentManager {
     final lanClient = _connectionManager.lanClient;
     if (lanClient == null || !lanClient.isConnected) return;
 
+    // 使用 fromDeviceId（消息所在设备）查找摘要，确保远程会话也能获取正确的摘要
     final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-    final summary = summaryStore.getSummary(employeeId, deviceId: _deviceId);
+    final summary = summaryStore.getSummary(employeeId, deviceId: fromDeviceId ?? _deviceId);
 
     final msg = LanMessage(
       type: LanMessageType.agentSessionSummaryChanged,

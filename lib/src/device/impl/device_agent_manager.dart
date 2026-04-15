@@ -316,9 +316,10 @@ class DeviceAgentManager {
       onSessionSummaryUpdated: (empId, summaryData) {
         final summary = SessionSummaryEntity.fromMap(summaryData);
         final summaryStore = SessionSummaryStore(deviceId: _deviceId);
+        // 远程会话使用 targetDeviceId（代理所在设备），保持与 session summary 一致
         summaryStore.upsertFromRemote(SessionSummaryEntity(
           employeeId: empId,
-          deviceId: _deviceId,
+          deviceId: targetDeviceId,
           unreadCount: summary.unreadCount,
           lastMsgId: summary.lastMsgId,
           lastMsgRole: summary.lastMsgRole,
@@ -336,7 +337,7 @@ class DeviceAgentManager {
           _stateHolder.notificationHub.onLatestMessageUpdated(
             message: agentMsg,
             employeeId: empId,
-            fromDeviceId: _deviceId,
+            fromDeviceId: targetDeviceId,
             unreadCount: summary.unreadCount,
           );
         }
