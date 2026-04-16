@@ -77,9 +77,14 @@ class ToolRegistry {
   /// 如果通过 [setExposedToolNames] 设置了可见工具集合，
   /// 则只返回该集合中的工具；否则返回所有已注册工具。
   List<llm.Tool> getLlmDartTools(LLMProvider provider) {
-    final exposedTools = _exposedToolNames != null
+    var exposedTools = _exposedToolNames != null
         ? _tools.values.where((t) => _exposedToolNames!.contains(t.name))
         : _tools.values;
+
+    // end 工具始终对 LLM 可见，确保 AI 能主动结束工具调用循环
+    if (!exposedTools.any((t) => t.name == 'end')) {
+      exposedTools = [...exposedTools, _tools['end']!];
+    }
 
     return exposedTools.map((t) {
       final tool = t.toLlmDartTool();

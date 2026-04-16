@@ -165,7 +165,7 @@ class TaskComplexityTool extends AgentTool {
   /// 分析子 Agent 的 system prompt
   static const _analysisSystemPrompt =
       '你是一个开发任务复杂度评估专家。你的任务是探索代码库，分析给定的开发任务，判断其复杂度等级并给出委派建议。\n\n'
-      '你有只读工具可用（file_list, file_read, file_search, content_search, code_symbols, env_info），'
+      '你有只读工具可用（file_list, file_read, file_search, content_search, code_symbols, env_info, end），注意end工具是确认任务完成，如果给的信息不足，使用end抛出原因。'
       '请主动探索相关文件和代码结构，基于实际代码库情况做出准确判断。\n\n'
       '重要：主 Agent 是纯粹的规划者和委派者，不直接执行任何文件操作或命令。'
       '所有实际工作都通过 spawn_sub_agent 委派给子 Agent 执行。复杂度等级仅影响规划和委派策略。\n\n'
@@ -179,6 +179,12 @@ class TaskComplexityTool extends AgentTool {
   String _buildAnalysisPrompt(String task, String? context) {
     final buffer = StringBuffer();
 
+    buffer.writeln();
+    buffer.writeln('请先探索代码库中与任务相关的文件和结构，然后根据你的发现和上面的分级标准进行分析。');
+    buffer.writeln();
+    buffer.writeln('## 待分析的任务');
+    buffer.writeln();
+    buffer.writeln(task);
     buffer.writeln('## 任务分级标准');
     buffer.writeln();
     buffer.writeln('### 1. 简单任务 → 单次委派');
@@ -203,9 +209,6 @@ class TaskComplexityTool extends AgentTool {
     buffer.writeln('4. 按照中型任务的流程逐个委派给子 Agent 执行');
     buffer.writeln('5. 所有待办完成后对照 Spec 做最终检查');
     buffer.writeln();
-    buffer.writeln('## 待分析的任务');
-    buffer.writeln();
-    buffer.writeln(task);
 
     if (context != null && context.isNotEmpty) {
       buffer.writeln();
@@ -213,11 +216,7 @@ class TaskComplexityTool extends AgentTool {
       buffer.writeln();
       buffer.writeln(context);
     }
-
     buffer.writeln();
-    buffer.writeln('---');
-    buffer.writeln();
-    buffer.writeln('请先探索代码库中与任务相关的文件和结构，然后根据你的发现和上面的分级标准进行分析。');
 
     return buffer.toString();
   }
