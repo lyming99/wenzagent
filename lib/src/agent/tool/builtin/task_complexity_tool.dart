@@ -17,7 +17,6 @@ class TaskComplexityTool extends AgentTool {
   static const List<String> _analysisToolNames = [
     'file_list',
     'file_read',
-    'file_search',
     'content_search',
     'code_symbols',
     'env_info',
@@ -50,21 +49,16 @@ class TaskComplexityTool extends AgentTool {
 
   @override
   Map<String, dynamic> get inputJsonSchema => {
-        'type': 'object',
-        'properties': {
-          'task': {
-            'type': 'string',
-            'description':
-                '要进行复杂度分析的用户任务描述。',
-          },
-          'context': {
-            'type': 'string',
-            'description':
-                '可选的补充上下文，如当前项目信息、相关文件等，有助于评估任务复杂度。',
-          },
-        },
-        'required': ['task'],
-      };
+    'type': 'object',
+    'properties': {
+      'task': {'type': 'string', 'description': '要进行复杂度分析的用户任务描述。'},
+      'context': {
+        'type': 'string',
+        'description': '可选的补充上下文，如当前项目信息、相关文件等，有助于评估任务复杂度。',
+      },
+    },
+    'required': ['task'],
+  };
 
   @override
   bool get requiresPermission => false;
@@ -81,9 +75,7 @@ class TaskComplexityTool extends AgentTool {
       final diag = StringBuffer(
         'Task complexity analysis is not available. Injection diagnostics:\n',
       );
-      diag.writeln(
-        '- executor: null (expected: SubAgentExecutor)',
-      );
+      diag.writeln('- executor: null (expected: SubAgentExecutor)');
       diag.writeln('- employeeId: ${employeeId ?? "null"}');
       diag.writeln(
         '- readFileContent: ${readFileContent != null ? "injected" : "null"}',
@@ -157,8 +149,8 @@ class TaskComplexityTool extends AgentTool {
       );
 
       return ToolResult.success(result.summary);
-    } catch (e) {
-      _log.error('Task complexity analysis failed', e);
+    } catch (e, st) {
+      _log.error('Task complexity analysis failed', e, st);
       return ToolResult.error('Task complexity analysis failed: $e');
     }
   }
@@ -167,7 +159,7 @@ class TaskComplexityTool extends AgentTool {
   static const _analysisSystemPrompt =
       '你是一个开发任务复杂度评估专家。你的任务是探索代码库，分析给定的开发任务，判断其复杂度等级并给出委派建议。\n\n'
       '你有以下工具可用：\n'
-      '- file_list, file_read, file_search, content_search, code_symbols, env_info：用于探索代码结构和文件内容\n'
+      '- file_list, file_read, content_search(searchType=file 可按文件名搜索), code_symbols, env_info：用于探索代码结构和文件内容\n'
       '- command_execute：用于执行命令（如 git log、grep、find 等）辅助分析\n'
       '- end：确认任务完成并返回分析结果，如果信息不足则使用 end 说明原因\n\n'
       '请主动探索相关文件和代码结构，基于实际代码库情况做出准确判断。\n\n'
@@ -185,10 +177,11 @@ class TaskComplexityTool extends AgentTool {
 
     buffer.writeln();
     buffer.writeln('## 任务描述');
+    buffer.writeln(
+      '请对待分析的任务根据下面的分级标准进行分析评分，探索代码库中与任务相关的文件和结构，返回任务分级，给出分析结果，如果资料不足，则根据待分析的任务描述进行简要分析。',
+    );
     buffer.writeln();
-    buffer.writeln('请先探索代码库中与任务相关的文件和结构，然后根据下面的分级标准进行分析。');
-    buffer.writeln();
-    buffer.writeln('## 待分析的任务');
+    buffer.writeln('## 待分析的任务(用户提供的开发任务或其它任务)');
     buffer.writeln();
     buffer.writeln(task);
     buffer.writeln('## 任务分级标准');

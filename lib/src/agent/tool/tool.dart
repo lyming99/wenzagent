@@ -11,7 +11,6 @@ export 'builtin/builtin_tools.dart';
 export 'builtin/file_read_tool.dart';
 export 'builtin/file_write_tool.dart';
 export 'builtin/file_list_tool.dart';
-export 'builtin/file_search_tool.dart';
 export 'builtin/content_search_tool.dart';
 export 'builtin/command_execute_tool.dart';
 export 'builtin/file_info_tool.dart';

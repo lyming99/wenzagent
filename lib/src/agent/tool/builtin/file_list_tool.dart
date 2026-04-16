@@ -18,7 +18,7 @@ class FileListTool extends AgentTool {
 
   @override
   String get description =>
-      '列出指定目录下的文件和子目录，返回条目类型（文件/目录）、名称和大小。非递归模式最多返回 500 条，递归模式最多 200 条。如需精确查找，请使用 file_search 工具。';
+      '列出指定目录下的文件和子目录，返回条目类型（文件/目录）、名称和大小。非递归模式最多返回 500 条，递归模式最多 200 条。如需精确查找，请使用 content_search 工具（searchType=file）。';
 
   @override
   Map<String, dynamic> get inputJsonSchema => {
@@ -108,7 +108,7 @@ class FileListTool extends AgentTool {
         result.writeln();
         result.writeln(
           '[结果已截断] 列出了 $maxEntries 条，但目录中还有更多内容。'
-          '建议: 1) 使用 file_search 按文件名模式缩小范围; '
+          '建议: 1) 使用 content_search(searchType=file) 按文件名模式缩小范围; '
           '2) 列出子目录而非递归列出; '
           '3) 指定更具体的路径。',
         );

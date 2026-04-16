@@ -1004,7 +1004,7 @@ class AgentImpl extends _AgentImplBase
   ///
   /// 创建独立的 SubAgentExecutor，复用主 Agent 的 provider 配置、
   /// 权限转发和文件读取回调，与 SpawnSubAgentTool 注入模式一致。
-  /// 子 Agent 仅使用只读工具（file_list, file_read, file_search 等），
+  /// 子 Agent 仅使用只读工具（file_list, file_read, content_search 等），
   /// 用于探索代码库以做出准确的复杂度评估。
   void _injectTaskComplexityCallbacks() {
     final tool = _toolRegistry.getTool('task_complexity');

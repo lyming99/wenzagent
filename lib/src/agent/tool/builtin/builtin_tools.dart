@@ -11,7 +11,6 @@ import 'file_info_tool.dart';
 import 'file_list_tool.dart';
 import 'file_patch_tool.dart';
 import 'file_read_tool.dart';
-import 'file_search_tool.dart';
 import 'file_write_tool.dart';
 import 'git_operations_tool.dart';
 import 'schedule_task_tool.dart';
@@ -48,7 +47,6 @@ class BuiltinTools {
     'file_read',
     'file_write',
     'file_list',
-    'file_search',
     'content_search',
     'file_info',
     'file_delete',
@@ -70,7 +68,6 @@ class BuiltinTools {
       FileReadTool(),
       FileWriteTool(),
       FileListTool(),
-      FileSearchTool(),
       ContentSearchTool(),
       CommandExecuteTool(),
       BgCommandTool(),
@@ -97,7 +94,6 @@ class BuiltinTools {
       EndTool(),
       FileReadTool(),
       FileListTool(),
-      FileSearchTool(),
       ContentSearchTool(),
       FileInfoTool(),
       EnvInfoTool(),
@@ -111,7 +107,6 @@ class BuiltinTools {
       FileReadTool(),
       FileWriteTool(),
       FileListTool(),
-      FileSearchTool(),
       ContentSearchTool(),
       FileInfoTool(),
       FileDeleteTool(),

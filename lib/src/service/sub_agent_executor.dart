@@ -65,7 +65,7 @@ class SubAgentExecutor {
   static const int _defaultMaxTurns = 30;
 
   /// 默认超时时间
-  static const Duration _defaultTimeout = Duration(minutes: 5);
+  static const Duration _defaultTimeout = Duration(minutes: 30);
 
   /// summary 最大字符数
   static const int _maxSummaryLength = 8000;

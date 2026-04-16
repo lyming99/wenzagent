@@ -95,6 +95,9 @@ class FileReadTool extends AgentTool {
         hintLines.add(
           '  - 如确需读取更多内容，可设置 maxBytes=$_absoluteMaxBytes',
         );
+        hintLines.add(
+          '  - 另外，可以使用code_symbols分析代码文件，避免全量读取代码',
+        );
 
         return ToolResult.error(hintLines.join('\n'));
       }
