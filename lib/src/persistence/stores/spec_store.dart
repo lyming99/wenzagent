@@ -1,12 +1,11 @@
 import 'package:sqlite3/sqlite3.dart';
 
 import '../database_manager.dart';
-import '../entities/spec_group_entity.dart';
 import '../entities/spec_item_entity.dart';
 
 /// Spec 数据存储
 ///
-/// 提供 spec 项和分组的 CRUD 操作，所有操作直接读写 SQLite。
+/// 提供 spec 项的 CRUD 操作，所有操作直接读写 SQLite。
 class SpecStore {
   final DatabaseManager _dbManager;
 
@@ -22,7 +21,6 @@ class SpecStore {
     return SpecItemEntity.fromMap({
       'id': row['id'],
       'employeeId': row['employee_id'],
-      'groupId': row['group_id'],
       'title': row['title'],
       'content': row['content'],
       'status': row['status'],
@@ -54,15 +52,6 @@ class SpecStore {
     return resultSet.map(_rowToItem).toList();
   }
 
-  /// 查询指定分组下的所有活跃项
-  List<SpecItemEntity> findByGroup(String groupId) {
-    final resultSet = _db.select(
-      "SELECT * FROM spec_items WHERE group_id = ? AND deleted = 0 AND status IN ('draft', 'pending', 'in_progress') ORDER BY sort_order ASC, create_time ASC",
-      [groupId],
-    );
-    return resultSet.map(_rowToItem).toList();
-  }
-
   /// 按 ID 查询单个 spec 项
   SpecItemEntity? findById(String id) {
     final resultSet = _db.select(
@@ -79,13 +68,12 @@ class SpecStore {
   void save(SpecItemEntity item) {
     _db.execute('''
       INSERT OR REPLACE INTO spec_items (
-        id, employee_id, group_id, title, content, status,
+        id, employee_id, title, content, status,
         priority, tags, sort_order, deleted, create_time, update_time
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', [
       item.id,
       item.employeeId,
-      item.groupId,
       item.title,
       item.content,
       item.status,
@@ -126,14 +114,6 @@ class SpecStore {
     }
   }
 
-  /// 移动到分组（groupId 可为 null 表示移出分组）
-  void moveToGroup(String id, String? groupId) {
-    _db.execute(
-      'UPDATE spec_items SET group_id = ?, update_time = ? WHERE id = ?',
-      [groupId, DateTime.now().millisecondsSinceEpoch, id],
-    );
-  }
-
   /// 软删除
   void softDelete(String id) {
     _db.execute(
@@ -168,93 +148,5 @@ class SpecStore {
       result[status] = cnt;
     }
     return result;
-  }
-
-  // ===== SpecGroup 操作 =====
-
-  /// 从数据库行解码为 SpecGroupEntity
-  SpecGroupEntity _rowToGroup(Row row) {
-    return SpecGroupEntity.fromMap({
-      'id': row['id'],
-      'employeeId': row['employee_id'],
-      'name': row['name'],
-      'sortOrder': row['sort_order'],
-      'deleted': row['deleted'],
-      'createTime': row['create_time'],
-      'updateTime': row['update_time'],
-    });
-  }
-
-  /// 查询员工的所有分组
-  List<SpecGroupEntity> findGroupsByEmployee(String employeeId) {
-    final resultSet = _db.select(
-      'SELECT * FROM spec_groups WHERE employee_id = ? AND deleted = 0 ORDER BY sort_order ASC',
-      [employeeId],
-    );
-    return resultSet.map(_rowToGroup).toList();
-  }
-
-  /// 按 ID 查询单个分组
-  SpecGroupEntity? findGroupById(String id) {
-    final resultSet = _db.select(
-      'SELECT * FROM spec_groups WHERE id = ? AND deleted = 0',
-      [id],
-    );
-    for (final row in resultSet) {
-      return _rowToGroup(row);
-    }
-    return null;
-  }
-
-  /// 按名称查找分组（用于 add 时自动关联）
-  SpecGroupEntity? findGroupByName(String employeeId, String name) {
-    final resultSet = _db.select(
-      'SELECT * FROM spec_groups WHERE employee_id = ? AND name = ? AND deleted = 0',
-      [employeeId, name],
-    );
-    for (final row in resultSet) {
-      return _rowToGroup(row);
-    }
-    return null;
-  }
-
-  /// 保存分组（INSERT OR REPLACE）
-  void saveGroup(SpecGroupEntity group) {
-    _db.execute('''
-      INSERT OR REPLACE INTO spec_groups (
-        id, employee_id, name, sort_order, deleted, create_time, update_time
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', [
-      group.id,
-      group.employeeId,
-      group.name,
-      group.sortOrder,
-      group.deleted,
-      group.createTime.millisecondsSinceEpoch,
-      group.updateTime.millisecondsSinceEpoch,
-    ]);
-  }
-
-  /// 软删除分组（同时将该分组下的 spec 项的 groupId 置 null）
-  void softDeleteGroup(String id) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    // 先将该分组下的 spec 项移至未分组
-    _db.execute(
-      'UPDATE spec_items SET group_id = NULL, update_time = ? WHERE group_id = ?',
-      [now, id],
-    );
-    // 软删除分组
-    _db.execute(
-      'UPDATE spec_groups SET deleted = 1, update_time = ? WHERE id = ?',
-      [now, id],
-    );
-  }
-
-  /// 重命名分组
-  void renameGroup(String id, String name) {
-    _db.execute(
-      'UPDATE spec_groups SET name = ?, update_time = ? WHERE id = ?',
-      [name, DateTime.now().millisecondsSinceEpoch, id],
-    );
   }
 }

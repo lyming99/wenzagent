@@ -85,26 +85,31 @@ class AgentRpcConfig {
   static const String methodGetCallingToolIds = 'agentGetCallingToolIds';
   static const String methodSubscribeState = 'agentSubscribeState';
 
-  // ===== Agent Todo 管理 =====
+  // ===== Agent Todo Topic 管理 =====
 
-  static const String methodGetActiveTodos = 'agentGetActiveTodos';
-  static const String methodGetCompletedTodos = 'agentGetCompletedTodos';
-  static const String methodGetTodoGroups = 'agentGetTodoGroups';
+  static const String methodGetCurrentTopics = 'agentGetCurrentTopics';
+  static const String methodGetPendingTopics = 'agentGetPendingTopics';
+  static const String methodGetAllTopics = 'agentGetAllTopics';
+  static const String methodGetCompletedTopics = 'agentGetCompletedTopics';
   static const String methodGetTodoStats = 'agentGetTodoStats';
 
   // ===== Agent Todo 写操作 =====
 
-  static const String methodUpdateTodoStatus = 'agentUpdateTodoStatus';
-  static const String methodUpdateTodoContent = 'agentUpdateTodoContent';
-  static const String methodDeleteTodo = 'agentDeleteTodo';
-  static const String methodClearCompletedTodos = 'agentClearCompletedTodos';
-  static const String methodMoveTodoToGroup = 'agentMoveTodoToGroup';
+  static const String methodUpdateTopicContent = 'agentUpdateTopicContent';
+  static const String methodDeleteTopic = 'agentDeleteTopic';
+  static const String methodClearCompletedTopics = 'agentClearCompletedTopics';
+
+  // ===== Agent Todo TaskItem 管理 =====
+
+  static const String methodGetTaskItemsByTopic = 'agentGetTaskItemsByTopic';
+  static const String methodUpdateTaskItemStatus = 'agentUpdateTaskItemStatus';
+  static const String methodUpdateTaskItemContent = 'agentUpdateTaskItemContent';
+  static const String methodDeleteTaskItem = 'agentDeleteTaskItem';
 
   // ===== Agent Spec 管理 =====
 
   static const String methodGetActiveSpecs = 'agentGetActiveSpecs';
   static const String methodGetCompletedSpecs = 'agentGetCompletedSpecs';
-  static const String methodGetSpecGroups = 'agentGetSpecGroups';
   static const String methodGetSpecStats = 'agentGetSpecStats';
 
   // ===== Agent Spec 写操作 =====
@@ -113,7 +118,6 @@ class AgentRpcConfig {
   static const String methodUpdateSpecContent = 'agentUpdateSpecContent';
   static const String methodDeleteSpec = 'agentDeleteSpec';
   static const String methodClearCompletedSpecs = 'agentClearCompletedSpecs';
-  static const String methodMoveSpecToGroup = 'agentMoveSpecToGroup';
 
   // ===== Agent 文件操作追踪 =====
 

@@ -273,10 +273,6 @@ class SubAgentExecutor {
       stopwatch.stop();
 
       var summary = resultBuffer.toString();
-      if (summary.length > _maxSummaryLength) {
-        summary =
-            '${summary.substring(0, _maxSummaryLength)}\n\n[Result truncated, original output ${summary.length} chars]';
-      }
 
       return SubAgentResult(
         success: !hasError && resultBuffer.isNotEmpty,

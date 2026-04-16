@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'agent_state.dart';
 import 'entity/entity.dart';
@@ -343,51 +343,43 @@ abstract class IAgent {
 
   // ===== Todo 管理 =====
 
-  /// 获取活跃 todo 项（pending + in_progress）
-  ///
-  /// 返回序列化后的 Map 列表
-  Future<List<Map<String, dynamic>>> getActiveTodos();
+  /// 获取当前待办主题（有子项正在进行）
+  Future<List<Map<String, dynamic>>> getCurrentTopics();
 
-  /// 获取已完成的 todo 项
-  ///
-  /// [limit] 最大返回数量，默认 50
-  Future<List<Map<String, dynamic>>> getCompletedTodos({int limit = 50});
+  /// 获取未完成待办主题
+  Future<List<Map<String, dynamic>>> getPendingTopics();
 
-  /// 获取所有 todo 分组
-  Future<List<Map<String, dynamic>>> getTodoGroups();
+  /// 获取所有待办主题
+  Future<List<Map<String, dynamic>>> getAllTopics();
 
-  /// 获取 todo 统计信息
-  ///
-  /// 返回各状态的数量统计
+  /// 获取已完成主题
+  Future<List<Map<String, dynamic>>> getCompletedTopics({int limit = 50});
+
+  /// 获取待办统计信息
   Future<Map<String, dynamic>> getTodoStats();
 
   // ===== Todo 写操作 =====
 
-  /// 更新 todo 状态
-  ///
-  /// [todoId] todo 项 ID
-  /// [status] 新状态（pending / in_progress / completed）
-  Future<void> updateTodoStatus(String todoId, String status);
+  /// 更新主题内容
+  Future<void> updateTopicContent(String topicId, {String? title, String? description});
 
-  /// 更新 todo 内容
-  ///
-  /// [todoId] todo 项 ID
-  /// [content] 新内容
-  Future<void> updateTodoContent(String todoId, String content);
+  /// 删除主题
+  Future<void> deleteTopic(String topicId);
 
-  /// 删除 todo 项（软删除）
-  ///
-  /// [todoId] todo 项 ID
-  Future<void> deleteTodo(String todoId);
+  /// 清除已完成主题
+  Future<void> clearCompletedTopics();
 
-  /// 清除所有已完成的 todo 项
-  Future<void> clearCompletedTodos();
+  /// 获取主题下的任务子项
+  Future<List<Map<String, dynamic>>> getTaskItemsByTopic(String topicId);
 
-  /// 移动 todo 到分组
-  ///
-  /// [todoId] todo 项 ID
-  /// [groupId] 目标分组 ID（null 表示移至未分组）
-  Future<void> moveTodoToGroup(String todoId, String? groupId);
+  /// 更新任务子项状态
+  Future<void> updateTaskItemStatus(String taskId, String status);
+
+  /// 更新任务子项内容
+  Future<void> updateTaskItemContent(String taskId, {String? title, String? content});
+
+  /// 删除任务子项
+  Future<void> deleteTaskItem(String taskId);
 
   // ===== Spec 管理 =====
 
@@ -400,9 +392,6 @@ abstract class IAgent {
   ///
   /// [limit] 最大返回数量，默认 50
   Future<List<Map<String, dynamic>>> getCompletedSpecs({int limit = 50});
-
-  /// 获取所有 spec 分组
-  Future<List<Map<String, dynamic>>> getSpecGroups();
 
   /// 获取 spec 统计信息
   ///
@@ -430,12 +419,6 @@ abstract class IAgent {
 
   /// 清除所有已完成的 spec 项
   Future<void> clearCompletedSpecs();
-
-  /// 移动 spec 到分组
-  ///
-  /// [specId] spec 项 ID
-  /// [groupId] 目标分组 ID（null 表示移至未分组）
-  Future<void> moveSpecToGroup(String specId, String? groupId);
 
   // ===== 文件操作追踪 =====
 

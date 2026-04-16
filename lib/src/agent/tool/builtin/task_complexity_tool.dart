@@ -156,7 +156,7 @@ class TaskComplexityTool extends AgentTool {
       '你有以下工具可用：\n'
       '- file_list, file_read, content_search(searchType=file 可按文件名搜索), code_symbols(代码摘要分析，类名、方法名、变量明等等), env_info：用于探索代码结构和文件内容\n'
       '- command_execute：用于执行命令（如 git log、grep、find 等）辅助分析\n'
-      '- end：确认任务完成并返回分析结果，如果信息不足则使用 end 说明原因\n';
+      '- end：在 end 里面返回任务书内容, 如果信息不足则使用 end 返回说明原因\n';
 
   /// 构建任务复杂度分析的任务 prompt
   String _buildAnalysisPrompt(String task, String? context) {

@@ -221,33 +221,37 @@ class _RemoteOps {
     return result;
   }
 
-  // ===== Todo 管理 =====
+  // ===== Todo Topic 管理 =====
 
-  /// 获取活跃 todo 项
-  Future<List<Map<String, dynamic>>> getActiveTodos() async {
-    final request = GetActiveTodosRequest(employeeId: _employeeId);
-    final result = await _rpcUtil.getActiveTodos(request);
-    return (result['todos'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  /// 获取当前待办主题
+  Future<List<Map<String, dynamic>>> getCurrentTopics() async {
+    final request = GetCurrentTopicsRequest(employeeId: _employeeId);
+    final result = await _rpcUtil.getCurrentTopics(request);
+    return (result['topics'] as List?)?.cast<Map<String, dynamic>>() ?? [];
   }
 
-  /// 获取已完成 todo 项
-  Future<List<Map<String, dynamic>>> getCompletedTodos({int limit = 50}) async {
-    final request = GetCompletedTodosRequest(
-      employeeId: _employeeId,
-      limit: limit,
-    );
-    final result = await _rpcUtil.getCompletedTodos(request);
-    return (result['todos'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  /// 获取未完成待办主题
+  Future<List<Map<String, dynamic>>> getPendingTopics() async {
+    final request = GetPendingTopicsRequest(employeeId: _employeeId);
+    final result = await _rpcUtil.getPendingTopics(request);
+    return (result['topics'] as List?)?.cast<Map<String, dynamic>>() ?? [];
   }
 
-  /// 获取 todo 分组
-  Future<List<Map<String, dynamic>>> getTodoGroups() async {
-    final request = GetTodoGroupsRequest(employeeId: _employeeId);
-    final result = await _rpcUtil.getTodoGroups(request);
-    return (result['groups'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  /// 获取所有待办主题
+  Future<List<Map<String, dynamic>>> getAllTopics() async {
+    final request = GetAllTopicsRequest(employeeId: _employeeId);
+    final result = await _rpcUtil.getAllTopics(request);
+    return (result['topics'] as List?)?.cast<Map<String, dynamic>>() ?? [];
   }
 
-  /// 获取 todo 统计
+  /// 获取已完成主题
+  Future<List<Map<String, dynamic>>> getCompletedTopics({int limit = 50}) async {
+    final request = GetCompletedTopicsRequest(employeeId: _employeeId, limit: limit);
+    final result = await _rpcUtil.getCompletedTopics(request);
+    return (result['topics'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
+
+  /// 获取待办统计
   Future<Map<String, dynamic>> getTodoStats() async {
     final request = GetTodoStatsRequest(employeeId: _employeeId);
     return await _rpcUtil.getTodoStats(request);
@@ -255,49 +259,63 @@ class _RemoteOps {
 
   // ===== Todo 写操作 =====
 
-  /// 更新 todo 状态
-  Future<void> updateTodoStatus(String todoId, String status) async {
-    final request = UpdateTodoStatusRequest(
+  /// 更新主题内容
+  Future<void> updateTopicContent(String topicId, {String? title, String? description}) async {
+    final request = UpdateTopicContentRequest(
       employeeId: _employeeId,
-      todoId: todoId,
+      topicId: topicId,
+      title: title,
+      description: description,
+    );
+    await _rpcUtil.updateTopicContent(request);
+  }
+
+  /// 删除主题
+  Future<void> deleteTopic(String topicId) async {
+    final request = DeleteTopicRequest(employeeId: _employeeId, topicId: topicId);
+    await _rpcUtil.deleteTopic(request);
+  }
+
+  /// 清除已完成主题
+  Future<void> clearCompletedTopics() async {
+    final request = ClearCompletedTopicsRequest(employeeId: _employeeId);
+    await _rpcUtil.clearCompletedTopics(request);
+  }
+
+  // ===== Todo TaskItem 管理 =====
+
+  /// 获取主题下的任务子项
+  Future<List<Map<String, dynamic>>> getTaskItemsByTopic(String topicId) async {
+    final request = GetTaskItemsByTopicRequest(employeeId: _employeeId, topicId: topicId);
+    final result = await _rpcUtil.getTaskItemsByTopic(request);
+    return (result['tasks'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
+
+  /// 更新任务子项状态
+  Future<void> updateTaskItemStatus(String taskId, String status) async {
+    final request = UpdateTaskItemStatusRequest(
+      employeeId: _employeeId,
+      taskId: taskId,
       status: status,
     );
-    await _rpcUtil.updateTodoStatus(request);
+    await _rpcUtil.updateTaskItemStatus(request);
   }
 
-  /// 更新 todo 内容
-  Future<void> updateTodoContent(String todoId, String content) async {
-    final request = UpdateTodoContentRequest(
+  /// 更新任务子项内容
+  Future<void> updateTaskItemContent(String taskId, {String? title, String? content}) async {
+    final request = UpdateTaskItemContentRequest(
       employeeId: _employeeId,
-      todoId: todoId,
+      taskId: taskId,
+      title: title,
       content: content,
     );
-    await _rpcUtil.updateTodoContent(request);
+    await _rpcUtil.updateTaskItemContent(request);
   }
 
-  /// 删除 todo
-  Future<void> deleteTodo(String todoId) async {
-    final request = DeleteTodoRequest(
-      employeeId: _employeeId,
-      todoId: todoId,
-    );
-    await _rpcUtil.deleteTodo(request);
-  }
-
-  /// 清除已完成 todo
-  Future<void> clearCompletedTodos() async {
-    final request = ClearCompletedTodosRequest(employeeId: _employeeId);
-    await _rpcUtil.clearCompletedTodos(request);
-  }
-
-  /// 移动 todo 到分组
-  Future<void> moveTodoToGroup(String todoId, String? groupId) async {
-    final request = MoveTodoToGroupRequest(
-      employeeId: _employeeId,
-      todoId: todoId,
-      groupId: groupId,
-    );
-    await _rpcUtil.moveTodoToGroup(request);
+  /// 删除任务子项
+  Future<void> deleteTaskItem(String taskId) async {
+    final request = DeleteTaskItemRequest(employeeId: _employeeId, taskId: taskId);
+    await _rpcUtil.deleteTaskItem(request);
   }
 
   // ===== Spec 管理 =====
@@ -311,19 +329,9 @@ class _RemoteOps {
 
   /// 获取已完成 spec 项
   Future<List<Map<String, dynamic>>> getCompletedSpecs({int limit = 50}) async {
-    final request = GetCompletedSpecsRequest(
-      employeeId: _employeeId,
-      limit: limit,
-    );
+    final request = GetCompletedSpecsRequest(employeeId: _employeeId, limit: limit);
     final result = await _rpcUtil.getCompletedSpecs(request);
     return (result['specs'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-  }
-
-  /// 获取 spec 分组
-  Future<List<Map<String, dynamic>>> getSpecGroups() async {
-    final request = GetSpecGroupsRequest(employeeId: _employeeId);
-    final result = await _rpcUtil.getSpecGroups(request);
-    return (result['groups'] as List?)?.cast<Map<String, dynamic>>() ?? [];
   }
 
   /// 获取 spec 统计
@@ -356,10 +364,7 @@ class _RemoteOps {
 
   /// 删除 spec
   Future<void> deleteSpec(String specId) async {
-    final request = DeleteSpecRequest(
-      employeeId: _employeeId,
-      specId: specId,
-    );
+    final request = DeleteSpecRequest(employeeId: _employeeId, specId: specId);
     await _rpcUtil.deleteSpec(request);
   }
 
@@ -367,16 +372,6 @@ class _RemoteOps {
   Future<void> clearCompletedSpecs() async {
     final request = ClearCompletedSpecsRequest(employeeId: _employeeId);
     await _rpcUtil.clearCompletedSpecs(request);
-  }
-
-  /// 移动 spec 到分组
-  Future<void> moveSpecToGroup(String specId, String? groupId) async {
-    final request = MoveSpecToGroupRequest(
-      employeeId: _employeeId,
-      specId: specId,
-      groupId: groupId,
-    );
-    await _rpcUtil.moveSpecToGroup(request);
   }
 
   /// 清空当前会话

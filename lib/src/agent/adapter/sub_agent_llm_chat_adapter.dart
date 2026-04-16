@@ -331,12 +331,21 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
             }
           }
 
+          var endResult = execResult.results
+              .where((r) => r.name == 'end')
+              .firstOrNull;
           // 检测 end 工具调用 → 主动结束循环
-          if (execResult.results.any((r) => r.name == 'end')) {
-            _log.info('end tool called, breaking tool-calling loop');
+          if (endResult != null) {
+            _log.info(
+              'end tool called, breaking tool-calling loop:${endResult.content}',
+            );
+            if (endResult.content.isNotEmpty) {
+              controller.add(
+                StreamResponse.chunk('\n执行结束,结果如下:\n${endResult.content}'),
+              );
+            }
             break;
           }
-
           if (iteration == _maxToolCallIterations - 1) {
             controller.add(
               StreamResponse.error('已达到最大工具调用轮次（$_maxToolCallIterations 次）'),

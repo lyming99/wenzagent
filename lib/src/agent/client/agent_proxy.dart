@@ -865,86 +865,110 @@ class AgentProxy {
 
   // ===== Todo 管理 =====
 
-  /// 获取活跃 todo 项（pending + in_progress）
-  Future<List<Map<String, dynamic>>> getActiveTodos() async {
+  /// 获取当前待办主题
+  Future<List<Map<String, dynamic>>> getCurrentTopics() async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.getActiveTodos();
+      return _localAgent!.getCurrentTopics();
     }
-    return _remoteOps!.getActiveTodos();
+    return _remoteOps!.getCurrentTopics();
   }
 
-  /// 获取已完成 todo 项
-  Future<List<Map<String, dynamic>>> getCompletedTodos({int limit = 50}) async {
+  /// 获取未完成待办主题
+  Future<List<Map<String, dynamic>>> getPendingTopics() async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.getCompletedTodos(limit: limit);
+      return _localAgent!.getPendingTopics();
     }
-    return _remoteOps!.getCompletedTodos(limit: limit);
+    return _remoteOps!.getPendingTopics();
   }
 
-  /// 获取 todo 分组
-  Future<List<Map<String, dynamic>>> getTodoGroups() async {
+  /// 获取所有待办主题
+  Future<List<Map<String, dynamic>>> getAllTopics() async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.getTodoGroups();
+      return _localAgent!.getAllTopics();
     }
-    return _remoteOps!.getTodoGroups();
+    return _remoteOps!.getAllTopics();
   }
 
-  /// 获取 todo 统计信息
+  /// 获取已完成主题
+  Future<List<Map<String, dynamic>>> getCompletedTopics({int limit = 50}) async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent!.getCompletedTopics(limit: limit);
+    }
+    return _remoteOps!.getCompletedTopics(limit: limit);
+  }
+
+  /// 获取待办统计信息
   Future<Map<String, dynamic>> getTodoStats() async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.getTodoStats();
+      return _localAgent!.getTodoStats();
     }
     return _remoteOps!.getTodoStats();
   }
 
   // ===== Todo 写操作 =====
 
-  /// 更新 todo 状态
-  Future<void> updateTodoStatus(String todoId, String status) async {
+  /// 更新主题内容
+  Future<void> updateTopicContent(String topicId, {String? title, String? description}) async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.updateTodoStatus(todoId, status);
+      return _localAgent!.updateTopicContent(topicId, title: title, description: description);
     }
-    return _remoteOps!.updateTodoStatus(todoId, status);
+    return _remoteOps!.updateTopicContent(topicId, title: title, description: description);
   }
 
-  /// 更新 todo 内容
-  Future<void> updateTodoContent(String todoId, String content) async {
+  /// 删除主题
+  Future<void> deleteTopic(String topicId) async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.updateTodoContent(todoId, content);
+      return _localAgent!.deleteTopic(topicId);
     }
-    return _remoteOps!.updateTodoContent(todoId, content);
+    return _remoteOps!.deleteTopic(topicId);
   }
 
-  /// 删除 todo 项
-  Future<void> deleteTodo(String todoId) async {
+  /// 清除已完成主题
+  Future<void> clearCompletedTopics() async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.deleteTodo(todoId);
+      return _localAgent!.clearCompletedTopics();
     }
-    return _remoteOps!.deleteTodo(todoId);
+    return _remoteOps!.clearCompletedTopics();
   }
 
-  /// 清除所有已完成 todo
-  Future<void> clearCompletedTodos() async {
+  /// 获取主题下的任务子项
+  Future<List<Map<String, dynamic>>> getTaskItemsByTopic(String topicId) async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.clearCompletedTodos();
+      return _localAgent!.getTaskItemsByTopic(topicId);
     }
-    return _remoteOps!.clearCompletedTodos();
+    return _remoteOps!.getTaskItemsByTopic(topicId);
   }
 
-  /// 移动 todo 到分组
-  Future<void> moveTodoToGroup(String todoId, String? groupId) async {
+  /// 更新任务子项状态
+  Future<void> updateTaskItemStatus(String taskId, String status) async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.moveTodoToGroup(todoId, groupId);
+      return _localAgent!.updateTaskItemStatus(taskId, status);
     }
-    return _remoteOps!.moveTodoToGroup(todoId, groupId);
+    return _remoteOps!.updateTaskItemStatus(taskId, status);
+  }
+
+  /// 更新任务子项内容
+  Future<void> updateTaskItemContent(String taskId, {String? title, String? content}) async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent!.updateTaskItemContent(taskId, title: title, content: content);
+    }
+    return _remoteOps!.updateTaskItemContent(taskId, title: title, content: content);
+  }
+
+  /// 删除任务子项
+  Future<void> deleteTaskItem(String taskId) async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent!.deleteTaskItem(taskId);
+    }
+    return _remoteOps!.deleteTaskItem(taskId);
   }
 
   // ===== Spec 管理 =====
 
-  /// 获取活跃 spec 项（draft + pending + in_progress）
+  /// 获取活跃 spec 项
   Future<List<Map<String, dynamic>>> getActiveSpecs() async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.getActiveSpecs();
+      return _localAgent!.getActiveSpecs();
     }
     return _remoteOps!.getActiveSpecs();
   }
@@ -952,23 +976,15 @@ class AgentProxy {
   /// 获取已完成 spec 项
   Future<List<Map<String, dynamic>>> getCompletedSpecs({int limit = 50}) async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.getCompletedSpecs(limit: limit);
+      return _localAgent!.getCompletedSpecs(limit: limit);
     }
     return _remoteOps!.getCompletedSpecs(limit: limit);
-  }
-
-  /// 获取 spec 分组
-  Future<List<Map<String, dynamic>>> getSpecGroups() async {
-    if (isLocalMode && _localAgent != null) {
-      return _localAgent.getSpecGroups();
-    }
-    return _remoteOps!.getSpecGroups();
   }
 
   /// 获取 spec 统计信息
   Future<Map<String, dynamic>> getSpecStats() async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.getSpecStats();
+      return _localAgent!.getSpecStats();
     }
     return _remoteOps!.getSpecStats();
   }
@@ -978,7 +994,7 @@ class AgentProxy {
   /// 更新 spec 状态
   Future<void> updateSpecStatus(String specId, String status) async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.updateSpecStatus(specId, status);
+      return _localAgent!.updateSpecStatus(specId, status);
     }
     return _remoteOps!.updateSpecStatus(specId, status);
   }
@@ -986,7 +1002,7 @@ class AgentProxy {
   /// 更新 spec 内容
   Future<void> updateSpecContent(String specId, String content) async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.updateSpecContent(specId, content);
+      return _localAgent!.updateSpecContent(specId, content);
     }
     return _remoteOps!.updateSpecContent(specId, content);
   }
@@ -994,7 +1010,7 @@ class AgentProxy {
   /// 删除 spec 项
   Future<void> deleteSpec(String specId) async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.deleteSpec(specId);
+      return _localAgent!.deleteSpec(specId);
     }
     return _remoteOps!.deleteSpec(specId);
   }
@@ -1002,17 +1018,9 @@ class AgentProxy {
   /// 清除所有已完成 spec
   Future<void> clearCompletedSpecs() async {
     if (isLocalMode && _localAgent != null) {
-      return _localAgent.clearCompletedSpecs();
+      return _localAgent!.clearCompletedSpecs();
     }
     return _remoteOps!.clearCompletedSpecs();
-  }
-
-  /// 移动 spec 到分组
-  Future<void> moveSpecToGroup(String specId, String? groupId) async {
-    if (isLocalMode && _localAgent != null) {
-      return _localAgent.moveSpecToGroup(specId, groupId);
-    }
-    return _remoteOps!.moveSpecToGroup(specId, groupId);
   }
 
   // ===== 文件操作追踪 =====

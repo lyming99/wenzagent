@@ -424,10 +424,26 @@ class LlmChatAdapter implements IChatAdapter {
               );
             }
           }
-
+          var endResult = execResult.results
+              .where((r) => r.name == 'end')
+              .firstOrNull;
           // 检测 end 工具调用 → 主动结束循环
-          if (execResult.results.any((r) => r.name == 'end')) {
-            _log.info('end tool called, breaking tool-calling loop');
+          if (endResult != null) {
+            _log.info(
+              'end tool called, breaking tool-calling loop:${endResult.content}',
+            );
+            if (endResult.content.isNotEmpty) {
+              controller.add(StreamResponse.chunk(endResult.content));
+              memoryManager.addMessage(
+                currentEmployeeUuid!,
+                deviceId!,
+                shared.ChatMessage.assistant(
+                  id: const Uuid().v4(),
+                  employeeId: currentEmployeeUuid!,
+                  content: endResult.content,
+                ),
+              );
+            }
             break;
           }
 

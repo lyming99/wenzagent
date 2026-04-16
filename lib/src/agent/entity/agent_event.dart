@@ -36,11 +36,11 @@ enum AgentEventType {
   /// 会话摘要变更（未读计数 + 最新消息）
   sessionSummaryChanged,
 
-  /// Todo 项变更
-  todoChanged,
+  /// Todo 主题变更
+  todoTopicChanged,
 
-  /// Todo 分组变更
-  todoGroupChanged,
+  /// Todo 任务子项变更
+  todoTaskItemChanged,
 
   /// Spec 项变更
   specChanged,

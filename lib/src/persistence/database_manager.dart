@@ -17,6 +17,7 @@ import 'migrations/v9_migration.dart';
 import 'migrations/v10_migration.dart';
 import 'migrations/v11_migration.dart';
 import 'migrations/v12_migration.dart';
+import 'migrations/v13_migration.dart';
 
 /// 数据库管理器
 ///
@@ -74,7 +75,7 @@ class DatabaseManager {
   bool _initialized = false;
 
   /// 当前 schema 版本号
-  static const int currentVersion = 12;
+  static const int currentVersion = 13;
 
   /// 版本迁移注册表
   ///
@@ -92,6 +93,7 @@ class DatabaseManager {
     V10Migration(),
     V11Migration(),
     V12Migration(),
+    V13Migration(),
   ];
 
   /// 获取数据库连接
@@ -190,11 +192,11 @@ class DatabaseManager {
         [deviceId],
       );
       _db!.execute(
-        "DELETE FROM todo_items WHERE employee_id LIKE ? ESCAPE '\\'",
+        "DELETE FROM todo_task_items WHERE employee_id LIKE ? ESCAPE '\\'",
         ['$deviceId-%'],
       );
       _db!.execute(
-        "DELETE FROM todo_groups WHERE employee_id LIKE ? ESCAPE '\\'",
+        "DELETE FROM todo_topics WHERE employee_id LIKE ? ESCAPE '\\'",
         ['$deviceId-%'],
       );
       _db!.execute(

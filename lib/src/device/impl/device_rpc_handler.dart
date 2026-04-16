@@ -573,26 +573,33 @@ class DeviceRpcHandler {
       return {'tools': agent.getRegisteredTools()};
     });
 
-    // Todo 管理
-    rpcServer.register(AgentRpcConfig.methodGetActiveTodos, (params) async {
-      final request = GetActiveTodosRequest.fromMap(params);
+    // Todo Topic 管理
+    rpcServer.register(AgentRpcConfig.methodGetCurrentTopics, (params) async {
+      final request = GetCurrentTopicsRequest.fromMap(params);
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
-      final todos = await agent.getActiveTodos();
-      return {'todos': todos};
+      final topics = await agent.getCurrentTopics();
+      return {'topics': topics};
     });
 
-    rpcServer.register(AgentRpcConfig.methodGetCompletedTodos, (params) async {
-      final request = GetCompletedTodosRequest.fromMap(params);
+    rpcServer.register(AgentRpcConfig.methodGetPendingTopics, (params) async {
+      final request = GetPendingTopicsRequest.fromMap(params);
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
-      final todos = await agent.getCompletedTodos(limit: request.limit);
-      return {'todos': todos};
+      final topics = await agent.getPendingTopics();
+      return {'topics': topics};
     });
 
-    rpcServer.register(AgentRpcConfig.methodGetTodoGroups, (params) async {
-      final request = GetTodoGroupsRequest.fromMap(params);
+    rpcServer.register(AgentRpcConfig.methodGetAllTopics, (params) async {
+      final request = GetAllTopicsRequest.fromMap(params);
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
-      final groups = await agent.getTodoGroups();
-      return {'groups': groups};
+      final topics = await agent.getAllTopics();
+      return {'topics': topics};
+    });
+
+    rpcServer.register(AgentRpcConfig.methodGetCompletedTopics, (params) async {
+      final request = GetCompletedTopicsRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      final topics = await agent.getCompletedTopics(limit: request.limit);
+      return {'topics': topics};
     });
 
     rpcServer.register(AgentRpcConfig.methodGetTodoStats, (params) async {
@@ -602,38 +609,53 @@ class DeviceRpcHandler {
     });
 
     // Todo 写操作
-    rpcServer.register(AgentRpcConfig.methodUpdateTodoStatus, (params) async {
-      final request = UpdateTodoStatusRequest.fromMap(params);
+    rpcServer.register(AgentRpcConfig.methodUpdateTopicContent, (params) async {
+      final request = UpdateTopicContentRequest.fromMap(params);
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
-      await agent.updateTodoStatus(request.todoId, request.status);
+      await agent.updateTopicContent(request.topicId, title: request.title, description: request.description);
       return {'success': true};
     });
 
-    rpcServer.register(AgentRpcConfig.methodUpdateTodoContent, (params) async {
-      final request = UpdateTodoContentRequest.fromMap(params);
+    rpcServer.register(AgentRpcConfig.methodDeleteTopic, (params) async {
+      final request = DeleteTopicRequest.fromMap(params);
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
-      await agent.updateTodoContent(request.todoId, request.content);
+      await agent.deleteTopic(request.topicId);
       return {'success': true};
     });
 
-    rpcServer.register(AgentRpcConfig.methodDeleteTodo, (params) async {
-      final request = DeleteTodoRequest.fromMap(params);
+    rpcServer.register(AgentRpcConfig.methodClearCompletedTopics, (params) async {
+      final request = ClearCompletedTopicsRequest.fromMap(params);
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
-      await agent.deleteTodo(request.todoId);
+      await agent.clearCompletedTopics();
       return {'success': true};
     });
 
-    rpcServer.register(AgentRpcConfig.methodClearCompletedTodos, (params) async {
-      final request = ClearCompletedTodosRequest.fromMap(params);
+    // Todo TaskItem 管理
+    rpcServer.register(AgentRpcConfig.methodGetTaskItemsByTopic, (params) async {
+      final request = GetTaskItemsByTopicRequest.fromMap(params);
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
-      await agent.clearCompletedTodos();
+      final tasks = await agent.getTaskItemsByTopic(request.topicId);
+      return {'tasks': tasks};
+    });
+
+    rpcServer.register(AgentRpcConfig.methodUpdateTaskItemStatus, (params) async {
+      final request = UpdateTaskItemStatusRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      await agent.updateTaskItemStatus(request.taskId, request.status);
       return {'success': true};
     });
 
-    rpcServer.register(AgentRpcConfig.methodMoveTodoToGroup, (params) async {
-      final request = MoveTodoToGroupRequest.fromMap(params);
+    rpcServer.register(AgentRpcConfig.methodUpdateTaskItemContent, (params) async {
+      final request = UpdateTaskItemContentRequest.fromMap(params);
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
-      await agent.moveTodoToGroup(request.todoId, request.groupId);
+      await agent.updateTaskItemContent(request.taskId, title: request.title, content: request.content);
+      return {'success': true};
+    });
+
+    rpcServer.register(AgentRpcConfig.methodDeleteTaskItem, (params) async {
+      final request = DeleteTaskItemRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      await agent.deleteTaskItem(request.taskId);
       return {'success': true};
     });
 
@@ -650,13 +672,6 @@ class DeviceRpcHandler {
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
       final specs = await agent.getCompletedSpecs(limit: request.limit);
       return {'specs': specs};
-    });
-
-    rpcServer.register(AgentRpcConfig.methodGetSpecGroups, (params) async {
-      final request = GetSpecGroupsRequest.fromMap(params);
-      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
-      final groups = await agent.getSpecGroups();
-      return {'groups': groups};
     });
 
     rpcServer.register(AgentRpcConfig.methodGetSpecStats, (params) async {
@@ -691,13 +706,6 @@ class DeviceRpcHandler {
       final request = ClearCompletedSpecsRequest.fromMap(params);
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
       await agent.clearCompletedSpecs();
-      return {'success': true};
-    });
-
-    rpcServer.register(AgentRpcConfig.methodMoveSpecToGroup, (params) async {
-      final request = MoveSpecToGroupRequest.fromMap(params);
-      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
-      await agent.moveSpecToGroup(request.specId, request.groupId);
       return {'success': true};
     });
 

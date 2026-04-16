@@ -547,78 +547,83 @@ class AgentImpl extends _AgentImplBase
     // 注入 employeeId
     todoTool.employeeId = employeeId;
 
-    // 活跃 todo 查询
-    todoTool.getActiveTodos = (eid) async {
-      return todoStore.findActiveByEmployee(eid);
+    // 主题查询
+    todoTool.getCurrentTopics = (eid) async {
+      return todoStore.findCurrentTopics(eid);
     };
 
-    // 已完成 todo 查询
-    todoTool.getCompletedTodos = (eid, {limit = 50}) async {
-      return todoStore.findCompletedByEmployee(eid, limit: limit);
+    todoTool.getPendingTopics = (eid) async {
+      return todoStore.findPendingTopics(eid);
     };
 
-    // 保存 todo 项
-    todoTool.saveTodo = (item) async {
-      todoStore.save(item);
+    todoTool.getAllTopics = (eid) async {
+      return todoStore.findAllTopics(eid);
     };
 
-    // 更新 todo 状态
-    todoTool.updateTodoStatus = (id, status) async {
-      todoStore.updateStatus(id, status);
+    todoTool.getCompletedTopics = (eid, {limit = 50}) async {
+      return todoStore.findCompletedTopics(eid, limit: limit);
     };
 
-    // 更新 todo 内容
-    todoTool.updateTodoContent = (id, content) async {
-      if (content != null) {
-        todoStore.updateContent(id, content);
+    // 主题写入
+    todoTool.saveTopic = (topic) async {
+      todoStore.saveTopic(topic);
+    };
+
+    todoTool.updateTopicContent = (id, {title, description}) async {
+      todoStore.updateTopicContent(id, title: title, description: description);
+    };
+
+    todoTool.removeTopic = (id) async {
+      todoStore.softDeleteTopic(id);
+    };
+
+    todoTool.clearCompletedTopics = (eid) async {
+      todoStore.deleteCompletedTopics(eid);
+    };
+
+    // 任务子项
+    todoTool.getTaskItemsByTopic = (topicId) async {
+      return todoStore.findTaskItemsByTopic(topicId);
+    };
+
+    todoTool.saveTaskItem = (item) async {
+      todoStore.saveTaskItem(item);
+    };
+
+    todoTool.updateTaskItemContent = (id, {title, content}) async {
+      todoStore.updateTaskItemContent(id, title: title, content: content);
+    };
+
+    todoTool.updateTaskItemStatus = (id, status) async {
+      todoStore.updateTaskItemStatus(id, status);
+      // 更新子项状态后，重新推导主题状态
+      // 需要先找到子项的 topicId
+      final taskItem = todoStore.findTaskItemById(id);
+      if (taskItem != null) {
+        todoStore.recalculateTopicStatus(taskItem.topicId);
       }
     };
 
-    // 软删除 todo 项
-    todoTool.removeTodo = (id) async {
-      todoStore.softDelete(id);
+    todoTool.removeTaskItem = (id) async {
+      // 先找到子项的 topicId
+      final taskItem = todoStore.findTaskItemById(id);
+      todoStore.softDeleteTaskItem(id);
+      if (taskItem != null) {
+        todoStore.recalculateTopicStatus(taskItem.topicId);
+      }
     };
 
-    // 批量删除已完成项
-    todoTool.clearCompletedTodos = (eid) async {
-      todoStore.deleteCompletedByEmployee(eid);
-    };
-
-    // 移动到分组
-    todoTool.moveTodoToGroup = (id, groupId) async {
-      todoStore.moveToGroup(id, groupId);
-    };
-
-    // 获取所有分组
-    todoTool.getGroups = (eid) async {
-      return todoStore.findGroupsByEmployee(eid);
-    };
-
-    // 按名称查找分组
-    todoTool.findGroupByName = (eid, name) async {
-      return todoStore.findGroupByName(eid, name);
-    };
-
-    // 保存分组
-    todoTool.saveGroup = (group) async {
-      todoStore.saveGroup(group);
-    };
-
-    // 软删除分组
-    todoTool.removeGroup = (id) async {
-      todoStore.softDeleteGroup(id);
-    };
-
-    // 重命名分组
-    todoTool.renameGroupFn = (id, newName) async {
-      todoStore.renameGroup(id, newName);
+    todoTool.recalculateTopicStatus = (topicId) async {
+      todoStore.recalculateTopicStatus(topicId);
     };
 
     // 广播事件
     todoTool.broadcastEvent = (type, data) {
-      final eventType = type == 'todoChanged'
-          ? AgentEventType.todoChanged
-          : AgentEventType.todoGroupChanged;
+      final eventType = type == 'todoTopicChanged'
+          ? AgentEventType.todoTopicChanged
+          : type == 'todoTaskItemChanged'
+              ? AgentEventType.todoTaskItemChanged
+              : AgentEventType.todoTopicChanged;
       _eventController.add(
         AgentEvent(
           type: eventType,
@@ -632,83 +637,116 @@ class AgentImpl extends _AgentImplBase
   // ===== IAgent: Todo 管理 =====
 
   @override
-  Future<List<Map<String, dynamic>>> getActiveTodos() async {
+  Future<List<Map<String, dynamic>>> getCurrentTopics() async {
     final store = TodoStore(deviceId: deviceId);
-    final items = store.findActiveByEmployee(employeeId);
+    final items = store.findCurrentTopics(employeeId);
     return items.map((e) => e.toMap()).toList();
   }
 
   @override
-  Future<List<Map<String, dynamic>>> getCompletedTodos({int limit = 50}) async {
+  Future<List<Map<String, dynamic>>> getPendingTopics() async {
     final store = TodoStore(deviceId: deviceId);
-    final items = store.findCompletedByEmployee(employeeId, limit: limit);
+    final items = store.findPendingTopics(employeeId);
     return items.map((e) => e.toMap()).toList();
   }
 
   @override
-  Future<List<Map<String, dynamic>>> getTodoGroups() async {
+  Future<List<Map<String, dynamic>>> getAllTopics() async {
     final store = TodoStore(deviceId: deviceId);
-    final groups = store.findGroupsByEmployee(employeeId);
-    return groups.map((e) => e.toMap()).toList();
+    final items = store.findAllTopics(employeeId);
+    return items.map((e) => e.toMap()).toList();
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getCompletedTopics({int limit = 50}) async {
+    final store = TodoStore(deviceId: deviceId);
+    final items = store.findCompletedTopics(employeeId, limit: limit);
+    return items.map((e) => e.toMap()).toList();
   }
 
   @override
   Future<Map<String, dynamic>> getTodoStats() async {
     final store = TodoStore(deviceId: deviceId);
-    return store.countByStatus(employeeId);
+    return store.countTopicsByStatus(employeeId);
   }
 
   @override
-  Future<void> updateTodoStatus(String todoId, String status) async {
+  Future<void> updateTopicContent(String topicId, {String? title, String? description}) async {
     final store = TodoStore(deviceId: deviceId);
-    store.updateStatus(todoId, status);
+    store.updateTopicContent(topicId, title: title, description: description);
     _eventController.add(AgentEvent(
-      type: AgentEventType.todoChanged,
-      data: {'action': 'updated', 'todoId': todoId, 'status': status},
+      type: AgentEventType.todoTopicChanged,
+      data: {'action': 'updated', 'topicId': topicId},
       employeeId: employeeId,
     ));
   }
 
   @override
-  Future<void> updateTodoContent(String todoId, String content) async {
+  Future<void> deleteTopic(String topicId) async {
     final store = TodoStore(deviceId: deviceId);
-    store.updateContent(todoId, content);
+    store.softDeleteTopic(topicId);
     _eventController.add(AgentEvent(
-      type: AgentEventType.todoChanged,
-      data: {'action': 'updated', 'todoId': todoId},
+      type: AgentEventType.todoTopicChanged,
+      data: {'action': 'removed', 'topicId': topicId},
       employeeId: employeeId,
     ));
   }
 
   @override
-  Future<void> deleteTodo(String todoId) async {
+  Future<void> clearCompletedTopics() async {
     final store = TodoStore(deviceId: deviceId);
-    store.softDelete(todoId);
+    store.deleteCompletedTopics(employeeId);
     _eventController.add(AgentEvent(
-      type: AgentEventType.todoChanged,
-      data: {'action': 'removed', 'todoId': todoId},
-      employeeId: employeeId,
-    ));
-  }
-
-  @override
-  Future<void> clearCompletedTodos() async {
-    final store = TodoStore(deviceId: deviceId);
-    store.deleteCompletedByEmployee(employeeId);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.todoChanged,
+      type: AgentEventType.todoTopicChanged,
       data: {'action': 'cleared'},
       employeeId: employeeId,
     ));
   }
 
   @override
-  Future<void> moveTodoToGroup(String todoId, String? groupId) async {
+  Future<List<Map<String, dynamic>>> getTaskItemsByTopic(String topicId) async {
     final store = TodoStore(deviceId: deviceId);
-    store.moveToGroup(todoId, groupId);
+    final items = store.findTaskItemsByTopic(topicId);
+    return items.map((e) => e.toMap()).toList();
+  }
+
+  @override
+  Future<void> updateTaskItemStatus(String taskId, String status) async {
+    final store = TodoStore(deviceId: deviceId);
+    store.updateTaskItemStatus(taskId, status);
+    final taskItem = store.findTaskItemById(taskId);
+    if (taskItem != null) {
+      store.recalculateTopicStatus(taskItem.topicId);
+    }
     _eventController.add(AgentEvent(
-      type: AgentEventType.todoChanged,
-      data: {'action': 'moved', 'todoId': todoId, 'groupId': groupId},
+      type: AgentEventType.todoTaskItemChanged,
+      data: {'action': 'updated', 'taskId': taskId, 'status': status},
+      employeeId: employeeId,
+    ));
+  }
+
+  @override
+  Future<void> updateTaskItemContent(String taskId, {String? title, String? content}) async {
+    final store = TodoStore(deviceId: deviceId);
+    store.updateTaskItemContent(taskId, title: title, content: content);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.todoTaskItemChanged,
+      data: {'action': 'updated', 'taskId': taskId},
+      employeeId: employeeId,
+    ));
+  }
+
+  @override
+  Future<void> deleteTaskItem(String taskId) async {
+    final store = TodoStore(deviceId: deviceId);
+    final taskItem = store.findTaskItemById(taskId);
+    store.softDeleteTaskItem(taskId);
+    if (taskItem != null) {
+      store.recalculateTopicStatus(taskItem.topicId);
+    }
+    _eventController.add(AgentEvent(
+      type: AgentEventType.todoTaskItemChanged,
+      data: {'action': 'removed', 'taskId': taskId},
       employeeId: employeeId,
     ));
   }
@@ -758,41 +796,9 @@ class AgentImpl extends _AgentImplBase
       specStore.deleteCompletedByEmployee(eid);
     };
 
-    // 移动到分组
-    specTool.moveSpecToGroup = (id, groupId) async {
-      specStore.moveToGroup(id, groupId);
-    };
-
-    // 获取所有分组
-    specTool.getGroups = (eid) async {
-      return specStore.findGroupsByEmployee(eid);
-    };
-
-    // 按名称查找分组
-    specTool.findGroupByName = (eid, name) async {
-      return specStore.findGroupByName(eid, name);
-    };
-
-    // 保存分组
-    specTool.saveGroup = (group) async {
-      specStore.saveGroup(group);
-    };
-
-    // 软删除分组
-    specTool.removeGroup = (id) async {
-      specStore.softDeleteGroup(id);
-    };
-
-    // 重命名分组
-    specTool.renameGroupFn = (id, newName) async {
-      specStore.renameGroup(id, newName);
-    };
-
     // 广播事件
     specTool.broadcastEvent = (type, data) {
-      final eventType = type == 'specChanged'
-          ? AgentEventType.specChanged
-          : AgentEventType.specGroupChanged;
+      final eventType = AgentEventType.specChanged;
       _eventController.add(
         AgentEvent(
           type: eventType,
@@ -817,13 +823,6 @@ class AgentImpl extends _AgentImplBase
     final store = SpecStore(deviceId: deviceId);
     final items = store.findCompletedByEmployee(employeeId, limit: limit);
     return items.map((e) => e.toMap()).toList();
-  }
-
-  @override
-  Future<List<Map<String, dynamic>>> getSpecGroups() async {
-    final store = SpecStore(deviceId: deviceId);
-    final groups = store.findGroupsByEmployee(employeeId);
-    return groups.map((e) => e.toMap()).toList();
   }
 
   @override
@@ -872,17 +871,6 @@ class AgentImpl extends _AgentImplBase
     _eventController.add(AgentEvent(
       type: AgentEventType.specChanged,
       data: {'action': 'cleared'},
-      employeeId: employeeId,
-    ));
-  }
-
-  @override
-  Future<void> moveSpecToGroup(String specId, String? groupId) async {
-    final store = SpecStore(deviceId: deviceId);
-    store.moveToGroup(specId, groupId);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.specChanged,
-      data: {'action': 'moved', 'specId': specId, 'groupId': groupId},
       employeeId: employeeId,
     ));
   }

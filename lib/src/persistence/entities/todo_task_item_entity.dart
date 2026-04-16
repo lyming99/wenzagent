@@ -1,157 +1,117 @@
-/// Spec 项状态
-enum SpecStatus {
-  draft,
+/// Todo 任务子项状态
+enum TodoTaskItemStatus {
   pending,
   inProgress,
   completed;
 
-  static SpecStatus fromString(String value) {
-    return SpecStatus.values.firstWhere(
+  static TodoTaskItemStatus fromString(String value) {
+    return TodoTaskItemStatus.values.firstWhere(
       (e) => e.name == value,
-      orElse: () => SpecStatus.pending,
-    );
-  }
-
-  /// 数据库存储值（与 Dart 枚举名一致）
-  String get dbValue => name;
-}
-
-/// Spec 项优先级
-enum SpecPriority {
-  low,
-  medium,
-  high;
-
-  static SpecPriority fromString(String value) {
-    return SpecPriority.values.firstWhere(
-      (e) => e.name == value,
-      orElse: () => SpecPriority.medium,
+      orElse: () => TodoTaskItemStatus.pending,
     );
   }
 
   String get dbValue => name;
 }
 
-/// Spec 项实体
-class SpecItemEntity {
-  /// UUID
+/// Todo 任务子项实体（替代旧的 TodoItemEntity）
+class TodoTaskItemEntity {
   final String id;
-
-  /// 员工 UUID
   String employeeId;
-
-  /// 标题
+  String topicId;
   String title;
-
-  /// 内容（详细描述）
   String content;
-
-  /// 状态 (draft/pending/in_progress/completed)
   String status;
-
-  /// 优先级 (low/medium/high)
-  String priority;
-
-  /// 标签（逗号分隔）
-  String tags;
-
-  /// 排序序号
   int sortOrder;
-
-  /// 是否已删除（软删除）
   int deleted;
-
-  /// 创建时间
   DateTime createTime;
-
-  /// 更新时间
   DateTime updateTime;
+  DateTime? completedAt;
 
-  SpecItemEntity({
+  TodoTaskItemEntity({
     required this.id,
     required this.employeeId,
+    required this.topicId,
     required this.title,
     this.content = '',
     this.status = 'pending',
-    this.priority = 'medium',
-    this.tags = '',
     this.sortOrder = 0,
     this.deleted = 0,
     required this.createTime,
     required this.updateTime,
+    this.completedAt,
   });
 
-  /// 从 Map 创建
-  factory SpecItemEntity.fromMap(Map<String, dynamic> map) {
-    return SpecItemEntity(
+  factory TodoTaskItemEntity.fromMap(Map<String, dynamic> map) {
+    return TodoTaskItemEntity(
       id: map['id'] as String,
       employeeId: map['employeeId'] as String,
+      topicId: map['topicId'] as String,
       title: map['title'] as String,
       content: map['content'] as String? ?? '',
       status: map['status'] as String? ?? 'pending',
-      priority: map['priority'] as String? ?? 'medium',
-      tags: map['tags'] as String? ?? '',
       sortOrder: map['sortOrder'] as int? ?? 0,
       deleted: map['deleted'] as int? ?? 0,
       createTime: map['createTime'] is DateTime
           ? map['createTime'] as DateTime
-          : DateTime.fromMillisecondsSinceEpoch(
-              map['createTime'] as int? ?? 0),
+          : DateTime.fromMillisecondsSinceEpoch(map['createTime'] as int? ?? 0),
       updateTime: map['updateTime'] is DateTime
           ? map['updateTime'] as DateTime
-          : DateTime.fromMillisecondsSinceEpoch(
-              map['updateTime'] as int? ?? 0),
+          : DateTime.fromMillisecondsSinceEpoch(map['updateTime'] as int? ?? 0),
+      completedAt: map['completedAt'] is int
+          ? (map['completedAt'] as int) > 0
+              ? DateTime.fromMillisecondsSinceEpoch(map['completedAt'] as int)
+              : null
+          : map['completedAt'] is DateTime
+              ? map['completedAt'] as DateTime
+              : null,
     );
   }
 
-  /// 转换为 Map
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'employeeId': employeeId,
+      'topicId': topicId,
       'title': title,
       'content': content,
       'status': status,
-      'priority': priority,
-      'tags': tags,
       'sortOrder': sortOrder,
       'deleted': deleted,
       'createTime': createTime.millisecondsSinceEpoch,
       'updateTime': updateTime.millisecondsSinceEpoch,
+      'completedAt': completedAt?.millisecondsSinceEpoch,
     };
   }
 
-  /// 复制并修改
-  SpecItemEntity copyWith({
+  TodoTaskItemEntity copyWith({
     String? id,
     String? employeeId,
+    String? topicId,
     String? title,
     String? content,
     String? status,
-    String? priority,
-    String? tags,
     int? sortOrder,
     int? deleted,
     DateTime? createTime,
     DateTime? updateTime,
+    DateTime? Function()? completedAt,
   }) {
-    return SpecItemEntity(
+    return TodoTaskItemEntity(
       id: id ?? this.id,
       employeeId: employeeId ?? this.employeeId,
+      topicId: topicId ?? this.topicId,
       title: title ?? this.title,
       content: content ?? this.content,
       status: status ?? this.status,
-      priority: priority ?? this.priority,
-      tags: tags ?? this.tags,
       sortOrder: sortOrder ?? this.sortOrder,
       deleted: deleted ?? this.deleted,
       createTime: createTime ?? this.createTime,
       updateTime: updateTime ?? this.updateTime,
+      completedAt: completedAt != null ? completedAt() : this.completedAt,
     );
   }
 
   @override
-  String toString() {
-    return 'SpecItemEntity(id: $id, title: $title, status: $status)';
-  }
+  String toString() => 'TodoTaskItemEntity(id: $id, title: $title, status: $status)';
 }

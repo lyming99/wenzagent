@@ -378,63 +378,57 @@ class GetMcpConfigsRequest {
   }
 }
 
-// ===== Todo 管理 =====
+// ===== Todo Topic 管理 =====
 
-/// 获取活跃 todo 项请求
-class GetActiveTodosRequest {
+/// 获取当前待办主题请求
+class GetCurrentTopicsRequest {
   final String employeeId;
-
-  const GetActiveTodosRequest({required this.employeeId});
-
+  const GetCurrentTopicsRequest({required this.employeeId});
   Map<String, dynamic> toMap() => {'employeeId': employeeId};
-
-  factory GetActiveTodosRequest.fromMap(Map<String, dynamic> map) {
-    return GetActiveTodosRequest(employeeId: map['employeeId'] as String);
+  factory GetCurrentTopicsRequest.fromMap(Map<String, dynamic> map) {
+    return GetCurrentTopicsRequest(employeeId: map['employeeId'] as String);
   }
 }
 
-/// 获取已完成 todo 项请求
-class GetCompletedTodosRequest {
+/// 获取未完成待办主题请求
+class GetPendingTopicsRequest {
+  final String employeeId;
+  const GetPendingTopicsRequest({required this.employeeId});
+  Map<String, dynamic> toMap() => {'employeeId': employeeId};
+  factory GetPendingTopicsRequest.fromMap(Map<String, dynamic> map) {
+    return GetPendingTopicsRequest(employeeId: map['employeeId'] as String);
+  }
+}
+
+/// 获取所有待办主题请求
+class GetAllTopicsRequest {
+  final String employeeId;
+  const GetAllTopicsRequest({required this.employeeId});
+  Map<String, dynamic> toMap() => {'employeeId': employeeId};
+  factory GetAllTopicsRequest.fromMap(Map<String, dynamic> map) {
+    return GetAllTopicsRequest(employeeId: map['employeeId'] as String);
+  }
+}
+
+/// 获取已完成主题请求
+class GetCompletedTopicsRequest {
   final String employeeId;
   final int limit;
-
-  const GetCompletedTodosRequest({
-    required this.employeeId,
-    this.limit = 50,
-  });
-
-  Map<String, dynamic> toMap() =>
-      {'employeeId': employeeId, 'limit': limit};
-
-  factory GetCompletedTodosRequest.fromMap(Map<String, dynamic> map) {
-    return GetCompletedTodosRequest(
+  const GetCompletedTopicsRequest({required this.employeeId, this.limit = 50});
+  Map<String, dynamic> toMap() => {'employeeId': employeeId, 'limit': limit};
+  factory GetCompletedTopicsRequest.fromMap(Map<String, dynamic> map) {
+    return GetCompletedTopicsRequest(
       employeeId: map['employeeId'] as String,
       limit: map['limit'] as int? ?? 50,
     );
   }
 }
 
-/// 获取 todo 分组请求
-class GetTodoGroupsRequest {
-  final String employeeId;
-
-  const GetTodoGroupsRequest({required this.employeeId});
-
-  Map<String, dynamic> toMap() => {'employeeId': employeeId};
-
-  factory GetTodoGroupsRequest.fromMap(Map<String, dynamic> map) {
-    return GetTodoGroupsRequest(employeeId: map['employeeId'] as String);
-  }
-}
-
-/// 获取 todo 统计请求
+/// 获取待办统计请求
 class GetTodoStatsRequest {
   final String employeeId;
-
   const GetTodoStatsRequest({required this.employeeId});
-
   Map<String, dynamic> toMap() => {'employeeId': employeeId};
-
   factory GetTodoStatsRequest.fromMap(Map<String, dynamic> map) {
     return GetTodoStatsRequest(employeeId: map['employeeId'] as String);
   }
@@ -442,137 +436,143 @@ class GetTodoStatsRequest {
 
 // ===== Todo 写操作请求 =====
 
-/// 更新 todo 状态请求
-class UpdateTodoStatusRequest {
+/// 更新主题内容请求
+class UpdateTopicContentRequest {
   final String employeeId;
-  final String todoId;
-  final String status;
-
-  const UpdateTodoStatusRequest({
+  final String topicId;
+  final String? title;
+  final String? description;
+  const UpdateTopicContentRequest({
     required this.employeeId,
-    required this.todoId,
+    required this.topicId,
+    this.title,
+    this.description,
+  });
+  Map<String, dynamic> toMap() => {
+    'employeeId': employeeId,
+    'topicId': topicId,
+    if (title != null) 'title': title,
+    if (description != null) 'description': description,
+  };
+  factory UpdateTopicContentRequest.fromMap(Map<String, dynamic> map) {
+    return UpdateTopicContentRequest(
+      employeeId: map['employeeId'] as String,
+      topicId: map['topicId'] as String,
+      title: map['title'] as String?,
+      description: map['description'] as String?,
+    );
+  }
+}
+
+/// 删除主题请求
+class DeleteTopicRequest {
+  final String employeeId;
+  final String topicId;
+  const DeleteTopicRequest({required this.employeeId, required this.topicId});
+  Map<String, dynamic> toMap() => {'employeeId': employeeId, 'topicId': topicId};
+  factory DeleteTopicRequest.fromMap(Map<String, dynamic> map) {
+    return DeleteTopicRequest(
+      employeeId: map['employeeId'] as String,
+      topicId: map['topicId'] as String,
+    );
+  }
+}
+
+/// 清除已完成主题请求
+class ClearCompletedTopicsRequest {
+  final String employeeId;
+  const ClearCompletedTopicsRequest({required this.employeeId});
+  Map<String, dynamic> toMap() => {'employeeId': employeeId};
+  factory ClearCompletedTopicsRequest.fromMap(Map<String, dynamic> map) {
+    return ClearCompletedTopicsRequest(employeeId: map['employeeId'] as String);
+  }
+}
+
+// ===== Todo TaskItem 管理请求 =====
+
+/// 获取主题下的任务子项请求
+class GetTaskItemsByTopicRequest {
+  final String employeeId;
+  final String topicId;
+  const GetTaskItemsByTopicRequest({required this.employeeId, required this.topicId});
+  Map<String, dynamic> toMap() => {'employeeId': employeeId, 'topicId': topicId};
+  factory GetTaskItemsByTopicRequest.fromMap(Map<String, dynamic> map) {
+    return GetTaskItemsByTopicRequest(
+      employeeId: map['employeeId'] as String,
+      topicId: map['topicId'] as String,
+    );
+  }
+}
+
+/// 更新任务子项状态请求
+class UpdateTaskItemStatusRequest {
+  final String employeeId;
+  final String taskId;
+  final String status;
+  const UpdateTaskItemStatusRequest({
+    required this.employeeId,
+    required this.taskId,
     required this.status,
   });
-
-  Map<String, dynamic> toMap() => {
-        'employeeId': employeeId,
-        'todoId': todoId,
-        'status': status,
-      };
-
-  factory UpdateTodoStatusRequest.fromMap(Map<String, dynamic> map) {
-    return UpdateTodoStatusRequest(
+  Map<String, dynamic> toMap() => {'employeeId': employeeId, 'taskId': taskId, 'status': status};
+  factory UpdateTaskItemStatusRequest.fromMap(Map<String, dynamic> map) {
+    return UpdateTaskItemStatusRequest(
       employeeId: map['employeeId'] as String,
-      todoId: map['todoId'] as String,
+      taskId: map['taskId'] as String,
       status: map['status'] as String,
     );
   }
 }
 
-/// 更新 todo 内容请求
-class UpdateTodoContentRequest {
+/// 更新任务子项内容请求
+class UpdateTaskItemContentRequest {
   final String employeeId;
-  final String todoId;
-  final String content;
-
-  const UpdateTodoContentRequest({
+  final String taskId;
+  final String? title;
+  final String? content;
+  const UpdateTaskItemContentRequest({
     required this.employeeId,
-    required this.todoId,
-    required this.content,
+    required this.taskId,
+    this.title,
+    this.content,
   });
-
   Map<String, dynamic> toMap() => {
-        'employeeId': employeeId,
-        'todoId': todoId,
-        'content': content,
-      };
-
-  factory UpdateTodoContentRequest.fromMap(Map<String, dynamic> map) {
-    return UpdateTodoContentRequest(
+    'employeeId': employeeId,
+    'taskId': taskId,
+    if (title != null) 'title': title,
+    if (content != null) 'content': content,
+  };
+  factory UpdateTaskItemContentRequest.fromMap(Map<String, dynamic> map) {
+    return UpdateTaskItemContentRequest(
       employeeId: map['employeeId'] as String,
-      todoId: map['todoId'] as String,
-      content: map['content'] as String,
+      taskId: map['taskId'] as String,
+      title: map['title'] as String?,
+      content: map['content'] as String?,
     );
   }
 }
 
-/// 删除 todo 请求
-class DeleteTodoRequest {
+/// 删除任务子项请求
+class DeleteTaskItemRequest {
   final String employeeId;
-  final String todoId;
-
-  const DeleteTodoRequest({
-    required this.employeeId,
-    required this.todoId,
-  });
-
-  Map<String, dynamic> toMap() => {
-        'employeeId': employeeId,
-        'todoId': todoId,
-      };
-
-  factory DeleteTodoRequest.fromMap(Map<String, dynamic> map) {
-    return DeleteTodoRequest(
+  final String taskId;
+  const DeleteTaskItemRequest({required this.employeeId, required this.taskId});
+  Map<String, dynamic> toMap() => {'employeeId': employeeId, 'taskId': taskId};
+  factory DeleteTaskItemRequest.fromMap(Map<String, dynamic> map) {
+    return DeleteTaskItemRequest(
       employeeId: map['employeeId'] as String,
-      todoId: map['todoId'] as String,
+      taskId: map['taskId'] as String,
     );
   }
 }
-
-/// 清除已完成 todo 请求
-class ClearCompletedTodosRequest {
-  final String employeeId;
-
-  const ClearCompletedTodosRequest({required this.employeeId});
-
-  Map<String, dynamic> toMap() => {'employeeId': employeeId};
-
-  factory ClearCompletedTodosRequest.fromMap(Map<String, dynamic> map) {
-    return ClearCompletedTodosRequest(
-      employeeId: map['employeeId'] as String,
-    );
-  }
-}
-
-/// 移动 todo 到分组请求
-class MoveTodoToGroupRequest {
-  final String employeeId;
-  final String todoId;
-  final String? groupId;
-
-  const MoveTodoToGroupRequest({
-    required this.employeeId,
-    required this.todoId,
-    this.groupId,
-  });
-
-  Map<String, dynamic> toMap() => {
-        'employeeId': employeeId,
-        'todoId': todoId,
-        'groupId': groupId,
-      };
-
-  factory MoveTodoToGroupRequest.fromMap(Map<String, dynamic> map) {
-    return MoveTodoToGroupRequest(
-      employeeId: map['employeeId'] as String,
-      todoId: map['todoId'] as String,
-      groupId: map['groupId'] as String?,
-    );
-  }
-}
-
-// ===== 文件操作追踪请求 =====
 
 // ===== Spec 管理请求 =====
 
 /// 获取活跃 spec 项请求
 class GetActiveSpecsRequest {
   final String employeeId;
-
   const GetActiveSpecsRequest({required this.employeeId});
-
   Map<String, dynamic> toMap() => {'employeeId': employeeId};
-
   factory GetActiveSpecsRequest.fromMap(Map<String, dynamic> map) {
     return GetActiveSpecsRequest(employeeId: map['employeeId'] as String);
   }
@@ -582,15 +582,8 @@ class GetActiveSpecsRequest {
 class GetCompletedSpecsRequest {
   final String employeeId;
   final int limit;
-
-  const GetCompletedSpecsRequest({
-    required this.employeeId,
-    this.limit = 50,
-  });
-
-  Map<String, dynamic> toMap() =>
-      {'employeeId': employeeId, 'limit': limit};
-
+  const GetCompletedSpecsRequest({required this.employeeId, this.limit = 50});
+  Map<String, dynamic> toMap() => {'employeeId': employeeId, 'limit': limit};
   factory GetCompletedSpecsRequest.fromMap(Map<String, dynamic> map) {
     return GetCompletedSpecsRequest(
       employeeId: map['employeeId'] as String,
@@ -599,27 +592,11 @@ class GetCompletedSpecsRequest {
   }
 }
 
-/// 获取 spec 分组请求
-class GetSpecGroupsRequest {
-  final String employeeId;
-
-  const GetSpecGroupsRequest({required this.employeeId});
-
-  Map<String, dynamic> toMap() => {'employeeId': employeeId};
-
-  factory GetSpecGroupsRequest.fromMap(Map<String, dynamic> map) {
-    return GetSpecGroupsRequest(employeeId: map['employeeId'] as String);
-  }
-}
-
 /// 获取 spec 统计请求
 class GetSpecStatsRequest {
   final String employeeId;
-
   const GetSpecStatsRequest({required this.employeeId});
-
   Map<String, dynamic> toMap() => {'employeeId': employeeId};
-
   factory GetSpecStatsRequest.fromMap(Map<String, dynamic> map) {
     return GetSpecStatsRequest(employeeId: map['employeeId'] as String);
   }
@@ -632,19 +609,12 @@ class UpdateSpecStatusRequest {
   final String employeeId;
   final String specId;
   final String status;
-
   const UpdateSpecStatusRequest({
     required this.employeeId,
     required this.specId,
     required this.status,
   });
-
-  Map<String, dynamic> toMap() => {
-        'employeeId': employeeId,
-        'specId': specId,
-        'status': status,
-      };
-
+  Map<String, dynamic> toMap() => {'employeeId': employeeId, 'specId': specId, 'status': status};
   factory UpdateSpecStatusRequest.fromMap(Map<String, dynamic> map) {
     return UpdateSpecStatusRequest(
       employeeId: map['employeeId'] as String,
@@ -659,19 +629,12 @@ class UpdateSpecContentRequest {
   final String employeeId;
   final String specId;
   final String content;
-
   const UpdateSpecContentRequest({
     required this.employeeId,
     required this.specId,
     required this.content,
   });
-
-  Map<String, dynamic> toMap() => {
-        'employeeId': employeeId,
-        'specId': specId,
-        'content': content,
-      };
-
+  Map<String, dynamic> toMap() => {'employeeId': employeeId, 'specId': specId, 'content': content};
   factory UpdateSpecContentRequest.fromMap(Map<String, dynamic> map) {
     return UpdateSpecContentRequest(
       employeeId: map['employeeId'] as String,
@@ -685,17 +648,8 @@ class UpdateSpecContentRequest {
 class DeleteSpecRequest {
   final String employeeId;
   final String specId;
-
-  const DeleteSpecRequest({
-    required this.employeeId,
-    required this.specId,
-  });
-
-  Map<String, dynamic> toMap() => {
-        'employeeId': employeeId,
-        'specId': specId,
-      };
-
+  const DeleteSpecRequest({required this.employeeId, required this.specId});
+  Map<String, dynamic> toMap() => {'employeeId': employeeId, 'specId': specId};
   factory DeleteSpecRequest.fromMap(Map<String, dynamic> map) {
     return DeleteSpecRequest(
       employeeId: map['employeeId'] as String,
@@ -707,42 +661,10 @@ class DeleteSpecRequest {
 /// 清除已完成 spec 请求
 class ClearCompletedSpecsRequest {
   final String employeeId;
-
   const ClearCompletedSpecsRequest({required this.employeeId});
-
   Map<String, dynamic> toMap() => {'employeeId': employeeId};
-
   factory ClearCompletedSpecsRequest.fromMap(Map<String, dynamic> map) {
-    return ClearCompletedSpecsRequest(
-      employeeId: map['employeeId'] as String,
-    );
-  }
-}
-
-/// 移动 spec 到分组请求
-class MoveSpecToGroupRequest {
-  final String employeeId;
-  final String specId;
-  final String? groupId;
-
-  const MoveSpecToGroupRequest({
-    required this.employeeId,
-    required this.specId,
-    this.groupId,
-  });
-
-  Map<String, dynamic> toMap() => {
-        'employeeId': employeeId,
-        'specId': specId,
-        'groupId': groupId,
-      };
-
-  factory MoveSpecToGroupRequest.fromMap(Map<String, dynamic> map) {
-    return MoveSpecToGroupRequest(
-      employeeId: map['employeeId'] as String,
-      specId: map['specId'] as String,
-      groupId: map['groupId'] as String?,
-    );
+    return ClearCompletedSpecsRequest(employeeId: map['employeeId'] as String);
   }
 }
 

@@ -844,41 +844,52 @@ class CachedAgentProxy extends _CachedAgentProxyBase
 
   // ===== Todo 管理 =====
 
-  /// 获取活跃 todo 项
-  Future<List<Map<String, dynamic>>> getActiveTodos() =>
-      _proxy.getActiveTodos();
+  /// 获取当前待办主题
+  Future<List<Map<String, dynamic>>> getCurrentTopics() =>
+      _proxy.getCurrentTopics();
 
-  /// 获取已完成 todo 项
-  Future<List<Map<String, dynamic>>> getCompletedTodos({int limit = 50}) =>
-      _proxy.getCompletedTodos(limit: limit);
+  /// 获取未完成待办主题
+  Future<List<Map<String, dynamic>>> getPendingTopics() =>
+      _proxy.getPendingTopics();
 
-  /// 获取 todo 分组
-  Future<List<Map<String, dynamic>>> getTodoGroups() =>
-      _proxy.getTodoGroups();
+  /// 获取所有待办主题
+  Future<List<Map<String, dynamic>>> getAllTopics() =>
+      _proxy.getAllTopics();
 
-  /// 获取 todo 统计信息
+  /// 获取已完成主题
+  Future<List<Map<String, dynamic>>> getCompletedTopics({int limit = 50}) =>
+      _proxy.getCompletedTopics(limit: limit);
+
+  /// 获取待办统计信息
   Future<Map<String, dynamic>> getTodoStats() =>
       _proxy.getTodoStats();
 
   // ===== Todo 写操作 =====
 
-  /// 更新 todo 状态
-  Future<void> updateTodoStatus(String todoId, String status) =>
-      _proxy.updateTodoStatus(todoId, status);
+  /// 更新主题内容
+  Future<void> updateTopicContent(String topicId, {String? title, String? description}) =>
+      _proxy.updateTopicContent(topicId, title: title, description: description);
 
-  /// 更新 todo 内容
-  Future<void> updateTodoContent(String todoId, String content) =>
-      _proxy.updateTodoContent(todoId, content);
+  /// 删除主题
+  Future<void> deleteTopic(String topicId) => _proxy.deleteTopic(topicId);
 
-  /// 删除 todo 项
-  Future<void> deleteTodo(String todoId) => _proxy.deleteTodo(todoId);
+  /// 清除已完成主题
+  Future<void> clearCompletedTopics() => _proxy.clearCompletedTopics();
 
-  /// 清除所有已完成 todo
-  Future<void> clearCompletedTodos() => _proxy.clearCompletedTodos();
+  /// 获取主题下的任务子项
+  Future<List<Map<String, dynamic>>> getTaskItemsByTopic(String topicId) =>
+      _proxy.getTaskItemsByTopic(topicId);
 
-  /// 移动 todo 到分组
-  Future<void> moveTodoToGroup(String todoId, String? groupId) =>
-      _proxy.moveTodoToGroup(todoId, groupId);
+  /// 更新任务子项状态
+  Future<void> updateTaskItemStatus(String taskId, String status) =>
+      _proxy.updateTaskItemStatus(taskId, status);
+
+  /// 更新任务子项内容
+  Future<void> updateTaskItemContent(String taskId, {String? title, String? content}) =>
+      _proxy.updateTaskItemContent(taskId, title: title, content: content);
+
+  /// 删除任务子项
+  Future<void> deleteTaskItem(String taskId) => _proxy.deleteTaskItem(taskId);
 
   // ===== Spec 管理 =====
 
@@ -889,10 +900,6 @@ class CachedAgentProxy extends _CachedAgentProxyBase
   /// 获取已完成 spec 项
   Future<List<Map<String, dynamic>>> getCompletedSpecs({int limit = 50}) =>
       _proxy.getCompletedSpecs(limit: limit);
-
-  /// 获取 spec 分组
-  Future<List<Map<String, dynamic>>> getSpecGroups() =>
-      _proxy.getSpecGroups();
 
   /// 获取 spec 统计信息
   Future<Map<String, dynamic>> getSpecStats() =>
@@ -913,10 +920,6 @@ class CachedAgentProxy extends _CachedAgentProxyBase
 
   /// 清除所有已完成 spec
   Future<void> clearCompletedSpecs() => _proxy.clearCompletedSpecs();
-
-  /// 移动 spec 到分组
-  Future<void> moveSpecToGroup(String specId, String? groupId) =>
-      _proxy.moveSpecToGroup(specId, groupId);
 
   // ===== 文件操作追踪 =====
 

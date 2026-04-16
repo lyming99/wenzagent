@@ -1,12 +1,12 @@
 import 'package:sqlite3/sqlite3.dart';
 
 import '../database_manager.dart';
-import '../entities/todo_group_entity.dart';
-import '../entities/todo_item_entity.dart';
+import '../entities/todo_topic_entity.dart';
+import '../entities/todo_task_item_entity.dart';
 
 /// Todo 数据存储
 ///
-/// 提供 todo 项和分组的 CRUD 操作，所有操作直接读写 SQLite。
+/// 提供 Todo Topic 和 TaskItem 的 CRUD 操作，所有操作直接读写 SQLite。
 class TodoStore {
   final DatabaseManager _dbManager;
 
@@ -15,15 +15,14 @@ class TodoStore {
 
   Database get _db => _dbManager.db;
 
-  // ===== TodoItem 操作 =====
+  // ===== TodoTopic 操作 =====
 
-  /// 从数据库行解码为 TodoItemEntity
-  TodoItemEntity _rowToItem(Row row) {
-    return TodoItemEntity.fromMap({
+  TodoTopicEntity _rowToTopic(Row row) {
+    return TodoTopicEntity.fromMap({
       'id': row['id'],
       'employeeId': row['employee_id'],
-      'groupId': row['group_id'],
-      'content': row['content'],
+      'title': row['title'],
+      'description': row['description'],
       'status': row['status'],
       'sortOrder': row['sort_order'],
       'deleted': row['deleted'],
@@ -33,119 +32,173 @@ class TodoStore {
     });
   }
 
-  /// 查询员工的活跃 todo 项（pending + in_progress）
-  List<TodoItemEntity> findActiveByEmployee(String employeeId) {
+  /// 查询当前待办主题（有子项正在进行）
+  List<TodoTopicEntity> findCurrentTopics(String employeeId) {
     final resultSet = _db.select(
-      "SELECT * FROM todo_items WHERE employee_id = ? AND deleted = 0 AND status IN ('pending', 'in_progress') ORDER BY sort_order ASC, create_time ASC",
+      "SELECT * FROM todo_topics WHERE employee_id = ? AND deleted = 0 AND status = 'in_progress' ORDER BY sort_order ASC, create_time ASC",
       [employeeId],
     );
-    return resultSet.map(_rowToItem).toList();
+    return resultSet.map(_rowToTopic).toList();
   }
 
-  /// 查询员工的已完成 todo 项（历史 todo）
-  List<TodoItemEntity> findCompletedByEmployee(String employeeId,
-      {int limit = 50}) {
+  /// 查询未完成待办主题（pending + in_progress）
+  List<TodoTopicEntity> findPendingTopics(String employeeId) {
     final resultSet = _db.select(
-      'SELECT * FROM todo_items WHERE employee_id = ? AND deleted = 0 AND status = ? ORDER BY completed_at DESC LIMIT ?',
-      [employeeId, 'completed', limit],
+      "SELECT * FROM todo_topics WHERE employee_id = ? AND deleted = 0 AND status IN ('pending', 'in_progress') ORDER BY sort_order ASC, create_time ASC",
+      [employeeId],
     );
-    return resultSet.map(_rowToItem).toList();
+    return resultSet.map(_rowToTopic).toList();
   }
 
-  /// 查询指定分组下的所有活跃项
-  List<TodoItemEntity> findByGroup(String groupId) {
+  /// 查询所有待办主题
+  List<TodoTopicEntity> findAllTopics(String employeeId) {
     final resultSet = _db.select(
-      "SELECT * FROM todo_items WHERE group_id = ? AND deleted = 0 AND status IN ('pending', 'in_progress') ORDER BY sort_order ASC, create_time ASC",
-      [groupId],
+      'SELECT * FROM todo_topics WHERE employee_id = ? AND deleted = 0 ORDER BY sort_order ASC, create_time ASC',
+      [employeeId],
     );
-    return resultSet.map(_rowToItem).toList();
+    return resultSet.map(_rowToTopic).toList();
   }
 
-  /// 按 ID 查询单个 todo 项
-  TodoItemEntity? findById(String id) {
+  /// 查询已完成主题
+  List<TodoTopicEntity> findCompletedTopics(String employeeId, {int limit = 50}) {
     final resultSet = _db.select(
-      'SELECT * FROM todo_items WHERE id = ? AND deleted = 0',
+      "SELECT * FROM todo_topics WHERE employee_id = ? AND deleted = 0 AND status = 'completed' ORDER BY completed_at DESC LIMIT ?",
+      [employeeId, limit],
+    );
+    return resultSet.map(_rowToTopic).toList();
+  }
+
+  /// 按 ID 查询单个主题
+  TodoTopicEntity? findTopicById(String id) {
+    final resultSet = _db.select(
+      'SELECT * FROM todo_topics WHERE id = ? AND deleted = 0',
       [id],
     );
     for (final row in resultSet) {
-      return _rowToItem(row);
+      return _rowToTopic(row);
     }
     return null;
   }
 
-  /// 保存 todo 项（INSERT OR REPLACE）
-  void save(TodoItemEntity item) {
+  /// 保存主题
+  void saveTopic(TodoTopicEntity topic) {
     _db.execute('''
-      INSERT OR REPLACE INTO todo_items (
-        id, employee_id, group_id, content, status,
+      INSERT OR REPLACE INTO todo_topics (
+        id, employee_id, title, description, status,
         sort_order, deleted, create_time, update_time, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', [
-      item.id,
-      item.employeeId,
-      item.groupId,
-      item.content,
-      item.status,
-      item.sortOrder,
-      item.deleted,
-      item.createTime.millisecondsSinceEpoch,
-      item.updateTime.millisecondsSinceEpoch,
-      item.completedAt?.millisecondsSinceEpoch,
+      topic.id,
+      topic.employeeId,
+      topic.title,
+      topic.description,
+      topic.status,
+      topic.sortOrder,
+      topic.deleted,
+      topic.createTime.millisecondsSinceEpoch,
+      topic.updateTime.millisecondsSinceEpoch,
+      topic.completedAt?.millisecondsSinceEpoch,
     ]);
   }
 
-  /// 更新状态，completed 时同时设置 completedAt
-  void updateStatus(String id, String status) {
+  /// 更新主题内容
+  void updateTopicContent(String id, {String? title, String? description}) {
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (status == 'completed') {
+    if (title != null && description != null) {
       _db.execute(
-        'UPDATE todo_items SET status = ?, completed_at = ?, update_time = ? WHERE id = ?',
-        [status, now, now, id],
+        'UPDATE todo_topics SET title = ?, description = ?, update_time = ? WHERE id = ?',
+        [title, description, now, id],
       );
-    } else {
+    } else if (title != null) {
       _db.execute(
-        'UPDATE todo_items SET status = ?, update_time = ? WHERE id = ?',
-        [status, now, id],
+        'UPDATE todo_topics SET title = ?, update_time = ? WHERE id = ?',
+        [title, now, id],
+      );
+    } else if (description != null) {
+      _db.execute(
+        'UPDATE todo_topics SET description = ?, update_time = ? WHERE id = ?',
+        [description, now, id],
       );
     }
   }
 
-  /// 更新内容
-  void updateContent(String id, String content) {
+  /// 软删除主题（同时软删除所有子项）
+  void softDeleteTopic(String id) {
+    final now = DateTime.now().millisecondsSinceEpoch;
     _db.execute(
-      'UPDATE todo_items SET content = ?, update_time = ? WHERE id = ?',
-      [content, DateTime.now().millisecondsSinceEpoch, id],
+      'UPDATE todo_task_items SET deleted = 1, update_time = ? WHERE topic_id = ?',
+      [now, id],
+    );
+    _db.execute(
+      'UPDATE todo_topics SET deleted = 1, update_time = ? WHERE id = ?',
+      [now, id],
     );
   }
 
-  /// 移动到分组（groupId 可为 null 表示移出分组）
-  void moveToGroup(String id, String? groupId) {
+  /// 批量硬删除已完成主题
+  void deleteCompletedTopics(String employeeId) {
+    // 先删除已完成主题下的子项
+    _db.execute('''
+      DELETE FROM todo_task_items WHERE topic_id IN (
+        SELECT id FROM todo_topics WHERE employee_id = ? AND status = 'completed'
+      )
+    ''', [employeeId]);
+    // 再删除已完成主题
     _db.execute(
-      'UPDATE todo_items SET group_id = ?, update_time = ? WHERE id = ?',
-      [groupId, DateTime.now().millisecondsSinceEpoch, id],
+      "DELETE FROM todo_topics WHERE employee_id = ? AND status = 'completed'",
+      [employeeId],
     );
   }
 
-  /// 软删除
-  void softDelete(String id) {
-    _db.execute(
-      'UPDATE todo_items SET deleted = 1, update_time = ? WHERE id = ?',
-      [DateTime.now().millisecondsSinceEpoch, id],
-    );
-  }
-
-  /// 批量硬删除已完成的项
-  void deleteCompletedByEmployee(String employeeId) {
-    _db.execute(
-      'DELETE FROM todo_items WHERE employee_id = ? AND status = ?',
-      [employeeId, 'completed'],
-    );
-  }
-
-  /// 按状态统计数量
-  Map<String, int> countByStatus(String employeeId) {
+  /// 推导主题状态（根据子项状态）
+  void recalculateTopicStatus(String topicId) {
     final resultSet = _db.select(
-      'SELECT status, COUNT(*) as cnt FROM todo_items WHERE employee_id = ? AND deleted = 0 GROUP BY status',
+      'SELECT status, COUNT(*) as cnt FROM todo_task_items WHERE topic_id = ? AND deleted = 0 GROUP BY status',
+      [topicId],
+    );
+
+    int totalCount = 0;
+    int completedCount = 0;
+    bool hasInProgress = false;
+
+    for (final row in resultSet) {
+      final status = row['status'] as String;
+      final cnt = row['cnt'] as int;
+      totalCount += cnt;
+      if (status == 'completed') completedCount += cnt;
+      if (status == 'in_progress') hasInProgress = true;
+    }
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    if (totalCount == 0) {
+      // 无子项，保持 pending
+      _db.execute(
+        "UPDATE todo_topics SET status = 'pending', completed_at = NULL, update_time = ? WHERE id = ?",
+        [now, topicId],
+      );
+    } else if (hasInProgress) {
+      _db.execute(
+        "UPDATE todo_topics SET status = 'in_progress', update_time = ? WHERE id = ?",
+        [now, topicId],
+      );
+    } else if (completedCount == totalCount) {
+      _db.execute(
+        "UPDATE todo_topics SET status = 'completed', completed_at = ?, update_time = ? WHERE id = ?",
+        [now, now, topicId],
+      );
+    } else {
+      _db.execute(
+        "UPDATE todo_topics SET status = 'pending', completed_at = NULL, update_time = ? WHERE id = ?",
+        [now, topicId],
+      );
+    }
+  }
+
+  /// 按状态统计主题数量
+  Map<String, int> countTopicsByStatus(String employeeId) {
+    final resultSet = _db.select(
+      'SELECT status, COUNT(*) as cnt FROM todo_topics WHERE employee_id = ? AND deleted = 0 GROUP BY status',
       [employeeId],
     );
     final result = <String, int>{
@@ -161,91 +214,109 @@ class TodoStore {
     return result;
   }
 
-  // ===== TodoGroup 操作 =====
+  // ===== TodoTaskItem 操作 =====
 
-  /// 从数据库行解码为 TodoGroupEntity
-  TodoGroupEntity _rowToGroup(Row row) {
-    return TodoGroupEntity.fromMap({
+  TodoTaskItemEntity _rowToTaskItem(Row row) {
+    return TodoTaskItemEntity.fromMap({
       'id': row['id'],
       'employeeId': row['employee_id'],
-      'name': row['name'],
+      'topicId': row['topic_id'],
+      'title': row['title'],
+      'content': row['content'],
+      'status': row['status'],
       'sortOrder': row['sort_order'],
       'deleted': row['deleted'],
       'createTime': row['create_time'],
       'updateTime': row['update_time'],
+      'completedAt': row['completed_at'],
     });
   }
 
-  /// 查询员工的所有分组
-  List<TodoGroupEntity> findGroupsByEmployee(String employeeId) {
+  /// 查询主题下的所有任务子项
+  List<TodoTaskItemEntity> findTaskItemsByTopic(String topicId) {
     final resultSet = _db.select(
-      'SELECT * FROM todo_groups WHERE employee_id = ? AND deleted = 0 ORDER BY sort_order ASC',
-      [employeeId],
+      'SELECT * FROM todo_task_items WHERE topic_id = ? AND deleted = 0 ORDER BY sort_order ASC, create_time ASC',
+      [topicId],
     );
-    return resultSet.map(_rowToGroup).toList();
+    return resultSet.map(_rowToTaskItem).toList();
   }
 
-  /// 按 ID 查询单个分组
-  TodoGroupEntity? findGroupById(String id) {
+  /// 按 ID 查询单个任务子项
+  TodoTaskItemEntity? findTaskItemById(String id) {
     final resultSet = _db.select(
-      'SELECT * FROM todo_groups WHERE id = ? AND deleted = 0',
+      'SELECT * FROM todo_task_items WHERE id = ? AND deleted = 0',
       [id],
     );
     for (final row in resultSet) {
-      return _rowToGroup(row);
+      return _rowToTaskItem(row);
     }
     return null;
   }
 
-  /// 按名称查找分组（用于 add 时自动关联）
-  TodoGroupEntity? findGroupByName(String employeeId, String name) {
-    final resultSet = _db.select(
-      'SELECT * FROM todo_groups WHERE employee_id = ? AND name = ? AND deleted = 0',
-      [employeeId, name],
-    );
-    for (final row in resultSet) {
-      return _rowToGroup(row);
-    }
-    return null;
-  }
-
-  /// 保存分组（INSERT OR REPLACE）
-  void saveGroup(TodoGroupEntity group) {
+  /// 保存任务子项
+  void saveTaskItem(TodoTaskItemEntity item) {
     _db.execute('''
-      INSERT OR REPLACE INTO todo_groups (
-        id, employee_id, name, sort_order, deleted, create_time, update_time
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO todo_task_items (
+        id, employee_id, topic_id, title, content, status,
+        sort_order, deleted, create_time, update_time, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', [
-      group.id,
-      group.employeeId,
-      group.name,
-      group.sortOrder,
-      group.deleted,
-      group.createTime.millisecondsSinceEpoch,
-      group.updateTime.millisecondsSinceEpoch,
+      item.id,
+      item.employeeId,
+      item.topicId,
+      item.title,
+      item.content,
+      item.status,
+      item.sortOrder,
+      item.deleted,
+      item.createTime.millisecondsSinceEpoch,
+      item.updateTime.millisecondsSinceEpoch,
+      item.completedAt?.millisecondsSinceEpoch,
     ]);
   }
 
-  /// 软删除分组（同时将该分组下的 todo 项的 groupId 置 null）
-  void softDeleteGroup(String id) {
+  /// 更新任务子项内容
+  void updateTaskItemContent(String id, {String? title, String? content}) {
     final now = DateTime.now().millisecondsSinceEpoch;
-    // 先将该分组下的 todo 项移至未分组
-    _db.execute(
-      'UPDATE todo_items SET group_id = NULL, update_time = ? WHERE group_id = ?',
-      [now, id],
-    );
-    // 软删除分组
-    _db.execute(
-      'UPDATE todo_groups SET deleted = 1, update_time = ? WHERE id = ?',
-      [now, id],
-    );
+    if (title != null && content != null) {
+      _db.execute(
+        'UPDATE todo_task_items SET title = ?, content = ?, update_time = ? WHERE id = ?',
+        [title, content, now, id],
+      );
+    } else if (title != null) {
+      _db.execute(
+        'UPDATE todo_task_items SET title = ?, update_time = ? WHERE id = ?',
+        [title, now, id],
+      );
+    } else if (content != null) {
+      _db.execute(
+        'UPDATE todo_task_items SET content = ?, update_time = ? WHERE id = ?',
+        [content, now, id],
+      );
+    }
   }
 
-  /// 重命名分组
-  void renameGroup(String id, String name) {
+  /// 更新任务子项状态，completed 时同时设置 completedAt
+  void updateTaskItemStatus(String id, String status) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (status == 'completed') {
+      _db.execute(
+        'UPDATE todo_task_items SET status = ?, completed_at = ?, update_time = ? WHERE id = ?',
+        [status, now, now, id],
+      );
+    } else {
+      _db.execute(
+        'UPDATE todo_task_items SET status = ?, completed_at = NULL, update_time = ? WHERE id = ?',
+        [status, now, id],
+      );
+    }
+  }
+
+  /// 软删除任务子项
+  void softDeleteTaskItem(String id) {
     _db.execute(
-      'UPDATE todo_groups SET name = ?, update_time = ? WHERE id = ?',
-      [name, DateTime.now().millisecondsSinceEpoch, id],
+      'UPDATE todo_task_items SET deleted = 1, update_time = ? WHERE id = ?',
+      [DateTime.now().millisecondsSinceEpoch, id],
     );
   }
 }

@@ -250,71 +250,94 @@ class AgentRpcUtil {
     return _rpcCall(AgentRpcConfig.methodGetCallingToolIds, request.toMap());
   }
 
-  // ===== Agent Todo 管理 =====
+  // ===== Agent Todo Topic 管理 =====
 
-  /// 获取活跃 todo 项
-  Future<Map<String, dynamic>> getActiveTodos(
-    GetActiveTodosRequest request,
-  ) async {
-    return _rpcCall(AgentRpcConfig.methodGetActiveTodos, request.toMap());
+  /// 获取当前待办主题
+  Future<Map<String, dynamic>> getCurrentTopics(
+    GetCurrentTopicsRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodGetCurrentTopics, request.toMap());
   }
 
-  /// 获取已完成 todo 项
-  Future<Map<String, dynamic>> getCompletedTodos(
-    GetCompletedTodosRequest request,
-  ) async {
-    return _rpcCall(AgentRpcConfig.methodGetCompletedTodos, request.toMap());
+  /// 获取未完成待办主题
+  Future<Map<String, dynamic>> getPendingTopics(
+    GetPendingTopicsRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodGetPendingTopics, request.toMap());
   }
 
-  /// 获取 todo 分组
-  Future<Map<String, dynamic>> getTodoGroups(
-    GetTodoGroupsRequest request,
-  ) async {
-    return _rpcCall(AgentRpcConfig.methodGetTodoGroups, request.toMap());
+  /// 获取所有待办主题
+  Future<Map<String, dynamic>> getAllTopics(
+    GetAllTopicsRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodGetAllTopics, request.toMap());
   }
 
-  /// 获取 todo 统计
+  /// 获取已完成主题
+  Future<Map<String, dynamic>> getCompletedTopics(
+    GetCompletedTopicsRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodGetCompletedTopics, request.toMap());
+  }
+
+  /// 获取待办统计
   Future<Map<String, dynamic>> getTodoStats(
     GetTodoStatsRequest request,
-  ) async {
+  ) {
     return _rpcCall(AgentRpcConfig.methodGetTodoStats, request.toMap());
   }
 
   // ===== Agent Todo 写操作 =====
 
-  /// 更新 todo 状态
-  Future<Map<String, dynamic>> updateTodoStatus(
-    UpdateTodoStatusRequest request,
-  ) async {
-    return _rpcCall(AgentRpcConfig.methodUpdateTodoStatus, request.toMap());
+  /// 更新主题内容
+  Future<Map<String, dynamic>> updateTopicContent(
+    UpdateTopicContentRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodUpdateTopicContent, request.toMap());
   }
 
-  /// 更新 todo 内容
-  Future<Map<String, dynamic>> updateTodoContent(
-    UpdateTodoContentRequest request,
-  ) async {
-    return _rpcCall(AgentRpcConfig.methodUpdateTodoContent, request.toMap());
+  /// 删除主题
+  Future<Map<String, dynamic>> deleteTopic(
+    DeleteTopicRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodDeleteTopic, request.toMap());
   }
 
-  /// 删除 todo
-  Future<Map<String, dynamic>> deleteTodo(
-    DeleteTodoRequest request,
-  ) async {
-    return _rpcCall(AgentRpcConfig.methodDeleteTodo, request.toMap());
+  /// 清除已完成主题
+  Future<Map<String, dynamic>> clearCompletedTopics(
+    ClearCompletedTopicsRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodClearCompletedTopics, request.toMap());
   }
 
-  /// 清除已完成 todo
-  Future<Map<String, dynamic>> clearCompletedTodos(
-    ClearCompletedTodosRequest request,
-  ) async {
-    return _rpcCall(AgentRpcConfig.methodClearCompletedTodos, request.toMap());
+  // ===== Agent Todo TaskItem 管理 =====
+
+  /// 获取主题下的任务子项
+  Future<Map<String, dynamic>> getTaskItemsByTopic(
+    GetTaskItemsByTopicRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodGetTaskItemsByTopic, request.toMap());
   }
 
-  /// 移动 todo 到分组
-  Future<Map<String, dynamic>> moveTodoToGroup(
-    MoveTodoToGroupRequest request,
-  ) async {
-    return _rpcCall(AgentRpcConfig.methodMoveTodoToGroup, request.toMap());
+  /// 更新任务子项状态
+  Future<Map<String, dynamic>> updateTaskItemStatus(
+    UpdateTaskItemStatusRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodUpdateTaskItemStatus, request.toMap());
+  }
+
+  /// 更新任务子项内容
+  Future<Map<String, dynamic>> updateTaskItemContent(
+    UpdateTaskItemContentRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodUpdateTaskItemContent, request.toMap());
+  }
+
+  /// 删除任务子项
+  Future<Map<String, dynamic>> deleteTaskItem(
+    DeleteTaskItemRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodDeleteTaskItem, request.toMap());
   }
 
   // ===== Agent Spec 管理 =====
@@ -322,28 +345,21 @@ class AgentRpcUtil {
   /// 获取活跃 spec 项
   Future<Map<String, dynamic>> getActiveSpecs(
     GetActiveSpecsRequest request,
-  ) async {
+  ) {
     return _rpcCall(AgentRpcConfig.methodGetActiveSpecs, request.toMap());
   }
 
   /// 获取已完成 spec 项
   Future<Map<String, dynamic>> getCompletedSpecs(
     GetCompletedSpecsRequest request,
-  ) async {
+  ) {
     return _rpcCall(AgentRpcConfig.methodGetCompletedSpecs, request.toMap());
-  }
-
-  /// 获取 spec 分组
-  Future<Map<String, dynamic>> getSpecGroups(
-    GetSpecGroupsRequest request,
-  ) async {
-    return _rpcCall(AgentRpcConfig.methodGetSpecGroups, request.toMap());
   }
 
   /// 获取 spec 统计
   Future<Map<String, dynamic>> getSpecStats(
     GetSpecStatsRequest request,
-  ) async {
+  ) {
     return _rpcCall(AgentRpcConfig.methodGetSpecStats, request.toMap());
   }
 
@@ -352,36 +368,29 @@ class AgentRpcUtil {
   /// 更新 spec 状态
   Future<Map<String, dynamic>> updateSpecStatus(
     UpdateSpecStatusRequest request,
-  ) async {
+  ) {
     return _rpcCall(AgentRpcConfig.methodUpdateSpecStatus, request.toMap());
   }
 
   /// 更新 spec 内容
   Future<Map<String, dynamic>> updateSpecContent(
     UpdateSpecContentRequest request,
-  ) async {
+  ) {
     return _rpcCall(AgentRpcConfig.methodUpdateSpecContent, request.toMap());
   }
 
   /// 删除 spec
   Future<Map<String, dynamic>> deleteSpec(
     DeleteSpecRequest request,
-  ) async {
+  ) {
     return _rpcCall(AgentRpcConfig.methodDeleteSpec, request.toMap());
   }
 
   /// 清除已完成 spec
   Future<Map<String, dynamic>> clearCompletedSpecs(
     ClearCompletedSpecsRequest request,
-  ) async {
+  ) {
     return _rpcCall(AgentRpcConfig.methodClearCompletedSpecs, request.toMap());
-  }
-
-  /// 移动 spec 到分组
-  Future<Map<String, dynamic>> moveSpecToGroup(
-    MoveSpecToGroupRequest request,
-  ) async {
-    return _rpcCall(AgentRpcConfig.methodMoveSpecToGroup, request.toMap());
   }
 
   // ===== Agent 文件操作追踪 =====

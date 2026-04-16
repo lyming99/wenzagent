@@ -1,54 +1,36 @@
-import '../../../persistence/entities/todo_group_entity.dart';
-import '../../../persistence/entities/todo_item_entity.dart';
+import '../../../persistence/entities/todo_topic_entity.dart';
+import '../../../persistence/entities/todo_task_item_entity.dart';
 import '../agent_tool.dart';
 
 /// 待办管理工具
 ///
-/// 支持跨轮次的待办列表管理，数据持久化到 SQLite，
-/// 支持分组管理。所有操作通过异步回调由 AgentImpl 注入。
+/// 支持跨轮次的待办列表管理，数据持久化到 SQLite。
+/// 待办任务由主题（Topic）和任务子项（TaskItem）组成。
+/// 所有操作通过异步回调由 AgentImpl 注入。
 class TodoManageTool extends AgentTool {
   // ===== 异步回调（由 AgentImpl 注入） =====
 
-  /// 获取活跃 todo 项（pending + in_progress）
-  Future<List<TodoItemEntity>> Function(String employeeId)? getActiveTodos;
+  // 主题操作
+  Future<List<TodoTopicEntity>> Function(String employeeId)? getCurrentTopics;
+  Future<List<TodoTopicEntity>> Function(String employeeId)? getPendingTopics;
+  Future<List<TodoTopicEntity>> Function(String employeeId)? getAllTopics;
+  Future<List<TodoTopicEntity>> Function(String employeeId, {int limit})?
+      getCompletedTopics;
+  Future<void> Function(TodoTopicEntity topic)? saveTopic;
+  Future<void> Function(String id, {String? title, String? description})?
+      updateTopicContent;
+  Future<void> Function(String id)? removeTopic;
+  Future<void> Function(String employeeId)? clearCompletedTopics;
 
-  /// 获取已完成的 todo 项
-  Future<List<TodoItemEntity>> Function(String employeeId, {int limit})?
-      getCompletedTodos;
-
-  /// 保存 todo 项
-  Future<void> Function(TodoItemEntity item)? saveTodo;
-
-  /// 更新 todo 状态
-  Future<void> Function(String id, String status)? updateTodoStatus;
-
-  /// 更新 todo 内容
-  Future<void> Function(String id, String? content)? updateTodoContent;
-
-  /// 软删除 todo 项
-  Future<void> Function(String id)? removeTodo;
-
-  /// 批量删除已完成的项
-  Future<void> Function(String employeeId)? clearCompletedTodos;
-
-  /// 移动 todo 到分组
-  Future<void> Function(String id, String? groupId)? moveTodoToGroup;
-
-  /// 获取员工所有分组
-  Future<List<TodoGroupEntity>> Function(String employeeId)? getGroups;
-
-  /// 按名称查找分组
-  Future<TodoGroupEntity?> Function(String employeeId, String name)?
-      findGroupByName;
-
-  /// 保存分组
-  Future<void> Function(TodoGroupEntity group)? saveGroup;
-
-  /// 软删除分组
-  Future<void> Function(String id)? removeGroup;
-
-  /// 重命名分组
-  Future<void> Function(String id, String newName)? renameGroupFn;
+  // 任务子项操作
+  Future<List<TodoTaskItemEntity>> Function(String topicId)?
+      getTaskItemsByTopic;
+  Future<void> Function(TodoTaskItemEntity item)? saveTaskItem;
+  Future<void> Function(String id, {String? title, String? content})?
+      updateTaskItemContent;
+  Future<void> Function(String id, String status)? updateTaskItemStatus;
+  Future<void> Function(String id)? removeTaskItem;
+  Future<void> Function(String topicId)? recalculateTopicStatus;
 
   /// 广播事件
   void Function(String type, Map<String, dynamic> data)? broadcastEvent;
@@ -61,24 +43,24 @@ class TodoManageTool extends AgentTool {
 
   @override
   String get description =>
-      '管理持久化的待办列表，支持分组。'
+      '管理持久化的待办任务列表。'
       '数据跨 Agent 重启持久保存。\n\n'
-      '**重要**：每个待办项必须属于一个分组。'
-      '必须先调用 "create_group" 创建分组，'
-      '然后使用 "add" 并指定 "group" 参数添加待办项。'
-      '不指定分组直接添加待办是不允许的。\n\n'
+      '待办任务由主题和任务子项组成：\n'
+      '- 主题（Topic）：一个待办任务的主题/标题\n'
+      '- 任务子项（TaskItem）：主题下的具体执行项，包含标题和内容（markdown）\n\n'
       '操作：\n'
-      '- "create_group"：创建新分组（必须先执行）\n'
-      '- "list_groups"：查看所有分组\n'
-      '- "add"：创建新待办项（需要 "group" 参数）\n'
-      '- "list"：按范围查看项目（active/completed/all）\n'
-      '- "update"：修改项目状态或内容\n'
-      '- "remove"：删除指定项目\n'
-      '- "clear"：清除所有已完成项\n'
-      '- "rename_group"：重命名分组\n'
-      '- "delete_group"：删除分组（项目移至未分组）\n'
-      '- "move_to_group"：将待办项移至分组\n\n'
-      '典型流程：create_group -> add（带 group）-> update -> complete。\n\n'
+      '- "add"：创建新待办主题（需要 title）\n'
+      '- "add_task"：向主题添加任务子项（需要 topic_id 和 title）\n'
+      '- "list"：按范围查看主题（current/pending/all）\n'
+      '- "update"：修改主题标题或描述\n'
+      '- "update_task"：修改任务子项（状态、标题、内容）\n'
+      '- "remove"：删除主题（及其所有子项）\n'
+      '- "remove_task"：删除任务子项\n'
+      '- "clear"：清除所有已完成主题\n\n'
+      'scope 说明：\n'
+      '- "current"：当前正在进行的待办（有子项处于进行中状态）\n'
+      '- "pending"：所有未完成的待办\n'
+      '- "all"：全部待办（含已完成）\n\n'
       '待办列表持久化在数据库中。';
 
   @override
@@ -89,59 +71,55 @@ class TodoManageTool extends AgentTool {
             'type': 'string',
             'enum': [
               'add',
+              'add_task',
               'list',
               'update',
+              'update_task',
               'remove',
+              'remove_task',
               'clear',
-              'create_group',
-              'list_groups',
-              'rename_group',
-              'delete_group',
-              'move_to_group',
             ],
             'description': '要对待办列表执行的操作。',
           },
+          // 主题操作参数
+          'title': {
+            'type': 'string',
+            'description': '主题标题。"add" 时必需。',
+          },
           'content': {
             'type': 'string',
-            'description':
-                '待办项内容。"add" 时必需，"update" 时可选用于修改内容。',
+            'description': '主题描述。"add" 时可选。',
           },
           'id': {
             'type': 'string',
-            'description':
-                '待办项 ID。"update"、"remove" 和 "move_to_group" 时必需。',
+            'description': '主题 ID。"update"、"remove" 时必需。',
+          },
+          'scope': {
+            'type': 'string',
+            'enum': ['current', 'pending', 'all'],
+            'description': '列表显示范围。默认："current"。',
+          },
+          // 任务子项操作参数
+          'topic_id': {
+            'type': 'string',
+            'description': '主题 ID。"add_task" 时必需。',
+          },
+          'task_id': {
+            'type': 'string',
+            'description': '任务子项 ID。"update_task"、"remove_task" 时必需。',
+          },
+          'task_title': {
+            'type': 'string',
+            'description': '任务子项标题。"add_task" 时必需。',
+          },
+          'task_content': {
+            'type': 'string',
+            'description': '任务子项内容（markdown）。"add_task"、"update_task" 时可选。',
           },
           'status': {
             'type': 'string',
             'enum': ['pending', 'in_progress', 'completed'],
-            'description':
-                '项目的新状态。用于 "update" 操作。',
-          },
-          'scope': {
-            'type': 'string',
-            'enum': ['active', 'completed', 'all'],
-            'description':
-                '列表显示范围。默认："active"。',
-          },
-          'group': {
-            'type': 'string',
-            'description':
-                '"add" 操作的分组名称。必需——每个待办必须属于一个分组。'
-                '分组必须已存在（先用 "create_group" 创建）。'
-                '不允许不指定分组添加待办。',
-          },
-          'group_id': {
-            'type': 'string',
-            'description':
-                '分组 ID，用于 "rename_group"、"delete_group" 和 "move_to_group" 操作。',
-          },
-          'new_name': {
-            'type': 'string',
-            'description': '"rename_group" 操作的新名称。',
-          },
-          'name': {
-            'type': 'string',
-            'description': '"create_group" 操作的分组名称。',
+            'description': '状态。"update_task" 时可选。',
           },
         },
         'required': ['action'],
@@ -164,169 +142,163 @@ class TodoManageTool extends AgentTool {
     switch (action) {
       case 'add':
         return _add(arguments);
+      case 'add_task':
+        return _addTask(arguments);
       case 'list':
         return _list(arguments);
       case 'update':
         return _update(arguments);
+      case 'update_task':
+        return _updateTask(arguments);
       case 'remove':
         return _remove(arguments);
+      case 'remove_task':
+        return _removeTask(arguments);
       case 'clear':
         return _clear();
-      case 'create_group':
-        return _createGroup(arguments);
-      case 'list_groups':
-        return _listGroups();
-      case 'rename_group':
-        return _renameGroup(arguments);
-      case 'delete_group':
-        return _deleteGroup(arguments);
-      case 'move_to_group':
-        return _moveToGroup(arguments);
       default:
         return ToolResult.error(
-          'Unknown action: $action. Use add, list, update, remove, clear, '
-          'create_group, list_groups, rename_group, delete_group, or move_to_group.',
+          'Unknown action: $action. Use add, add_task, list, update, update_task, '
+          'remove, remove_task, or clear.',
         );
     }
   }
 
+  // ===== 主题操作 =====
+
   Future<ToolResult> _add(Map<String, dynamic> arguments) async {
-    final content = arguments['content'] as String?;
-    if (content == null || content.isEmpty) {
-      return ToolResult.error('content is required for add action');
+    final title = arguments['title'] as String?;
+    if (title == null || title.isEmpty) {
+      return ToolResult.error('title is required for add action');
     }
 
-    // group 为必填，必须先创建分组再添加待办
-    final groupName = arguments['group'] as String?;
-    if (groupName == null || groupName.isEmpty) {
-      return ToolResult.error(
-        'group is required for add action. '
-        'Every todo item must belong to a group. '
-        'Use "create_group" action first to create a group, '
-        'then add todo items with the "group" parameter.',
-      );
-    }
-
-    if (findGroupByName == null) {
-      return ToolResult.error('Group operations not available');
-    }
-
-    // 查找已存在的分组，不自动创建
-    final group = await findGroupByName!(employeeId!, groupName);
-    if (group == null) {
-      return ToolResult.error(
-        'Group "$groupName" does not exist. '
-        'Use "create_group" action to create it first.',
-      );
-    }
-    final groupId = group.id;
-
+    final description = arguments['content'] as String? ?? '';
     final now = DateTime.now();
-    final id = 'todo_${now.millisecondsSinceEpoch}';
+    final id = 'topic_${now.millisecondsSinceEpoch}';
 
-    final item = TodoItemEntity(
+    final topic = TodoTopicEntity(
       id: id,
       employeeId: employeeId!,
-      groupId: groupId,
-      content: content,
+      title: title,
+      description: description,
       status: 'pending',
       createTime: now,
       updateTime: now,
     );
 
-    await saveTodo?.call(item);
+    await saveTopic?.call(topic);
 
-    broadcastEvent?.call('todoChanged', {
+    broadcastEvent?.call('todoTopicChanged', {
       'action': 'added',
-      'todoId': id,
-      'content': content,
-      'groupId': groupId,
+      'topicId': id,
+      'title': title,
     });
 
-    return ToolResult.success('Todo added: [$id] $content (group: $groupName)');
+    return ToolResult.success('Todo topic added: [$id] $title');
+  }
+
+  Future<ToolResult> _addTask(Map<String, dynamic> arguments) async {
+    final topicId = arguments['topic_id'] as String?;
+    if (topicId == null || topicId.isEmpty) {
+      return ToolResult.error('topic_id is required for add_task action');
+    }
+
+    final taskTitle = arguments['task_title'] as String?;
+    if (taskTitle == null || taskTitle.isEmpty) {
+      return ToolResult.error('task_title is required for add_task action');
+    }
+
+    final taskContent = arguments['task_content'] as String? ?? '';
+    final now = DateTime.now();
+    final id = 'task_${now.millisecondsSinceEpoch}';
+
+    final taskItem = TodoTaskItemEntity(
+      id: id,
+      employeeId: employeeId!,
+      topicId: topicId,
+      title: taskTitle,
+      content: taskContent,
+      status: 'pending',
+      createTime: now,
+      updateTime: now,
+    );
+
+    await saveTaskItem?.call(taskItem);
+    await recalculateTopicStatus?.call(topicId);
+
+    broadcastEvent?.call('todoTaskItemChanged', {
+      'action': 'added',
+      'taskId': id,
+      'topicId': topicId,
+      'title': taskTitle,
+    });
+
+    return ToolResult.success('Task added: [$id] $taskTitle (topic: $topicId)');
   }
 
   Future<ToolResult> _list(Map<String, dynamic> arguments) async {
-    if (getActiveTodos == null) {
+    if (getCurrentTopics == null) {
       return ToolResult.error('Todo list is not available');
     }
 
-    final scope = arguments['scope'] as String? ?? 'active';
+    final scope = arguments['scope'] as String? ?? 'current';
     final eid = employeeId!;
 
-    List<TodoItemEntity> activeItems = [];
-    List<TodoItemEntity> completedItems = [];
+    List<TodoTopicEntity> pendingTopics = [];
+    List<TodoTopicEntity> completedTopics = [];
 
-    if (scope == 'active' || scope == 'all') {
-      activeItems = await getActiveTodos!(eid);
-    }
-    if (scope == 'completed' || scope == 'all') {
-      completedItems = await getCompletedTodos!(eid);
+    if (scope == 'current') {
+      pendingTopics = await getCurrentTopics!(eid);
+    } else if (scope == 'pending') {
+      pendingTopics = await getPendingTopics!(eid);
+    } else if (scope == 'all') {
+      pendingTopics = await getPendingTopics!(eid);
+      completedTopics = await getCompletedTopics!(eid);
     }
 
-    final allItems = [...activeItems, ...completedItems];
-    if (allItems.isEmpty) {
+    final allTopics = [...pendingTopics, ...completedTopics];
+    if (allTopics.isEmpty) {
       return ToolResult.success('Todo list is empty.');
     }
 
-    // 获取所有分组用于显示名称
-    final groups = await getGroups?.call(eid) ?? [];
-    final groupMap = <String, String>{};
-    for (final g in groups) {
-      groupMap[g.id] = g.name;
-    }
-
-    // 按分组组织活跃项
-    final grouped = <String?, List<TodoItemEntity>>{};
-    final ungrouped = <TodoItemEntity>[];
-    for (final item in activeItems) {
-      if (item.groupId != null) {
-        grouped.putIfAbsent(item.groupId, () => []).add(item);
-      } else {
-        ungrouped.add(item);
-      }
-    }
-
     final buffer = StringBuffer();
-    buffer.writeln('## Todo List (${allItems.length} items)');
 
-    // 按分组输出
-    for (final entry in grouped.entries) {
-      final gName = groupMap[entry.key] ?? 'Unknown Group';
+    if (scope == 'current') {
+      buffer.writeln('## Current Todos (${pendingTopics.length} topics)');
+    } else if (scope == 'pending') {
+      buffer.writeln('## Pending Todos (${pendingTopics.length} topics)');
+    } else {
+      buffer.writeln('## All Todos (${allTopics.length} topics)');
+    }
+
+    for (final topic in pendingTopics) {
       buffer.writeln();
-      buffer.writeln('### $gName');
-      for (final t in entry.value) {
-        final statusIcon = t.status == 'in_progress' ? '...' : ' ';
-        buffer.writeln('  - [${t.id}]${statusIcon}${t.content}');
+      final statusIcon = topic.status == 'in_progress' ? '>>>' : '   ';
+      buffer.writeln('$statusIcon **[${topic.id}] ${topic.title}**');
+      if (topic.description.isNotEmpty) {
+        buffer.writeln('   ${topic.description}');
+      }
+
+      // 获取子项
+      final tasks = await getTaskItemsByTopic?.call(topic.id) ?? [];
+      for (final task in tasks) {
+        final icon = task.status == 'completed'
+            ? '[x]'
+            : task.status == 'in_progress'
+                ? '[~]'
+                : '[ ]';
+        buffer.writeln('   $icon [${task.id}] ${task.title}');
+        if (task.content.isNotEmpty) {
+          buffer.writeln('      ${task.content}');
+        }
       }
     }
 
-    // 未分组的活跃项
-    final inProgress =
-        ungrouped.where((t) => t.status == 'in_progress').toList();
-    final pending = ungrouped.where((t) => t.status == 'pending').toList();
-
-    if (inProgress.isNotEmpty) {
+    if (completedTopics.isNotEmpty) {
       buffer.writeln();
-      buffer.writeln('### In Progress');
-      for (final t in inProgress) {
-        buffer.writeln('  - [${t.id}] ${t.content}');
-      }
-    }
-
-    if (pending.isNotEmpty) {
-      buffer.writeln();
-      buffer.writeln('### Pending');
-      for (final t in pending) {
-        buffer.writeln('  - [${t.id}] ${t.content}');
-      }
-    }
-
-    if (completedItems.isNotEmpty) {
-      buffer.writeln();
-      buffer.writeln('### Completed (${completedItems.length})');
-      for (final t in completedItems) {
-        buffer.writeln('  - [${t.id}] ${t.content}');
+      buffer.writeln('### Completed (${completedTopics.length})');
+      for (final topic in completedTopics) {
+        buffer.writeln('  - [${topic.id}] ${topic.title}');
       }
     }
 
@@ -339,37 +311,70 @@ class TodoManageTool extends AgentTool {
       return ToolResult.error('id is required for update action');
     }
 
-    final statusStr = arguments['status'] as String?;
+    final title = arguments['title'] as String?;
     final content = arguments['content'] as String?;
 
-    if (statusStr == null && (content == null || content.isEmpty)) {
+    if ((title == null || title.isEmpty) && (content == null || content.isEmpty)) {
       return ToolResult.error(
-          'At least one of status or content is required for update action');
+          'At least one of title or content is required for update action');
     }
 
+    await updateTopicContent?.call(id, title: title, description: content);
+
+    broadcastEvent?.call('todoTopicChanged', {
+      'action': 'updated',
+      'topicId': id,
+    });
+
+    return ToolResult.success(
+      'Todo topic updated: [$id]${title != null ? ' title=$title' : ''}'
+      '${content != null ? ' description updated' : ''}',
+    );
+  }
+
+  Future<ToolResult> _updateTask(Map<String, dynamic> arguments) async {
+    final taskId = arguments['task_id'] as String?;
+    if (taskId == null || taskId.isEmpty) {
+      return ToolResult.error('task_id is required for update_task action');
+    }
+
+    final statusStr = arguments['status'] as String?;
+    final title = arguments['task_title'] as String?;
+    final content = arguments['task_content'] as String?;
+
+    if (statusStr == null &&
+        (title == null || title.isEmpty) &&
+        (content == null || content.isEmpty)) {
+      return ToolResult.error(
+          'At least one of status, task_title, or task_content is required for update_task action');
+    }
+
+    // 获取 topicId 用于重新计算主题状态
+    // 先更新内容
+    if ((title != null && title.isNotEmpty) ||
+        (content != null && content.isNotEmpty)) {
+      await updateTaskItemContent?.call(taskId, title: title, content: content);
+    }
+
+    // 更新状态
     if (statusStr != null) {
       if (!['pending', 'in_progress', 'completed'].contains(statusStr)) {
         return ToolResult.error(
           'Invalid status: $statusStr. Use pending, in_progress, or completed.',
         );
       }
-      await updateTodoStatus?.call(id, statusStr);
+      await updateTaskItemStatus?.call(taskId, statusStr);
     }
 
-    if (content != null && content.isNotEmpty) {
-      await updateTodoContent?.call(id, content);
-    }
-
-    broadcastEvent?.call('todoChanged', {
+    broadcastEvent?.call('todoTaskItemChanged', {
       'action': 'updated',
-      'todoId': id,
+      'taskId': taskId,
       if (statusStr != null) 'status': statusStr,
     });
 
     return ToolResult.success(
-      'Todo updated: [$id]${
-        statusStr != null ? ' status=$statusStr' : ''
-      }${content != null ? ' content=$content' : ''}',
+      'Task updated: [$taskId]${statusStr != null ? ' status=$statusStr' : ''}'
+      '${title != null ? ' title=$title' : ''}${content != null ? ' content updated' : ''}',
     );
   }
 
@@ -379,146 +384,42 @@ class TodoManageTool extends AgentTool {
       return ToolResult.error('id is required for remove action');
     }
 
-    await removeTodo?.call(id);
+    await removeTopic?.call(id);
 
-    broadcastEvent?.call('todoChanged', {
+    broadcastEvent?.call('todoTopicChanged', {
       'action': 'removed',
-      'todoId': id,
+      'topicId': id,
     });
 
-    return ToolResult.success('Todo removed: [$id]');
+    return ToolResult.success('Todo topic removed: [$id]');
+  }
+
+  Future<ToolResult> _removeTask(Map<String, dynamic> arguments) async {
+    final taskId = arguments['task_id'] as String?;
+    if (taskId == null || taskId.isEmpty) {
+      return ToolResult.error('task_id is required for remove_task action');
+    }
+
+    await removeTaskItem?.call(taskId);
+
+    broadcastEvent?.call('todoTaskItemChanged', {
+      'action': 'removed',
+      'taskId': taskId,
+    });
+
+    return ToolResult.success('Task removed: [$taskId]');
   }
 
   Future<ToolResult> _clear() async {
-    if (clearCompletedTodos == null) {
+    if (clearCompletedTopics == null) {
       return ToolResult.error('Todo operations not available');
     }
-    await clearCompletedTodos!(employeeId!);
+    await clearCompletedTopics!(employeeId!);
 
-    broadcastEvent?.call('todoChanged', {
+    broadcastEvent?.call('todoTopicChanged', {
       'action': 'cleared',
     });
 
-    return ToolResult.success('All completed items cleared.');
-  }
-
-  Future<ToolResult> _createGroup(Map<String, dynamic> arguments) async {
-    final name = arguments['name'] as String?;
-    if (name == null || name.isEmpty) {
-      return ToolResult.error('name is required for create_group action');
-    }
-
-    if (saveGroup == null || findGroupByName == null) {
-      return ToolResult.error('Group operations not available');
-    }
-
-    // 检查是否已存在同名分组
-    final existing = await findGroupByName!(employeeId!, name);
-    if (existing != null) {
-      return ToolResult.error('Group already exists: $name');
-    }
-
-    final now = DateTime.now();
-    final id = 'tg_${now.millisecondsSinceEpoch}';
-    final group = TodoGroupEntity(
-      id: id,
-      employeeId: employeeId!,
-      name: name,
-      createTime: now,
-      updateTime: now,
-    );
-    await saveGroup!(group);
-
-    broadcastEvent?.call('todoGroupChanged', {
-      'action': 'created',
-      'groupId': id,
-      'name': name,
-    });
-
-    return ToolResult.success('Group created: [$id] $name');
-  }
-
-  Future<ToolResult> _listGroups() async {
-    if (getGroups == null) {
-      return ToolResult.error('Group operations not available');
-    }
-
-    final groups = await getGroups!(employeeId!);
-    if (groups.isEmpty) {
-      return ToolResult.success('No groups found.');
-    }
-
-    final buffer = StringBuffer('## Groups (${groups.length})\n');
-    for (final g in groups) {
-      buffer.writeln('  - [${g.id}] ${g.name}');
-    }
-    return ToolResult.success(buffer.toString().trim());
-  }
-
-  Future<ToolResult> _renameGroup(Map<String, dynamic> arguments) async {
-    final groupId = arguments['group_id'] as String?;
-    final newName = arguments['new_name'] as String?;
-
-    if (groupId == null || groupId.isEmpty) {
-      return ToolResult.error('group_id is required for rename_group action');
-    }
-    if (newName == null || newName.isEmpty) {
-      return ToolResult.error('new_name is required for rename_group action');
-    }
-
-    await renameGroupFn?.call(groupId, newName);
-
-    broadcastEvent?.call('todoGroupChanged', {
-      'action': 'renamed',
-      'groupId': groupId,
-      'newName': newName,
-    });
-
-    return ToolResult.success('Group renamed: [$groupId] -> $newName');
-  }
-
-  Future<ToolResult> _deleteGroup(Map<String, dynamic> arguments) async {
-    final groupId = arguments['group_id'] as String?;
-    if (groupId == null || groupId.isEmpty) {
-      return ToolResult.error('group_id is required for delete_group action');
-    }
-
-    await removeGroup?.call(groupId);
-
-    broadcastEvent?.call('todoGroupChanged', {
-      'action': 'deleted',
-      'groupId': groupId,
-    });
-
-    return ToolResult.success(
-      'Group deleted: [$groupId]. Items moved to ungrouped.',
-    );
-  }
-
-  Future<ToolResult> _moveToGroup(Map<String, dynamic> arguments) async {
-    final todoId = arguments['id'] as String?;
-    final groupId = arguments['group_id'] as String?;
-
-    if (todoId == null || todoId.isEmpty) {
-      return ToolResult.error('id is required for move_to_group action');
-    }
-
-    if (moveTodoToGroup == null) {
-      return ToolResult.error('Todo operations not available');
-    }
-
-    // groupId 为 null 表示移出分组
-    await moveTodoToGroup!(todoId, groupId);
-
-    broadcastEvent?.call('todoChanged', {
-      'action': 'moved',
-      'todoId': todoId,
-      'groupId': groupId,
-    });
-
-    if (groupId != null) {
-      return ToolResult.success('Todo [$todoId] moved to group [$groupId]');
-    }
-    return ToolResult.success('Todo [$todoId] moved to ungrouped');
+    return ToolResult.success('All completed topics cleared.');
   }
 }

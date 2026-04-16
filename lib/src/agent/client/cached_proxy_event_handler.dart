@@ -48,8 +48,8 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
         break;
       case AgentEventType.unknown:
       case AgentEventType.sessionSummaryChanged:
-      case AgentEventType.todoChanged:
-      case AgentEventType.todoGroupChanged:
+      case AgentEventType.todoTopicChanged:
+      case AgentEventType.todoTaskItemChanged:
       case AgentEventType.specChanged:
       case AgentEventType.specGroupChanged:
         break;
