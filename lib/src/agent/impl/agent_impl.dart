@@ -937,13 +937,7 @@ class AgentImpl extends _AgentImplBase
 
     // Provider 配置：直接从 _chatAdapter 获取
     executor.getAgentConfig = (eid) async {
-      final providerConfig = _chatAdapter.getProviderConfig();
-      final context = _chatAdapter.currentContext;
-      return AgentRuntimeConfig(
-        providerConfig: providerConfig,
-        systemPrompt: context?['systemPrompt'] as String?,
-        projectContext: null,
-      );
+      return _buildAgentRuntimeConfig();
     };
 
     // 权限请求转发：通过 _permissionManager 转发
@@ -1006,7 +1000,12 @@ class AgentImpl extends _AgentImplBase
     );
   }
 
-  /// 注入 TaskComplexityTool 的 LLM 回调
+  /// 注入 TaskComplexityTool 的 SubAgentExecutor 回调
+  ///
+  /// 创建独立的 SubAgentExecutor，复用主 Agent 的 provider 配置、
+  /// 权限转发和文件读取回调，与 SpawnSubAgentTool 注入模式一致。
+  /// 子 Agent 仅使用只读工具（file_list, file_read, file_search 等），
+  /// 用于探索代码库以做出准确的复杂度评估。
   void _injectTaskComplexityCallbacks() {
     final tool = _toolRegistry.getTool('task_complexity');
     if (tool is! TaskComplexityTool) {
@@ -1017,12 +1016,70 @@ class AgentImpl extends _AgentImplBase
       return;
     }
 
-    tool.invokeLlm = (prompt) async {
-      return await _chatAdapter.invokeOnce(prompt);
+    final agentEmployeeId = employeeId;
+
+    // 工具注册器引用：供 TaskComplexityTool 筛选只读工具实例
+    tool.getAvailableTools = () => _toolRegistry.tools;
+
+    // 创建 SubAgentExecutor 并注入所有回调
+    final executor = SubAgentExecutor();
+
+    // Provider 配置：直接从 _chatAdapter 获取
+    executor.getAgentConfig = (eid) async {
+      return _buildAgentRuntimeConfig();
     };
 
+    // 权限请求转发：通过 _permissionManager 转发
+    executor.requestPermission = (request) async {
+      if (_permissionManager.onPermissionRequest == null) {
+        return PermissionDecision.deny;
+      }
+      return _permissionManager.onPermissionRequest!(request);
+    };
+
+    // 文件读取
+    executor.readFileContent = (filePath) async {
+      try {
+        return await File(filePath).readAsString();
+      } catch (e) {
+        return null;
+      }
+    };
+
+    tool.executor = executor;
+    tool.employeeId = agentEmployeeId;
+    tool.readFileContent = executor.readFileContent;
+
     _AgentImplBase._log.info(
-      'TaskComplexityTool injected (invokeLlm) for $employeeId',
+      'TaskComplexityTool fully injected (SubAgentExecutor + read-only tools) for $agentEmployeeId',
+    );
+  }
+
+  /// 从 _chatAdapter 构建 AgentRuntimeConfig，包含 provider、systemPrompt 和项目上下文
+  AgentRuntimeConfig _buildAgentRuntimeConfig() {
+    final providerConfig = _chatAdapter.getProviderConfig();
+    final context = _chatAdapter.currentContext;
+    final systemPrompt = context?['systemPrompt'] as String?;
+
+    // 提取项目相关字段，传递给子 Agent 以便注入项目信息到 system prompt
+    const projectKeys = [
+      'projectUuid', 'projectName', 'projectContext',
+      'workPath', 'additionalInfo', 'metadata',
+    ];
+    final projectContext = <String, dynamic>{};
+    if (context != null) {
+      for (final key in projectKeys) {
+        final value = context[key];
+        if (value != null) {
+          projectContext[key] = value;
+        }
+      }
+    }
+
+    return AgentRuntimeConfig(
+      providerConfig: providerConfig,
+      systemPrompt: systemPrompt,
+      projectContext: projectContext.isEmpty ? null : projectContext,
     );
   }
 

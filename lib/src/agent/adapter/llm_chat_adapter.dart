@@ -324,7 +324,7 @@ class LlmChatAdapter implements IChatAdapter {
             }
           }
           notReplyRecord.reset();
-          // 有工具调用 → 暂存 assistant 消息，不立即写入 session
+          // 有工具调用 → 立即写入 assistant 消息，让前端能及时看到 AI 的文本回复
           final chatToolCalls = llmResult.toolCalls
               .map((tc) => shared.ToolCall(
                     id: tc.id,
@@ -363,7 +363,10 @@ class LlmChatAdapter implements IChatAdapter {
             consecutiveDuplicateCount = 0;
           }
 
-          // 权限检查 + 并行执行工具（不再内部持久化）
+          // 立即持久化 assistant 消息（含文本 + toolCalls），前端可即时看到 AI 回复
+          memoryManager.addMessage(currentEmployeeUuid!, deviceId!, pendingAssistantMsg);
+
+          // 权限检查 + 并行执行工具
           final execResult = await executeToolCalls(
             llmResult.toolCalls,
             alreadyCallsSet: alreadyCallsSet,
@@ -376,8 +379,7 @@ class LlmChatAdapter implements IChatAdapter {
             return;
           }
 
-          // 原子写入：assistant + toolResults（同步执行，无竞态窗口）
-          memoryManager.addMessage(currentEmployeeUuid!, deviceId!, pendingAssistantMsg);
+          // 工具执行完毕后，持久化 toolResult 消息
           persistToolResults(execResult.results);
 
           // 推送工具调用结果事件 + 错误提示
