@@ -773,6 +773,39 @@ class AgentImpl extends _AgentImplBase
     ));
   }
 
+  @override
+  Future<void> updateTopicStatus(String topicId, String status) async {
+    final store = TodoStore(deviceId: deviceId);
+    store.updateTopicStatus(topicId, status);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.todoTopicChanged,
+      data: {'action': 'updated', 'topicId': topicId, 'status': status},
+      employeeId: employeeId,
+    ));
+  }
+
+  @override
+  Future<void> reorderTopics(List<String> topicIds) async {
+    final store = TodoStore(deviceId: deviceId);
+    store.reorderTopics(topicIds);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.todoTopicChanged,
+      data: {'action': 'reordered', 'topicIds': topicIds},
+      employeeId: employeeId,
+    ));
+  }
+
+  @override
+  Future<void> reorderTaskItems(List<String> taskItemIds) async {
+    final store = TodoStore(deviceId: deviceId);
+    store.reorderTaskItems(taskItemIds);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.todoTaskItemChanged,
+      data: {'action': 'reordered', 'taskItemIds': taskItemIds},
+      employeeId: employeeId,
+    ));
+  }
+
   /// 注入 SpecManageTool 回调
   void _injectSpecManageCallbacks() {
     final specTool = _toolRegistry.getTool('spec_manage');
@@ -893,6 +926,17 @@ class AgentImpl extends _AgentImplBase
     _eventController.add(AgentEvent(
       type: AgentEventType.specChanged,
       data: {'action': 'cleared'},
+      employeeId: employeeId,
+    ));
+  }
+
+  @override
+  Future<void> reorderSpecs(List<String> specIds) async {
+    final store = SpecStore(deviceId: deviceId);
+    store.reorderSpecs(specIds);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.specChanged,
+      data: {'action': 'reordered', 'specIds': specIds},
       employeeId: employeeId,
     ));
   }

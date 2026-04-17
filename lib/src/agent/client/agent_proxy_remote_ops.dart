@@ -276,6 +276,18 @@ class _RemoteOps {
     await _rpcUtil.deleteTopic(request);
   }
 
+  /// 更新主题状态
+  Future<void> updateTopicStatus(String topicId, String status) async {
+    final request = UpdateTopicStatusRequest(employeeId: _employeeId, topicId: topicId, status: status);
+    await _rpcUtil.updateTopicStatus(request);
+  }
+
+  /// 批量更新主题排序
+  Future<void> reorderTopics(List<String> topicIds) async {
+    final request = ReorderTopicsRequest(employeeId: _employeeId, topicIds: topicIds);
+    await _rpcUtil.reorderTopics(request);
+  }
+
   /// 清除已完成主题
   Future<void> clearCompletedTopics() async {
     final request = ClearCompletedTopicsRequest(employeeId: _employeeId);
@@ -316,6 +328,12 @@ class _RemoteOps {
   Future<void> deleteTaskItem(String taskId) async {
     final request = DeleteTaskItemRequest(employeeId: _employeeId, taskId: taskId);
     await _rpcUtil.deleteTaskItem(request);
+  }
+
+  /// 批量更新任务子项排序
+  Future<void> reorderTaskItems(List<String> taskItemIds) async {
+    final request = ReorderTaskItemsRequest(employeeId: _employeeId, taskItemIds: taskItemIds);
+    await _rpcUtil.reorderTaskItems(request);
   }
 
   // ===== Spec 管理 =====
@@ -372,6 +390,12 @@ class _RemoteOps {
   Future<void> clearCompletedSpecs() async {
     final request = ClearCompletedSpecsRequest(employeeId: _employeeId);
     await _rpcUtil.clearCompletedSpecs(request);
+  }
+
+  /// 批量更新 spec 排序
+  Future<void> reorderSpecs(List<String> specIds) async {
+    final request = ReorderSpecsRequest(employeeId: _employeeId, specIds: specIds);
+    await _rpcUtil.reorderSpecs(request);
   }
 
   /// 清空当前会话

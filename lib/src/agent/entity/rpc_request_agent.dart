@@ -534,6 +534,43 @@ class ClearCompletedTopicsRequest {
   }
 }
 
+/// 更新主题状态请求
+class UpdateTopicStatusRequest {
+  final String employeeId;
+  final String topicId;
+  final String status;
+  const UpdateTopicStatusRequest({
+    required this.employeeId,
+    required this.topicId,
+    required this.status,
+  });
+  Map<String, dynamic> toMap() => {'employeeId': employeeId, 'topicId': topicId, 'status': status};
+  factory UpdateTopicStatusRequest.fromMap(Map<String, dynamic> map) {
+    return UpdateTopicStatusRequest(
+      employeeId: map['employeeId'] as String,
+      topicId: map['topicId'] as String,
+      status: map['status'] as String,
+    );
+  }
+}
+
+/// 批量更新主题排序请求
+class ReorderTopicsRequest {
+  final String employeeId;
+  final List<String> topicIds;
+  const ReorderTopicsRequest({
+    required this.employeeId,
+    required this.topicIds,
+  });
+  Map<String, dynamic> toMap() => {'employeeId': employeeId, 'topicIds': topicIds};
+  factory ReorderTopicsRequest.fromMap(Map<String, dynamic> map) {
+    return ReorderTopicsRequest(
+      employeeId: map['employeeId'] as String,
+      topicIds: (map['topicIds'] as List).cast<String>(),
+    );
+  }
+}
+
 // ===== Todo TaskItem 管理请求 =====
 
 /// 获取主题下的任务子项请求
@@ -608,6 +645,23 @@ class DeleteTaskItemRequest {
     return DeleteTaskItemRequest(
       employeeId: map['employeeId'] as String,
       taskId: map['taskId'] as String,
+    );
+  }
+}
+
+/// 批量更新任务子项排序请求
+class ReorderTaskItemsRequest {
+  final String employeeId;
+  final List<String> taskItemIds;
+  const ReorderTaskItemsRequest({
+    required this.employeeId,
+    required this.taskItemIds,
+  });
+  Map<String, dynamic> toMap() => {'employeeId': employeeId, 'taskItemIds': taskItemIds};
+  factory ReorderTaskItemsRequest.fromMap(Map<String, dynamic> map) {
+    return ReorderTaskItemsRequest(
+      employeeId: map['employeeId'] as String,
+      taskItemIds: (map['taskItemIds'] as List).cast<String>(),
     );
   }
 }
@@ -711,6 +765,23 @@ class ClearCompletedSpecsRequest {
   Map<String, dynamic> toMap() => {'employeeId': employeeId};
   factory ClearCompletedSpecsRequest.fromMap(Map<String, dynamic> map) {
     return ClearCompletedSpecsRequest(employeeId: map['employeeId'] as String);
+  }
+}
+
+/// 批量更新 spec 排序请求
+class ReorderSpecsRequest {
+  final String employeeId;
+  final List<String> specIds;
+  const ReorderSpecsRequest({
+    required this.employeeId,
+    required this.specIds,
+  });
+  Map<String, dynamic> toMap() => {'employeeId': employeeId, 'specIds': specIds};
+  factory ReorderSpecsRequest.fromMap(Map<String, dynamic> map) {
+    return ReorderSpecsRequest(
+      employeeId: map['employeeId'] as String,
+      specIds: (map['specIds'] as List).cast<String>(),
+    );
   }
 }
 

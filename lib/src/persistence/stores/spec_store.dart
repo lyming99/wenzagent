@@ -130,6 +130,24 @@ class SpecStore {
     );
   }
 
+  /// 批量更新 spec 排序（事务）
+  void reorderSpecs(List<String> specIds) {
+    _db.execute('BEGIN TRANSACTION');
+    try {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      for (int i = 0; i < specIds.length; i++) {
+        _db.execute(
+          'UPDATE spec_items SET sort_order = ?, update_time = ? WHERE id = ?',
+          [i, now, specIds[i]],
+        );
+      }
+      _db.execute('COMMIT');
+    } catch (e) {
+      _db.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
   /// 按状态统计数量
   Map<String, int> countByStatus(String employeeId) {
     final resultSet = _db.select(

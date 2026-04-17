@@ -319,6 +319,20 @@ class AgentRpcUtil {
     return _rpcCall(AgentRpcConfig.methodDeleteTopic, request.toMap());
   }
 
+  /// 更新主题状态
+  Future<Map<String, dynamic>> updateTopicStatus(
+    UpdateTopicStatusRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodUpdateTopicStatus, request.toMap());
+  }
+
+  /// 批量更新主题排序
+  Future<Map<String, dynamic>> reorderTopics(
+    ReorderTopicsRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodReorderTopics, request.toMap());
+  }
+
   /// 清除已完成主题
   Future<Map<String, dynamic>> clearCompletedTopics(
     ClearCompletedTopicsRequest request,
@@ -354,6 +368,13 @@ class AgentRpcUtil {
     DeleteTaskItemRequest request,
   ) {
     return _rpcCall(AgentRpcConfig.methodDeleteTaskItem, request.toMap());
+  }
+
+  /// 批量更新任务子项排序
+  Future<Map<String, dynamic>> reorderTaskItems(
+    ReorderTaskItemsRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodReorderTaskItems, request.toMap());
   }
 
   // ===== Agent Spec 管理 =====
@@ -407,6 +428,13 @@ class AgentRpcUtil {
     ClearCompletedSpecsRequest request,
   ) {
     return _rpcCall(AgentRpcConfig.methodClearCompletedSpecs, request.toMap());
+  }
+
+  /// 批量更新 spec 排序
+  Future<Map<String, dynamic>> reorderSpecs(
+    ReorderSpecsRequest request,
+  ) {
+    return _rpcCall(AgentRpcConfig.methodReorderSpecs, request.toMap());
   }
 
   // ===== Agent 文件操作追踪 =====

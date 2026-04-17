@@ -394,6 +394,14 @@ abstract class IAgent {
   /// 删除任务子项
   Future<void> deleteTaskItem(String taskId);
 
+  /// 更新主题状态  Future<void> updateTopicStatus(String topicId, String status);
+
+  /// 批量更新主题排序
+  Future<void> reorderTopics(List<String> topicIds);
+
+  /// 批量更新任务子项排序
+  Future<void> reorderTaskItems(List<String> taskItemIds);
+
   // ===== Spec 管理 =====
 
   /// 获取活跃 spec 项（draft + pending + in_progress）
@@ -432,6 +440,9 @@ abstract class IAgent {
 
   /// 清除所有已完成的 spec 项
   Future<void> clearCompletedSpecs();
+
+  /// 批量更新 spec 排序
+  Future<void> reorderSpecs(List<String> specIds);
 
   // ===== 文件操作追踪 =====
 

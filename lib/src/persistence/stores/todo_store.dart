@@ -319,4 +319,56 @@ class TodoStore {
       [DateTime.now().millisecondsSinceEpoch, id],
     );
   }
+
+  /// 更新主题状态
+  void updateTopicStatus(String id, String status) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (status == 'completed') {
+      _db.execute(
+        "UPDATE todo_topics SET status = ?, completed_at = ?, update_time = ? WHERE id = ?",
+        [status, now, now, id],
+      );
+    } else {
+      _db.execute(
+        "UPDATE todo_topics SET status = ?, completed_at = NULL, update_time = ? WHERE id = ?",
+        [status, now, id],
+      );
+    }
+  }
+
+  /// 批量更新主题排序（事务）
+  void reorderTopics(List<String> topicIds) {
+    _db.execute('BEGIN TRANSACTION');
+    try {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      for (int i = 0; i < topicIds.length; i++) {
+        _db.execute(
+          'UPDATE todo_topics SET sort_order = ?, update_time = ? WHERE id = ?',
+          [i, now, topicIds[i]],
+        );
+      }
+      _db.execute('COMMIT');
+    } catch (e) {
+      _db.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  /// 批量更新任务子项排序（事务）
+  void reorderTaskItems(List<String> taskItemIds) {
+    _db.execute('BEGIN TRANSACTION');
+    try {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      for (int i = 0; i < taskItemIds.length; i++) {
+        _db.execute(
+          'UPDATE todo_task_items SET sort_order = ?, update_time = ? WHERE id = ?',
+          [i, now, taskItemIds[i]],
+        );
+      }
+      _db.execute('COMMIT');
+    } catch (e) {
+      _db.execute('ROLLBACK');
+      rethrow;
+    }
+  }
 }

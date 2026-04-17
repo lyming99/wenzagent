@@ -958,6 +958,22 @@ class AgentProxy {
     return _remoteOps!.deleteTopic(topicId);
   }
 
+  /// 更新主题状态
+  Future<void> updateTopicStatus(String topicId, String status) async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent!.updateTopicStatus(topicId, status);
+    }
+    return _remoteOps!.updateTopicStatus(topicId, status);
+  }
+
+  /// 批量更新主题排序
+  Future<void> reorderTopics(List<String> topicIds) async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent!.reorderTopics(topicIds);
+    }
+    return _remoteOps!.reorderTopics(topicIds);
+  }
+
   /// 清除已完成主题
   Future<void> clearCompletedTopics() async {
     if (isLocalMode && _localAgent != null) {
@@ -996,6 +1012,14 @@ class AgentProxy {
       return _localAgent!.deleteTaskItem(taskId);
     }
     return _remoteOps!.deleteTaskItem(taskId);
+  }
+
+  /// 批量更新任务子项排序
+  Future<void> reorderTaskItems(List<String> taskItemIds) async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent!.reorderTaskItems(taskItemIds);
+    }
+    return _remoteOps!.reorderTaskItems(taskItemIds);
   }
 
   // ===== Spec 管理 =====
@@ -1056,6 +1080,14 @@ class AgentProxy {
       return _localAgent!.clearCompletedSpecs();
     }
     return _remoteOps!.clearCompletedSpecs();
+  }
+
+  /// 批量更新 spec 排序
+  Future<void> reorderSpecs(List<String> specIds) async {
+    if (isLocalMode && _localAgent != null) {
+      return _localAgent!.reorderSpecs(specIds);
+    }
+    return _remoteOps!.reorderSpecs(specIds);
   }
 
   // ===== 文件操作追踪 =====

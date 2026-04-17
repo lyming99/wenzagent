@@ -638,6 +638,20 @@ class DeviceRpcHandler {
       return {'success': true};
     });
 
+    rpcServer.register(AgentRpcConfig.methodUpdateTopicStatus, (params) async {
+      final request = UpdateTopicStatusRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      await agent.updateTopicStatus(request.topicId, request.status);
+      return {'success': true};
+    });
+
+    rpcServer.register(AgentRpcConfig.methodReorderTopics, (params) async {
+      final request = ReorderTopicsRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      await agent.reorderTopics(request.topicIds);
+      return {'success': true};
+    });
+
     rpcServer.register(AgentRpcConfig.methodClearCompletedTopics, (params) async {
       final request = ClearCompletedTopicsRequest.fromMap(params);
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
@@ -671,6 +685,13 @@ class DeviceRpcHandler {
       final request = DeleteTaskItemRequest.fromMap(params);
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
       await agent.deleteTaskItem(request.taskId);
+      return {'success': true};
+    });
+
+    rpcServer.register(AgentRpcConfig.methodReorderTaskItems, (params) async {
+      final request = ReorderTaskItemsRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      await agent.reorderTaskItems(request.taskItemIds);
       return {'success': true};
     });
 
@@ -721,6 +742,13 @@ class DeviceRpcHandler {
       final request = ClearCompletedSpecsRequest.fromMap(params);
       final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
       await agent.clearCompletedSpecs();
+      return {'success': true};
+    });
+
+    rpcServer.register(AgentRpcConfig.methodReorderSpecs, (params) async {
+      final request = ReorderSpecsRequest.fromMap(params);
+      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+      await agent.reorderSpecs(request.specIds);
       return {'success': true};
     });
 

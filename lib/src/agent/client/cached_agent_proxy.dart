@@ -902,6 +902,14 @@ class CachedAgentProxy extends _CachedAgentProxyBase
   /// 删除主题
   Future<void> deleteTopic(String topicId) => _proxy.deleteTopic(topicId);
 
+  /// 更新主题状态
+  Future<void> updateTopicStatus(String topicId, String status) =>
+      _proxy.updateTopicStatus(topicId, status);
+
+  /// 批量更新主题排序
+  Future<void> reorderTopics(List<String> topicIds) =>
+      _proxy.reorderTopics(topicIds);
+
   /// 清除已完成主题
   Future<void> clearCompletedTopics() => _proxy.clearCompletedTopics();
 
@@ -919,6 +927,10 @@ class CachedAgentProxy extends _CachedAgentProxyBase
 
   /// 删除任务子项
   Future<void> deleteTaskItem(String taskId) => _proxy.deleteTaskItem(taskId);
+
+  /// 批量更新任务子项排序
+  Future<void> reorderTaskItems(List<String> taskItemIds) =>
+      _proxy.reorderTaskItems(taskItemIds);
 
   // ===== Spec 管理 =====
 
@@ -949,6 +961,10 @@ class CachedAgentProxy extends _CachedAgentProxyBase
 
   /// 清除所有已完成 spec
   Future<void> clearCompletedSpecs() => _proxy.clearCompletedSpecs();
+
+  /// 批量更新 spec 排序
+  Future<void> reorderSpecs(List<String> specIds) =>
+      _proxy.reorderSpecs(specIds);
 
   // ===== 文件操作追踪 =====
 

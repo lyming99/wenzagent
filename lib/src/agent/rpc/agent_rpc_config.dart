@@ -102,6 +102,8 @@ class AgentRpcConfig {
 
   static const String methodUpdateTopicContent = 'agentUpdateTopicContent';
   static const String methodDeleteTopic = 'agentDeleteTopic';
+  static const String methodUpdateTopicStatus = 'agentUpdateTopicStatus';
+  static const String methodReorderTopics = 'agentReorderTopics';
   static const String methodClearCompletedTopics = 'agentClearCompletedTopics';
 
   // ===== Agent Todo TaskItem 管理 =====
@@ -110,6 +112,7 @@ class AgentRpcConfig {
   static const String methodUpdateTaskItemStatus = 'agentUpdateTaskItemStatus';
   static const String methodUpdateTaskItemContent = 'agentUpdateTaskItemContent';
   static const String methodDeleteTaskItem = 'agentDeleteTaskItem';
+  static const String methodReorderTaskItems = 'agentReorderTaskItems';
 
   // ===== Agent Spec 管理 =====
 
@@ -123,6 +126,7 @@ class AgentRpcConfig {
   static const String methodUpdateSpecContent = 'agentUpdateSpecContent';
   static const String methodDeleteSpec = 'agentDeleteSpec';
   static const String methodClearCompletedSpecs = 'agentClearCompletedSpecs';
+  static const String methodReorderSpecs = 'agentReorderSpecs';
 
   // ===== Agent 文件操作追踪 =====
 
