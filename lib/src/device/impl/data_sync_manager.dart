@@ -1,3 +1,4 @@
+import '../../host/host_rpc_methods.dart';
 import '../../persistence/persistence.dart';
 import '../../service/service.dart';
 import '../../utils/logger.dart';

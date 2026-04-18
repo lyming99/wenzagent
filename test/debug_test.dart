@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:test/test.dart';
-import 'package:uuid/uuid.dart';
 import 'package:wenzagent/src/persistence/persistence.dart';
 import 'package:wenzagent/src/service/employee_manager.dart';
 
@@ -91,7 +90,7 @@ void main() {
             ? existing.deletedTime!.isAfter(remote.deletedTime!)
               ? (existing.deletedTime, existing.deleted)
               : (remote.deletedTime, remote.deleted)
-            : (null<DateTime?>(), 0)
+            : (null, 0)
     );
 
     print('merge result: dt=$dt, d=$d');
