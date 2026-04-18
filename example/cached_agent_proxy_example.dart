@@ -363,9 +363,10 @@ void main() async {
   }
 
   // --- 6.3 通过事件流监听排队变化 ---
-  // messageQueued 事件：消息进入队列时触发
-  // messageProcessing 事件：消息开始处理时触发
+  // messageStarted 事件：消息开始处理时触发
   // messageStatusChanged 事件：消息状态变更时触发
+  // streamDelta 事件：流式输出文本增量
+  // thinkingDelta 事件：LLM 思考内容增量
   // 这些事件已经在 cachedProxy 内部处理并触发 onMessagesChanged
 
   // ============================================================

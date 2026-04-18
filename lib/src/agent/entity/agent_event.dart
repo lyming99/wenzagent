@@ -27,14 +27,14 @@ enum AgentEventType {
   /// 确认响应
   confirmResponse,
 
-  /// 消息被引用回复
-  messageReplied,
+  /// 消息开始处理（消息从队列中取出，Agent 开始生成回复）
+  messageStarted,
 
-  /// 消息入队
-  messageQueued,
+  /// 流式输出文本增量（每个 token/chunk 一次，高频事件）
+  streamDelta,
 
-  /// 消息处理中（ChatAdapter 工具回调）
-  messageProcessing,
+  /// LLM 思考内容增量（如 DeepSeek-R1 reasoning_content）
+  thinkingDelta,
 
   /// 会话被清空
   sessionCleared,
@@ -51,8 +51,8 @@ enum AgentEventType {
   /// Spec 项变更
   specChanged,
 
-  /// Spec 分组变更
-  specGroupChanged,
+  /// 配置变更（provider/context/skills/mcp/project 等）
+  configChanged,
 
   /// 未知类型（兼容旧数据或外部扩展）
   unknown;
@@ -93,10 +93,17 @@ class AgentEvent {
     this.fromDeviceId,
   });
 
+  /// 安全解析 Map，兼容 JSON 反序列化的 _Map<dynamic, dynamic>
+  static Map<String, dynamic> _parseMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return {};
+  }
+
   factory AgentEvent.fromMap(Map<String, dynamic> map) {
     return AgentEvent(
       type: AgentEventType.fromString(map['type'] as String? ?? ''),
-      data: map['data'] as Map<String, dynamic>? ?? {},
+      data: _parseMap(map['data']),
       employeeId: map['employeeId'] as String?,
       fromDeviceId:
           map['fromDeviceId'] as String? ?? map['fromId'] as String?,

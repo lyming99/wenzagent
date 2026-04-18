@@ -172,12 +172,12 @@ class AgentNotificationHub {
 
   /// 接收本地 Agent 返回消息
   ///
-  /// [markUnread] 是否标记未读，默认 true
+  /// [markUnread] 是否标记未读，默认 false（本地消息默认不增加未读计数）
   void onLocalMessage({
     required AgentMessage message,
     required String employeeId,
     String? fromDeviceId,
-    bool markUnread = true,
+    bool markUnread = false,
   }) {
     if (_isDisposed) return;
 

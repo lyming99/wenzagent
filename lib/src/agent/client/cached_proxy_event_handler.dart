@@ -31,36 +31,42 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
       case AgentEventType.toolPermissionRequest:
         _handlePermissionRequest(data);
         break;
+      case AgentEventType.toolPermissionResponse:
+        _handlePermissionResponse(data);
+        break;
       case AgentEventType.confirmRequest:
         _handleConfirmRequest(data);
         break;
       case AgentEventType.confirmResponse:
         _handleConfirmResponse(data);
         break;
-      case AgentEventType.messageReplied:
-        _handleMessageReplied(data);
+      case AgentEventType.messageStarted:
+        _handleMessageStarted(data);
         break;
-      case AgentEventType.messageQueued:
-        _handleMessageQueued(data);
+      case AgentEventType.streamDelta:
+        // 流式增量事件：透传给上层 UI，不修改本地缓存
+        // UI 层通过 onEvent 流直接消费此事件实现打字机效果
         break;
-      case AgentEventType.messageProcessing:
-        _handleMessageProcessing(data);
+      case AgentEventType.thinkingDelta:
+        // 思考增量事件：透传给上层 UI，不修改本地缓存
+        // UI 层通过 onEvent 流直接消费此事件展示思考过程
         break;
       case AgentEventType.sessionCleared:
         _handleSessionCleared(data);
         break;
-      case AgentEventType.toolPermissionResponse:
-        _handlePermissionResponse(data);
-        break;
-      case AgentEventType.unknown:
       case AgentEventType.sessionSummaryChanged:
-      case AgentEventType.todoTopicChanged:
-      case AgentEventType.todoTaskItemChanged:
-      case AgentEventType.specChanged:
-      case AgentEventType.specGroupChanged:
+        _handleSessionSummaryChanged(data);
         break;
       case AgentEventType.messageReadStatusChanged:
         _handleMessageReadStatusChanged(data);
+        break;
+      case AgentEventType.todoTopicChanged:
+      case AgentEventType.todoTaskItemChanged:
+      case AgentEventType.specChanged:
+      case AgentEventType.configChanged:
+        // 数据变更事件：透传给上层，由 UI 决定是否刷新
+        break;
+      case AgentEventType.unknown:
         break;
     }
   }
@@ -301,13 +307,21 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
   }
 
   /// 处理权限响应事件（其他设备已授权/拒绝，本地需清除缓存）
+  ///
+  /// 增强：解析 decision 和 scope 字段，记录详细日志。
+  /// 如果 scope 为持久化授权（非 once），后续可通过 syncFromRemote
+  /// 获取最新的权限配置。
   void _handlePermissionResponse(Map<String, dynamic> data) {
     final requestId = data['requestId'] as String?;
     if (requestId == null) return;
 
+    final decision = data['decision'] as String?;
+    final scope = data['scope'] as String?;
+
     final removed = _pendingPermissionRequests.remove(requestId);
     if (removed != null) {
-      _CachedAgentProxyBase._log.info('收到权限响应（其他设备已处理）: $requestId');
+      _CachedAgentProxyBase._log.info(
+        '收到权限响应（其他设备已处理）: $requestId, decision=$decision, scope=$scope');
       _notifyMessagesChanged();
     }
   }
@@ -338,72 +352,18 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
     }
   }
 
-  /// 处理消息被回复事件
-  Future<void> _handleMessageReplied(Map<String, dynamic> data) async {
-    final originalMessageId = data['originalMessageId'] as String?;
-    final replyMessageId = data['replyMessageId'] as String?;
-
-    if (originalMessageId == null || replyMessageId == null) return;
-
-    _CachedAgentProxyBase._log.debug('消息被回复: $originalMessageId -> $replyMessageId');
-
-    // 从数据库查找并更新原消息
-    final existing = await _messageStore.getMessage(
-        _deviceId, originalMessageId);
-    if (existing != null) {
-      final updatedChatMsg = existing.copyWith(
-        metadata: {
-          ...?existing.metadata,
-          'replyMessageId': replyMessageId,
-          'replied': true,
-          'updateTime': DateTime.now().toIso8601String(),
-        },
-      );
-      await _messageStore.updateMessage(_deviceId, updatedChatMsg);
-      _notifyMessagesChanged();
-    }
-
-    // 立即同步消息列表以获取最新的回复内容
-    _syncMessagesFromRemote();
-  }
-
-  /// 处理队列中消息事件
-  Future<void> _handleMessageQueued(Map<String, dynamic> data) async {
-    final messageId = data['messageId'] as String?;
-    final queuePosition = data['queuePosition'] as int?;
-
-    if (messageId == null) return;
-
-    _CachedAgentProxyBase._log.debug('消息进入队列: $messageId, 位置: $queuePosition');
-
-    // 从数据库查找并更新消息状态
-    final existing = await _messageStore.getMessage(
-        _deviceId, messageId);
-    if (existing != null) {
-      final updatedChatMsg = existing.copyWith(
-        metadata: {
-          ...?existing.metadata,
-          'queuePosition': queuePosition,
-          'updateTime': DateTime.now().toIso8601String(),
-        },
-      );
-      await _messageStore.updateMessage(_deviceId, updatedChatMsg);
-      await _messageStore.updateMessageStatus(
-        _deviceId, messageId, shared.MessageStatus.fromString('queued'),
-      );
-      _notifyMessagesChanged();
-    }
-  }
-
-  /// 处理消息处理中事件
-  void _handleMessageProcessing(Map<String, dynamic> data) {
+  /// 处理消息开始处理事件
+  ///
+  /// 当 Agent 从队列中取出消息开始处理时触发，
+  /// 更新本地消息状态为 processing，通知 UI 显示"正在输入"。
+  void _handleMessageStarted(Map<String, dynamic> data) {
     final messageId = data['messageId'] as String?;
 
     if (messageId == null) return;
 
     _CachedAgentProxyBase._log.debug('消息开始处理: $messageId');
 
-    // 更新消息状态为processing
+    // 更新消息状态为 processing
     _updateMessageStatus(messageId, 'processing');
   }
 
@@ -435,6 +395,17 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
     _notifyMessagesChanged();
 
     _CachedAgentProxyBase._log.info('本地会话已清空，水位线: clearSeq=lastSeq=$maxSeq');
+  }
+
+  /// 处理会话摘要变更事件
+  ///
+  /// 收到远程广播的会话摘要后，触发本地摘要同步，
+  /// 确保 UI 能及时更新未读计数和最新消息预览。
+  void _handleSessionSummaryChanged(Map<String, dynamic> data) {
+    _CachedAgentProxyBase._log.debug('收到会话摘要变更事件');
+
+    // 从远程同步最新摘要，更新本地未读计数和最新消息缓存
+    _syncSessionSummaryFromRemote();
   }
 
   /// 处理消息已读状态变更事件（来自远程 Agent 广播或其他设备）

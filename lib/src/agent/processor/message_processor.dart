@@ -1,4 +1,4 @@
-﻿import '../agent_state.dart';
+import '../agent_state.dart';
 import '../entity/entity.dart';
 import '../tool/permission_manager.dart';
 import '../tool/tool_registry.dart';
@@ -165,6 +165,18 @@ abstract class IChatAdapter {
   /// 设置工具事件回调
   void setToolEventCallback(void Function(ToolEvent event)? callback);
 
+  /// 流式输出文本增量回调（每个 token/chunk 一次）
+  ///
+  /// 由 [AgentImpl] 注入，用于发射 `streamDelta` AgentEvent。
+  /// 回调参数为当前 chunk 文本内容。
+  void Function(String chunk)? onStreamDelta;
+
+  /// LLM 思考内容增量回调（如 DeepSeek-R1 reasoning_content）
+  ///
+  /// 由 [AgentImpl] 注入，用于发射 `thinkingDelta` AgentEvent。
+  /// 回调参数为当前思考增量文本。
+  void Function(String delta)? onThinkingDelta;
+
   /// 更新消息状态（用于持久化）
   void updateMessageStatus(
     String messageId,
@@ -231,6 +243,13 @@ class MessageProcessor {
   /// 数据已经落盘（如 SQLite 持久化、seq 已分配）。
   /// 这解决了 async* generator 被取消导致 post-loop 代码无法执行的问题。
   Future<void> Function()? onBeforeMessageCompleted;
+
+  /// 消息开始处理回调（从队列中取出后触发）
+  ///
+  /// 在消息状态变更为 processing 之后调用，
+  /// 用于发射 `messageStarted` AgentEvent。
+  /// 回调参数为 (messageId, messageData)。
+  void Function(String messageId, Map<String, dynamic> messageData)? onMessageStarted;
 
   MessageProcessor({
     required StreamMessageFunc streamMessage,
@@ -418,6 +437,9 @@ class MessageProcessor {
       item.messageId,
       MessageProcessingStatus.processing,
     ); // 同步追踪器状态
+
+    // 通知消息开始处理（发射 messageStarted 事件）
+    onMessageStarted?.call(item.messageId, item.messageData);
 
     _processMessage(item.messageId, MessageInput.fromMap(item.messageData));
   }

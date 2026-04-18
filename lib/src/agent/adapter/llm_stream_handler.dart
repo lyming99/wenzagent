@@ -127,6 +127,7 @@ extension _StreamHandler on LlmChatAdapter {
             if (chunk.isNotEmpty) {
               aiContentBuffer.write(chunk);
               onChunk?.call(chunk);
+              onStreamDelta?.call(chunk);
             }
             break;
           case llm.ToolCallDeltaEvent():
@@ -135,6 +136,7 @@ extension _StreamHandler on LlmChatAdapter {
           case llm.ThinkingDeltaEvent():
             if (event.delta.isNotEmpty) {
               thinkingContentBuffer.write(event.delta);
+              onThinkingDelta?.call(event.delta);
             }
             break;
           case llm.CompletionEvent():

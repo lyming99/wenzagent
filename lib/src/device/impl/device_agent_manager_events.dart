@@ -142,6 +142,22 @@ extension DeviceAgentManagerEvents on DeviceAgentManager {
         msgType = LanMessageType.agentSessionCleared;
       case AgentEventType.sessionSummaryChanged:
         msgType = LanMessageType.agentSessionSummaryChanged;
+      case AgentEventType.confirmRequest:
+      case AgentEventType.confirmResponse:
+        msgType = LanMessageType.agentConfirmChanged;
+      case AgentEventType.todoTopicChanged:
+      case AgentEventType.todoTaskItemChanged:
+        msgType = LanMessageType.agentTodoChanged;
+      case AgentEventType.specChanged:
+        msgType = LanMessageType.agentSpecChanged;
+      case AgentEventType.configChanged:
+        msgType = LanMessageType.agentConfigChanged;
+      case AgentEventType.messageStarted:
+        msgType = LanMessageType.agentMessageStatusChanged;
+      // streamDelta 和 thinkingDelta 为高频事件，仅本地使用，不广播到 LAN
+      case AgentEventType.streamDelta:
+      case AgentEventType.thinkingDelta:
+        return;
       default:
         return;
     }

@@ -62,6 +62,18 @@ enum LanMessageType {
   /// 会话摘要变更（跨设备同步未读计数 + 最新消息）
   agentSessionSummaryChanged,
 
+  /// Agent 确认请求/响应变更（跨设备同步）
+  agentConfirmChanged,
+
+  /// Agent Todo 变更（跨设备同步）
+  agentTodoChanged,
+
+  /// Agent Spec 变更（跨设备同步）
+  agentSpecChanged,
+
+  /// Agent 配置变更（跨设备同步）
+  agentConfigChanged,
+
   // ===== AI Employee 消息类型 =====
 
   /// AI 聊天请求

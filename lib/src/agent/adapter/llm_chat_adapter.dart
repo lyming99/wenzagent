@@ -154,6 +154,14 @@ class LlmChatAdapter implements IChatAdapter {
   /// 工具事件回调
   void Function(ToolEvent event)? _toolEventCallback;
 
+  /// 流式输出文本增量回调（由 AgentImpl 注入，发射 streamDelta 事件）
+  @override
+  void Function(String chunk)? onStreamDelta;
+
+  /// LLM 思考内容增量回调（由 AgentImpl 注入，发射 thinkingDelta 事件）
+  @override
+  void Function(String delta)? onThinkingDelta;
+
   /// 当前正在并行执行的工具列表（用于取消）
   final List<AgentTool> _runningTools = [];
 

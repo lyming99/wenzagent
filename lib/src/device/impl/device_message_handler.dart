@@ -95,6 +95,10 @@ class DeviceMessageHandler {
       case LanMessageType.toolCallResult:
       case LanMessageType.agentPermissionChanged:
       case LanMessageType.agentSessionCleared:
+      case LanMessageType.agentConfirmChanged:
+      case LanMessageType.agentTodoChanged:
+      case LanMessageType.agentSpecChanged:
+      case LanMessageType.agentConfigChanged:
         _handleAgentEvent(msg);
       case LanMessageType.agentMessageReadStatus:
       case LanMessageType.agentSessionSummaryChanged:

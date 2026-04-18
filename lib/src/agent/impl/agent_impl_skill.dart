@@ -14,16 +14,31 @@ mixin _AgentImplSkill on _AgentImplBase {
   Future<void> addSkill(Skill skill) async {
     if (_skillManager == null) return;
     await _skillManager!.loadSkill(skill);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.configChanged,
+      data: {'configType': 'skills', 'action': 'added', 'skillId': skill.id},
+      employeeId: employeeId,
+    ));
   }
 
   /// 运行时移除技能
   Future<void> removeSkill(String skillId) async {
     await _skillManager?.unloadSkill(skillId);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.configChanged,
+      data: {'configType': 'skills', 'action': 'removed', 'skillId': skillId},
+      employeeId: employeeId,
+    ));
   }
 
   /// 运行时重新加载技能
   Future<void> reloadSkill(String skillId) async {
     await _skillManager?.reloadSkill(skillId);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.configChanged,
+      data: {'configType': 'skills', 'action': 'reloaded', 'skillId': skillId},
+      employeeId: employeeId,
+    ));
   }
 
   /// 初始化技能系统

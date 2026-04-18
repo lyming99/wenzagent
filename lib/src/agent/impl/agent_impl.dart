@@ -266,6 +266,26 @@ class AgentImpl extends _AgentImplBase
     _chatAdapter.setToolRegistry(_toolRegistry);
     _chatAdapter.setPermissionManager(_permissionManager);
 
+    // 注入流式输出增量回调：发射 streamDelta AgentEvent
+    _chatAdapter.onStreamDelta = (chunk) {
+      if (_status == AgentStatus.disposed) return;
+      _eventController.add(AgentEvent(
+        type: AgentEventType.streamDelta,
+        data: {'content': chunk},
+        employeeId: employeeId,
+      ));
+    };
+
+    // 注入思考内容增量回调：发射 thinkingDelta AgentEvent
+    _chatAdapter.onThinkingDelta = (delta) {
+      if (_status == AgentStatus.disposed) return;
+      _eventController.add(AgentEvent(
+        type: AgentEventType.thinkingDelta,
+        data: {'content': delta},
+        employeeId: employeeId,
+      ));
+    };
+
     // 设置权限回调：通过事件流广播权限请求
     _permissionManager.onPermissionRequest = (request) async {
       final completer = Completer<PermissionDecision>();
@@ -351,6 +371,20 @@ class AgentImpl extends _AgentImplBase
     // 消息完成前回调：消息已通过 memoryManager.addMessage 同步持久化，无需等待
     _processor!.onBeforeMessageCompleted = () async {
       // no-op: addMessage 已同步写 DB
+    };
+
+    // 消息开始处理回调：发射 messageStarted AgentEvent
+    _processor!.onMessageStarted = (messageId, messageData) {
+      _eventController.add(AgentEvent(
+        type: AgentEventType.messageStarted,
+        data: {
+          'messageId': messageId,
+          'role': messageData['role'],
+          'type': messageData['type'],
+          'content': messageData['content'],
+        },
+        employeeId: employeeId,
+      ));
     };
 
     // 监听消息处理状态变更
@@ -461,12 +495,22 @@ class AgentImpl extends _AgentImplBase
   Future<void> setContext(Map<String, dynamic> contextData) async {
     _touch();
     _chatAdapter.setContext(contextData);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.configChanged,
+      data: {'configType': 'context', 'action': 'updated'},
+      employeeId: employeeId,
+    ));
   }
 
   @override
   Future<void> clearContext() async {
     _touch();
     _chatAdapter.clearContext();
+    _eventController.add(AgentEvent(
+      type: AgentEventType.configChanged,
+      data: {'configType': 'context', 'action': 'cleared'},
+      employeeId: employeeId,
+    ));
   }
 
   @override
@@ -482,6 +526,11 @@ class AgentImpl extends _AgentImplBase
     await _withLock(() async {
       await _chatAdapter.updateProvider(providerConfig.toMap());
     });
+    _eventController.add(AgentEvent(
+      type: AgentEventType.configChanged,
+      data: {'configType': 'provider', 'action': 'updated'},
+      employeeId: employeeId,
+    ));
   }
 
   @override
@@ -496,6 +545,11 @@ class AgentImpl extends _AgentImplBase
   Future<void> setProject(ProjectData? projectData) async {
     _touch();
     await _chatAdapter.updateProjectContext(projectData?.toMap());
+    _eventController.add(AgentEvent(
+      type: AgentEventType.configChanged,
+      data: {'configType': 'project', 'action': projectData != null ? 'updated' : 'cleared'},
+      employeeId: employeeId,
+    ));
   }
 
   @override
@@ -509,16 +563,31 @@ class AgentImpl extends _AgentImplBase
   @override
   void registerTool(AgentTool tool) {
     _toolRegistry.registerTool(tool);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.configChanged,
+      data: {'configType': 'tools', 'action': 'added', 'toolName': tool.name},
+      employeeId: employeeId,
+    ));
   }
 
   @override
   void registerTools(List<AgentTool> tools) {
     _toolRegistry.registerTools(tools);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.configChanged,
+      data: {'configType': 'tools', 'action': 'added', 'count': tools.length},
+      employeeId: employeeId,
+    ));
   }
 
   @override
   void unregisterTool(String name) {
     _toolRegistry.unregisterTool(name);
+    _eventController.add(AgentEvent(
+      type: AgentEventType.configChanged,
+      data: {'configType': 'tools', 'action': 'removed', 'toolName': name},
+      employeeId: employeeId,
+    ));
   }
 
   @override
