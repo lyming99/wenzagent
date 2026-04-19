@@ -871,6 +871,136 @@ void main() {
       expect(summary.lastMsgContent, equals('正确数据'));
       expect(summary.lastMsgTime, equals(1000));
     });
+
+    test('rebuildSummary 保留已有的 pending_permission', () {
+      // 先创建摘要并设置 pending_permission
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-1',
+        createTime: 1000,
+        seq: 1,
+        content: '消息1',
+      );
+      store.setPendingPermission(
+        'emp-1',
+        deviceId,
+        '{"type":"permission","requestId":"req-1","tool":"file_read"}',
+      );
+
+      // 确认 pending 已设置
+      var summary = store.getSummary('emp-1', deviceId: deviceId);
+      expect(summary!.hasPendingPermission, isTrue);
+      final permTime = summary.pendingPermissionTime;
+
+      // 插入消息到 messages 表（rebuildSummary 需要）
+      MessageSchema.create(db);
+      insertTestMessage(db,
+          uuid: 'msg-1',
+          employeeId: 'emp-1',
+          deviceId: deviceId,
+          role: 'assistant',
+          isRead: 0,
+          seq: 1,
+          createTime: 1000,
+          content: '消息1');
+
+      // 重建摘要
+      store.rebuildSummary('emp-1', deviceId: deviceId);
+
+      // pending_permission 应该被保留
+      summary = store.getSummary('emp-1', deviceId: deviceId);
+      expect(summary!.hasPendingPermission, isTrue);
+      expect(summary.pendingPermission,
+          equals('{"type":"permission","requestId":"req-1","tool":"file_read"}'));
+      expect(summary.pendingPermissionTime, equals(permTime));
+    });
+
+    test('rebuildSummary 保留已有的 pending_confirm', () {
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-1',
+        createTime: 1000,
+        seq: 1,
+        content: '消息1',
+      );
+      store.setPendingConfirm(
+        'emp-1',
+        deviceId,
+        '{"type":"confirm","requestId":"conf-1","message":"确认删除？"}',
+      );
+
+      var summary = store.getSummary('emp-1', deviceId: deviceId);
+      expect(summary!.hasPendingConfirm, isTrue);
+      final confTime = summary.pendingConfirmTime;
+
+      MessageSchema.create(db);
+      insertTestMessage(db,
+          uuid: 'msg-1',
+          employeeId: 'emp-1',
+          deviceId: deviceId,
+          role: 'assistant',
+          isRead: 0,
+          seq: 1,
+          createTime: 1000,
+          content: '消息1');
+
+      store.rebuildSummary('emp-1', deviceId: deviceId);
+
+      summary = store.getSummary('emp-1', deviceId: deviceId);
+      expect(summary!.hasPendingConfirm, isTrue);
+      expect(summary.pendingConfirm,
+          equals('{"type":"confirm","requestId":"conf-1","message":"确认删除？"}'));
+      expect(summary.pendingConfirmTime, equals(confTime));
+    });
+
+    test('rebuildSummary 同时保留 permission 和 confirm', () {
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-1',
+        createTime: 1000,
+        seq: 1,
+        content: '消息1',
+      );
+      store.setPendingPermission(
+        'emp-1',
+        deviceId,
+        '{"type":"permission","requestId":"req-1"}',
+      );
+      store.setPendingConfirm(
+        'emp-1',
+        deviceId,
+        '{"type":"confirm","requestId":"conf-1"}',
+      );
+
+      MessageSchema.create(db);
+      insertTestMessage(db,
+          uuid: 'msg-1',
+          employeeId: 'emp-1',
+          deviceId: deviceId,
+          role: 'assistant',
+          isRead: 0,
+          seq: 1,
+          createTime: 1000,
+          content: '消息1');
+
+      store.rebuildSummary('emp-1', deviceId: deviceId);
+
+      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      expect(summary!.hasPendingPermission, isTrue);
+      expect(summary.hasPendingConfirm, isTrue);
+      expect(summary.hasPendingRequest, isTrue);
+      expect(summary.pendingPermission, contains('req-1'));
+      expect(summary.pendingConfirm, contains('conf-1'));
+    });
   });
 
   // ═══════════════════════════════════════════════════
@@ -1685,6 +1815,625 @@ void main() {
       expect(summary.pendingPermissionTime, equals(4000));
       expect(summary.pendingConfirm, equals('{"type":"confirm","id":"conf-new"}'));
       expect(summary.pendingConfirmTime, equals(4500));
+    });
+  });
+
+  // ═══════════════════════════════════════════════════
+  // onMessagesAdded 测试
+  // ═══════════════════════════════════════════════════
+
+  group('onMessagesAdded', () {
+    test('批量写入多条消息，所有摘要正确更新', () {
+      store.onMessagesAdded([
+        {
+          'employeeId': 'emp-1',
+          'deviceId': deviceId,
+          'role': 'assistant',
+          'isRead': false,
+          'messageId': 'msg-1',
+          'createTime': 1000,
+          'seq': 1,
+          'content': '消息1',
+        },
+        {
+          'employeeId': 'emp-1',
+          'deviceId': deviceId,
+          'role': 'assistant',
+          'isRead': false,
+          'messageId': 'msg-2',
+          'createTime': 2000,
+          'seq': 2,
+          'content': '消息2',
+        },
+        {
+          'employeeId': 'emp-2',
+          'deviceId': deviceId,
+          'role': 'assistant',
+          'isRead': false,
+          'messageId': 'msg-3',
+          'createTime': 3000,
+          'seq': 1,
+          'content': '消息3',
+        },
+      ]);
+
+      // emp-1: 2 条未读
+      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
+      final s1 = store.getSummary('emp-1', deviceId: deviceId);
+      expect(s1!.lastMsgId, equals('msg-2'));
+      expect(s1.lastMsgContent, equals('消息2'));
+
+      // emp-2: 1 条未读
+      expect(store.getUnreadCount('emp-2', deviceId: deviceId), equals(1));
+      final s2 = store.getSummary('emp-2', deviceId: deviceId);
+      expect(s2!.lastMsgId, equals('msg-3'));
+    });
+
+    test('空列表不操作', () {
+      store.onMessagesAdded([]);
+      expect(store.getAllSummaries(), isEmpty);
+    });
+
+    test('事务一致性：批量写入后全部成功', () {
+      store.onMessagesAdded([
+        {
+          'employeeId': 'emp-1',
+          'deviceId': deviceId,
+          'role': 'assistant',
+          'isRead': false,
+          'messageId': 'msg-1',
+          'createTime': 1000,
+          'seq': 1,
+          'content': '消息1',
+        },
+        {
+          'employeeId': 'emp-1',
+          'deviceId': deviceId,
+          'role': 'assistant',
+          'isRead': false,
+          'messageId': 'msg-2',
+          'createTime': 2000,
+          'seq': 2,
+          'content': '消息2',
+        },
+      ]);
+
+      // 两消息都写入成功
+      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
+      expect(store.getSummary('emp-1', deviceId: deviceId)!.lastMsgId,
+          equals('msg-2'));
+    });
+  });
+
+  // ═══════════════════════════════════════════════════
+  // deleteSummary 测试
+  // ═══════════════════════════════════════════════════
+
+  group('deleteSummary', () {
+    test('删除已存在的摘要', () {
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-1',
+        createTime: 1000,
+        seq: 1,
+        content: '消息1',
+      );
+
+      expect(store.getSummary('emp-1', deviceId: deviceId), isNotNull);
+      expect(store.getTotalUnreadCount(), equals(1));
+
+      store.deleteSummary('emp-1', deviceId: deviceId);
+
+      expect(store.getSummary('emp-1', deviceId: deviceId), isNull);
+      expect(store.getTotalUnreadCount(), equals(0));
+    });
+
+    test('删除不存在的摘要无副作用', () {
+      // 不抛异常
+      store.deleteSummary('emp-nonexistent', deviceId: deviceId);
+
+      expect(store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
+      expect(store.getAllSummaries(), isEmpty);
+    });
+
+    test('删除一个摘要不影响其他摘要', () {
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-1',
+        createTime: 1000,
+        seq: 1,
+        content: '消息1',
+      );
+      store.onMessageAdded(
+        employeeId: 'emp-2',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-2',
+        createTime: 2000,
+        seq: 1,
+        content: '消息2',
+      );
+
+      store.deleteSummary('emp-1', deviceId: deviceId);
+
+      expect(store.getSummary('emp-1', deviceId: deviceId), isNull);
+      expect(store.getSummary('emp-2', deviceId: deviceId), isNotNull);
+      expect(store.getTotalUnreadCount(), equals(1));
+    });
+  });
+
+  // ═══════════════════════════════════════════════════
+  // markAllAsRead 测试
+  // ═══════════════════════════════════════════════════
+
+  group('markAllAsRead', () {
+    test('多个会话有未读，全局标记后全部为 0', () {
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-1',
+        createTime: 1000,
+        seq: 1,
+        content: '消息1',
+      );
+      store.onMessageAdded(
+        employeeId: 'emp-2',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-2',
+        createTime: 2000,
+        seq: 1,
+        content: '消息2',
+      );
+      store.onMessageAdded(
+        employeeId: 'emp-3',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-3',
+        createTime: 3000,
+        seq: 1,
+        content: '消息3',
+      );
+
+      expect(store.getTotalUnreadCount(), equals(3));
+
+      store.markAllAsRead();
+
+      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(0));
+      expect(store.getUnreadCount('emp-2', deviceId: deviceId), equals(0));
+      expect(store.getUnreadCount('emp-3', deviceId: deviceId), equals(0));
+      expect(store.getTotalUnreadCount(), equals(0));
+    });
+
+    test('按 deviceId 过滤标记已读', () {
+      // dev-A 有未读
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: 'dev-A',
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-a',
+        createTime: 1000,
+        seq: 1,
+        content: 'A消息',
+      );
+      // dev-B 有未读
+      store.onMessageAdded(
+        employeeId: 'emp-2',
+        deviceId: 'dev-B',
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-b',
+        createTime: 2000,
+        seq: 1,
+        content: 'B消息',
+      );
+
+      expect(store.getTotalUnreadCount(), equals(2));
+
+      // 只标记 dev-A
+      store.markAllAsRead(deviceId: 'dev-A');
+
+      expect(store.getUnreadCount('emp-1', deviceId: 'dev-A'), equals(0));
+      expect(store.getUnreadCount('emp-2', deviceId: 'dev-B'), equals(1));
+      expect(store.getTotalUnreadCount(), equals(1));
+    });
+
+    test('空表调用无异常', () {
+      store.markAllAsRead();
+      expect(store.getTotalUnreadCount(), equals(0));
+    });
+  });
+
+  // ═══════════════════════════════════════════════════
+  // setPendingPermission / clearPendingPermission 测试
+  // ═══════════════════════════════════════════════════
+
+  group('setPendingPermission / clearPendingPermission', () {
+    test('无摘要时 setPendingPermission 无副作用', () {
+      store.setPendingPermission(
+        'emp-nonexistent',
+        deviceId,
+        '{"type":"permission","requestId":"req-1"}',
+      );
+
+      // UPDATE 影响行数为 0，不创建新行
+      expect(store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
+    });
+
+    test('有摘要时 setPendingPermission 正确写入', () {
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-1',
+        createTime: 1000,
+        seq: 1,
+        content: '消息1',
+      );
+
+      store.setPendingPermission(
+        'emp-1',
+        deviceId,
+        '{"type":"permission","requestId":"req-1","tool":"file_read"}',
+      );
+
+      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      expect(summary!.hasPendingPermission, isTrue);
+      expect(summary.pendingPermission, contains('req-1'));
+      expect(summary.pendingPermissionTime, isNotNull);
+      expect(summary.pendingPermissionTime!, greaterThan(0));
+    });
+
+    test('clearPendingPermission 清除字段', () {
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-1',
+        createTime: 1000,
+        seq: 1,
+        content: '消息1',
+      );
+      store.setPendingPermission(
+        'emp-1',
+        deviceId,
+        '{"type":"permission","requestId":"req-1"}',
+      );
+
+      expect(store.getSummary('emp-1', deviceId: deviceId)!.hasPendingPermission,
+          isTrue);
+
+      store.clearPendingPermission('emp-1', deviceId);
+
+      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      expect(summary!.hasPendingPermission, isFalse);
+      expect(summary.pendingPermission, isNull);
+      expect(summary.pendingPermissionTime, isNull);
+    });
+
+    test('无摘要时 clearPendingPermission 无副作用', () {
+      store.clearPendingPermission('emp-nonexistent', deviceId);
+      // 不抛异常
+      expect(store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════
+  // setPendingConfirm / clearPendingConfirm 测试
+  // ═══════════════════════════════════════════════════
+
+  group('setPendingConfirm / clearPendingConfirm', () {
+    test('无摘要时 setPendingConfirm 无副作用', () {
+      store.setPendingConfirm(
+        'emp-nonexistent',
+        deviceId,
+        '{"type":"confirm","requestId":"conf-1"}',
+      );
+
+      expect(store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
+    });
+
+    test('有摘要时 setPendingConfirm 正确写入', () {
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-1',
+        createTime: 1000,
+        seq: 1,
+        content: '消息1',
+      );
+
+      store.setPendingConfirm(
+        'emp-1',
+        deviceId,
+        '{"type":"confirm","requestId":"conf-1","message":"确认删除？"}',
+      );
+
+      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      expect(summary!.hasPendingConfirm, isTrue);
+      expect(summary.pendingConfirm, contains('conf-1'));
+      expect(summary.pendingConfirmTime, isNotNull);
+      expect(summary.pendingConfirmTime!, greaterThan(0));
+    });
+
+    test('clearPendingConfirm 清除字段', () {
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-1',
+        createTime: 1000,
+        seq: 1,
+        content: '消息1',
+      );
+      store.setPendingConfirm(
+        'emp-1',
+        deviceId,
+        '{"type":"confirm","requestId":"conf-1"}',
+      );
+
+      expect(store.getSummary('emp-1', deviceId: deviceId)!.hasPendingConfirm,
+          isTrue);
+
+      store.clearPendingConfirm('emp-1', deviceId);
+
+      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      expect(summary!.hasPendingConfirm, isFalse);
+      expect(summary.pendingConfirm, isNull);
+      expect(summary.pendingConfirmTime, isNull);
+    });
+
+    test('无摘要时 clearPendingConfirm 无副作用', () {
+      store.clearPendingConfirm('emp-nonexistent', deviceId);
+      expect(store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════
+  // getPendingSummaries 测试
+  // ═══════════════════════════════════════════════════
+
+  group('getPendingSummaries', () {
+    test('无 pending 时返回空列表', () {
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-1',
+        createTime: 1000,
+        seq: 1,
+        content: '消息1',
+      );
+
+      expect(store.getPendingSummaries(), isEmpty);
+    });
+
+    test('只有 permission pending 时返回正确', () {
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-1',
+        createTime: 1000,
+        seq: 1,
+        content: '消息1',
+      );
+      store.setPendingPermission(
+        'emp-1',
+        deviceId,
+        '{"type":"permission","requestId":"req-1"}',
+      );
+
+      final pending = store.getPendingSummaries();
+      expect(pending.length, equals(1));
+      expect(pending.first.employeeId, equals('emp-1'));
+      expect(pending.first.hasPendingPermission, isTrue);
+      expect(pending.first.hasPendingConfirm, isFalse);
+    });
+
+    test('只有 confirm pending 时返回正确', () {
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-1',
+        createTime: 1000,
+        seq: 1,
+        content: '消息1',
+      );
+      store.setPendingConfirm(
+        'emp-1',
+        deviceId,
+        '{"type":"confirm","requestId":"conf-1"}',
+      );
+
+      final pending = store.getPendingSummaries();
+      expect(pending.length, equals(1));
+      expect(pending.first.hasPendingPermission, isFalse);
+      expect(pending.first.hasPendingConfirm, isTrue);
+    });
+
+    test('同时有 permission + confirm 时返回正确', () {
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-1',
+        createTime: 1000,
+        seq: 1,
+        content: '消息1',
+      );
+      store.setPendingPermission(
+        'emp-1',
+        deviceId,
+        '{"type":"permission","requestId":"req-1"}',
+      );
+      store.setPendingConfirm(
+        'emp-1',
+        deviceId,
+        '{"type":"confirm","requestId":"conf-1"}',
+      );
+
+      final pending = store.getPendingSummaries();
+      expect(pending.length, equals(1));
+      expect(pending.first.hasPendingRequest, isTrue);
+    });
+
+    test('按 deviceId 过滤', () {
+      // dev-A 有 pending
+      store.onMessageAdded(
+        employeeId: 'emp-1',
+        deviceId: 'dev-A',
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-a',
+        createTime: 1000,
+        seq: 1,
+        content: 'A消息',
+      );
+      store.setPendingPermission(
+        'emp-1',
+        'dev-A',
+        '{"type":"permission","requestId":"req-a"}',
+      );
+
+      // dev-B 有 pending
+      store.onMessageAdded(
+        employeeId: 'emp-2',
+        deviceId: 'dev-B',
+        role: 'assistant',
+        isRead: false,
+        messageId: 'msg-b',
+        createTime: 2000,
+        seq: 1,
+        content: 'B消息',
+      );
+      store.setPendingConfirm(
+        'emp-2',
+        'dev-B',
+        '{"type":"confirm","requestId":"conf-b"}',
+      );
+
+      expect(store.getPendingSummaries(deviceId: 'dev-A').length, equals(1));
+      expect(store.getPendingSummaries(deviceId: 'dev-B').length, equals(1));
+      expect(store.getPendingSummaries().length, equals(2));
+    });
+
+    test('无摘要时返回空列表', () {
+      expect(store.getPendingSummaries(), isEmpty);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════
+  // Entity pending 便捷方法测试
+  // ═══════════════════════════════════════════════════
+
+  group('Entity pending 便捷方法', () {
+    test('hasPendingPermission 各种情况', () {
+      final withPerm = SessionSummaryEntity(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        unreadCount: 0,
+        pendingPermission: '{"type":"permission"}',
+        updateTime: 1000,
+      );
+      expect(withPerm.hasPendingPermission, isTrue);
+      expect(withPerm.hasPendingConfirm, isFalse);
+      expect(withPerm.hasPendingRequest, isTrue);
+
+      final withoutPerm = SessionSummaryEntity(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        unreadCount: 0,
+        updateTime: 1000,
+      );
+      expect(withoutPerm.hasPendingPermission, isFalse);
+      expect(withoutPerm.hasPendingRequest, isFalse);
+    });
+
+    test('pending 为空字符串时 hasPendingPermission 返回 false', () {
+      final emptyPerm = SessionSummaryEntity(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        unreadCount: 0,
+        pendingPermission: '',
+        pendingConfirm: '',
+        updateTime: 1000,
+      );
+      expect(emptyPerm.hasPendingPermission, isFalse);
+      expect(emptyPerm.hasPendingConfirm, isFalse);
+      expect(emptyPerm.hasPendingRequest, isFalse);
+    });
+
+    test('hasPendingConfirm 各种情况', () {
+      final withConf = SessionSummaryEntity(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        unreadCount: 0,
+        pendingConfirm: '{"type":"confirm"}',
+        updateTime: 1000,
+      );
+      expect(withConf.hasPendingConfirm, isTrue);
+      expect(withConf.hasPendingPermission, isFalse);
+      expect(withConf.hasPendingRequest, isTrue);
+    });
+
+    test('同时有 permission 和 confirm', () {
+      final both = SessionSummaryEntity(
+        employeeId: 'emp-1',
+        deviceId: deviceId,
+        unreadCount: 0,
+        pendingPermission: '{"type":"permission"}',
+        pendingConfirm: '{"type":"confirm"}',
+        updateTime: 1000,
+      );
+      expect(both.hasPendingPermission, isTrue);
+      expect(both.hasPendingConfirm, isTrue);
+      expect(both.hasPendingRequest, isTrue);
+    });
+
+    test('Entity pending 字段 toMap/fromMap 往返', () {
+      final original = SessionSummaryEntity(
+        employeeId: 'emp-1',
+        deviceId: 'dev-1',
+        unreadCount: 3,
+        pendingPermission: '{"type":"permission","requestId":"req-1"}',
+        pendingConfirm: '{"type":"confirm","requestId":"conf-1"}',
+        pendingPermissionTime: 12345,
+        pendingConfirmTime: 12350,
+        updateTime: 12345,
+      );
+
+      final map = original.toMap();
+      final restored = SessionSummaryEntity.fromMap(map);
+
+      expect(restored.pendingPermission, equals(original.pendingPermission));
+      expect(restored.pendingConfirm, equals(original.pendingConfirm));
+      expect(restored.pendingPermissionTime, equals(12345));
+      expect(restored.pendingConfirmTime, equals(12350));
+      expect(restored.hasPendingPermission, isTrue);
+      expect(restored.hasPendingConfirm, isTrue);
     });
   });
 }

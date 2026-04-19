@@ -513,6 +513,10 @@ class SessionSummaryStore {
             last_msg_content = ?,
             last_msg_time = ?,
             last_msg_seq = ?,
+            pending_permission = session_summary.pending_permission,
+            pending_confirm = session_summary.pending_confirm,
+            pending_permission_time = session_summary.pending_permission_time,
+            pending_confirm_time = session_summary.pending_confirm_time,
             update_time = ?
         ''', [
           eid, did, unreadCount,
