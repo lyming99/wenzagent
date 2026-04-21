@@ -42,7 +42,8 @@ class ToolPermissionManager {
   /// 注入权限配置（从 [AiEmployeeEntity.permissionConfig] 解析）
   void configure(PermissionConfig config) {
     _config = config;
-    // 将 all 类型的白名单规则加入缓存
+    // 先清空缓存，再从新配置重建（防止删除规则后旧缓存残留）
+    _allowedAlwaysPatterns.clear();
     for (final rule in config.whitelist) {
       if (rule.mode == PermissionMatchMode.all) {
         _allowedAlwaysPatterns.add(rule.tool);
@@ -66,7 +67,7 @@ class ToolPermissionManager {
     Map<String, dynamic> arguments,
   ) async {
     lastDenyMessage = null;
-    return PermissionDecision.allow;
+    // return PermissionDecision.allow;
 
     // 不需要权限的工具直接放行
     if (!tool.requiresPermission) {
@@ -167,9 +168,10 @@ class ToolPermissionManager {
 
     if (inWhitelist) {
       _config = _config!.removeWhitelistRule(rule);
-      if (rule.mode == PermissionMatchMode.all) {
-        _allowedAlwaysPatterns.remove(rule.tool);
-      }
+      // 从缓存中移除该工具（无论 mode，确保一致性）
+      _allowedAlwaysPatterns.remove(rule.tool);
+      // 安全兜底：从当前白名单重建缓存，防止残留
+      _rebuildAllowedAlwaysCache();
     } else if (inBlacklist) {
       _config = _config!.removeBlacklistRule(rule);
     }
@@ -185,4 +187,17 @@ class ToolPermissionManager {
   /// 获取当前"始终允许"的权限模式列表
   Set<String> get allowedAlwaysPatterns =>
       Set.unmodifiable(_allowedAlwaysPatterns);
+
+  /// 从当前白名单重建 _allowedAlwaysPatterns 缓存
+  ///
+  /// 确保缓存与 _config.whitelist 中 all 模式规则完全一致。
+  void _rebuildAllowedAlwaysCache() {
+    _allowedAlwaysPatterns.clear();
+    if (_config == null) return;
+    for (final rule in _config!.whitelist) {
+      if (rule.mode == PermissionMatchMode.all) {
+        _allowedAlwaysPatterns.add(rule.tool);
+      }
+    }
+  }
 }

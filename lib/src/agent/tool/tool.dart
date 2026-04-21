@@ -4,6 +4,7 @@
 library;
 
 export 'agent_tool.dart';
+export 'command_splitter.dart';
 export 'tool_registry.dart';
 export 'permission_manager.dart';
 export 'permission_rule.dart';

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../utils/logger.dart';
+import 'command_splitter.dart';
 
 /// 命令 pattern 推导粒度
 enum CommandPatternGranularity {
@@ -95,6 +96,17 @@ class PermissionRule {
         return rawValue == pattern;
       case PermissionMatchMode.regex:
         try {
+          // 命令类型：拆分子命令逐条匹配（支持复合命令）
+          if (tool == 'command_execute' &&
+              CommandSplitter.isCompound(rawValue)) {
+            for (final cmd in CommandSplitter.split(rawValue)) {
+              if (RegExp(pattern, dotAll: true).hasMatch(cmd)) {
+                return true;
+              }
+            }
+            return false;
+          }
+          // 非命令类型 或 单条命令：整体匹配
           return RegExp(pattern, dotAll: true).hasMatch(rawValue);
         } catch (e) {
           _log.debug('regex match failed, using fallback: $e');
@@ -152,7 +164,16 @@ class PermissionRule {
       {required CommandPatternGranularity granularity}) {
     if (command.isEmpty) return '.*';
 
-    final parts = command.trim().split(RegExp(r'\s+'));
+    // 复合命令：取第一个子命令推导
+    var effectiveCommand = command;
+    if (CommandSplitter.isCompound(command)) {
+      final subCommands = CommandSplitter.split(command);
+      if (subCommands.isNotEmpty) {
+        effectiveCommand = subCommands.first;
+      }
+    }
+
+    final parts = effectiveCommand.trim().split(RegExp(r'\s+'));
     if (parts.isEmpty) return '.*';
 
     switch (granularity) {
@@ -297,10 +318,64 @@ class PermissionConfig {
   /// 综合判定
   ///
   /// 决策顺序：黑名单 → 白名单 → ask
+  ///
+  /// 对于 command_execute 类型，支持复合命令逐条判定：
+  /// - 任一子命令命中黑名单 → 整体 deny
+  /// - 所有子命令命中白名单 → allow
+  /// - 否则 → ask
   PermissionVerdict evaluate(
       String toolName, Map<String, dynamic> arguments) {
-    if (matchesBlacklist(toolName, arguments)) return PermissionVerdict.deny;
-    if (matchesWhitelist(toolName, arguments)) return PermissionVerdict.allow;
+    // 非命令类型：走原有整体判定逻辑
+    if (toolName != 'command_execute') {
+      if (matchesBlacklist(toolName, arguments)) {
+        return PermissionVerdict.deny;
+      }
+      if (matchesWhitelist(toolName, arguments)) {
+        return PermissionVerdict.allow;
+      }
+      return PermissionVerdict.ask;
+    }
+
+    // 命令类型：检查是否为复合命令
+    final rawCommand = arguments['command'] as String?;
+    if (rawCommand == null || rawCommand.isEmpty) {
+      return PermissionVerdict.ask;
+    }
+
+    // 单条命令：走原有逻辑
+    if (!CommandSplitter.isCompound(rawCommand)) {
+      if (matchesBlacklist(toolName, arguments)) {
+        return PermissionVerdict.deny;
+      }
+      if (matchesWhitelist(toolName, arguments)) {
+        return PermissionVerdict.allow;
+      }
+      return PermissionVerdict.ask;
+    }
+
+    // 复合命令：逐条判定
+    final subCommands = CommandSplitter.split(rawCommand);
+    if (subCommands.isEmpty) return PermissionVerdict.ask;
+
+    var allWhitelisted = true;
+
+    for (final cmd in subCommands) {
+      final cmdArgs = {'command': cmd};
+
+      // 任一子命令命中黑名单 → 整体拒绝
+      if (matchesBlacklist(toolName, cmdArgs)) {
+        return PermissionVerdict.deny;
+      }
+
+      // 任一子命令不在白名单 → 需要用户确认
+      if (!matchesWhitelist(toolName, cmdArgs)) {
+        allWhitelisted = false;
+      }
+    }
+
+    // 所有子命令都在白名单 → 允许
+    if (allWhitelisted) return PermissionVerdict.allow;
+
     return PermissionVerdict.ask;
   }
 
