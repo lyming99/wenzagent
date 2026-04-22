@@ -381,6 +381,10 @@ class LlmChatAdapter implements IChatAdapter {
             consecutiveDuplicateCount = duplicateError.updatedCount;
 
             if (duplicateError.isDeadLoop) {
+              LlmChatAdapter._log.error(
+                '工具调用死循环中断: 连续 $duplicateError.updatedCount 轮相同调用, '
+                'signature=${duplicateError.updatedSignature.length > 200 ? '${duplicateError.updatedSignature.substring(0, 200)}...' : duplicateError.updatedSignature}',
+              );
               controller.add(
                 StreamResponse.error(
                   '检测到工具调用死循环：LLM 连续 $duplicateError.updatedCount 轮发出相同的工具调用。'

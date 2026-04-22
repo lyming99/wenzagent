@@ -13,9 +13,16 @@ extension _ToolCallingLoop on LlmChatAdapter {
   ) {
     const maxConsecutiveDuplicateRounds = 3;
 
+    // 只比较工具名+参数（排除 toolCallId，因为 LLM 每次会生成不同的 id）
     final currentSignature = toolCalls
         .map((tc) => '${tc.function.name}:${tc.function.arguments}')
         .join('|');
+
+    LlmChatAdapter._log.debug(
+      'checkDuplicateToolCalls: signature=${currentSignature.length > 200 ? '${currentSignature.substring(0, 200)}...' : currentSignature}, '
+      'lastSignature=${lastSignature != null ? (lastSignature.length > 200 ? '${lastSignature.substring(0, 200)}...' : lastSignature) : 'null'}, '
+      'currentCount=$currentCount',
+    );
 
     if (currentSignature == lastSignature) {
       final newCount = currentCount + 1;
@@ -72,6 +79,7 @@ extension _ToolCallingLoop on LlmChatAdapter {
 
       final toolName = toolCall.function.name;
       final toolCallId = toolCall.id;
+      LlmChatAdapter._log.info('执行工具调用: $toolName, toolCallId=$toolCallId, alreadyCallsSet.size=${alreadyCallsSet.length}');
       Map<String, dynamic> toolArguments;
       try {
         toolArguments =

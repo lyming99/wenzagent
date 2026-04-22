@@ -120,7 +120,12 @@ class ContentSearchTool extends AgentTool {
     final caseSensitive = arguments['caseSensitive'] as bool? ?? true;
 
     try {
-      final regex = RegExp(pattern, caseSensitive: caseSensitive);
+      RegExp regex;
+      try {
+        regex = RegExp(pattern, caseSensitive: caseSensitive);
+      } on FormatException catch (e) {
+        return ToolResult.error('正则表达式语法错误: $e');
+      }
 
       final lines = await file.readAsLines();
       final results = <String>[];
@@ -165,10 +170,15 @@ class ContentSearchTool extends AgentTool {
     final recursive = arguments['recursive'] as bool? ?? true;
 
     try {
-      final regex = RegExp(
-        _globToRegex(pattern),
-        caseSensitive: !Platform.isWindows,
-      );
+      RegExp regex;
+      try {
+        regex = RegExp(
+          _globToRegex(pattern),
+          caseSensitive: !Platform.isWindows,
+        );
+      } on FormatException catch (e) {
+        return ToolResult.error('文件名模式语法错误: $e');
+      }
 
       final matches = <String>[];
       var truncated = false;
@@ -221,7 +231,12 @@ class ContentSearchTool extends AgentTool {
     final recursive = arguments['recursive'] as bool? ?? true;
 
     try {
-      final regex = RegExp(pattern, caseSensitive: caseSensitive);
+      RegExp regex;
+      try {
+        regex = RegExp(pattern, caseSensitive: caseSensitive);
+      } on FormatException catch (e) {
+        return ToolResult.error('正则表达式语法错误: $e');
+      }
       RegExp? fileRegex;
       if (filePattern != null && filePattern.isNotEmpty) {
         fileRegex = RegExp(
@@ -344,6 +359,7 @@ class ContentSearchTool extends AgentTool {
       '.wasm',
       '.pdb',
       '.bin',
+      '.lock',
     };
     final dot = name.lastIndexOf('.');
     if (dot < 0) return false;

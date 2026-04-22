@@ -273,6 +273,11 @@ class LlmMessageMapper {
           msg.toolCalls!.isNotEmpty) {
         // 如果之前有未匹配的 tool_call_id，清除上一条 assistant 的 toolCalls
         if (expectedIds.isNotEmpty) {
+          _log.warn(
+            'sanitizeForLlm: 新 assistant(toolCalls) 但有未匹配的 expectedIds=$expectedIds, '
+            '新 toolCallIds=${msg.toolCalls!.map((tc) => tc.id).toList()}, '
+            '触发 _stripLastAssistantToolCalls',
+          );
           _stripLastAssistantToolCalls(result);
           expectedIds.clear();
         }
@@ -324,7 +329,9 @@ class LlmMessageMapper {
         // user / system 等非 tool 消息
         if (expectedIds.isNotEmpty) {
           _log.warn(
-            'sanitizeForLlm: 遇到非 tool 消息但有未匹配的 toolCallIds，清除上一条 assistant toolCalls',
+            'sanitizeForLlm: 遇到 ${msg.role} 消息但有未匹配的 toolCallIds=$expectedIds, '
+            'msgId=${msg.id}, content=${_truncate(msg.content ?? '', 60)}, '
+            '触发 _stripLastAssistantToolCalls',
           );
           _stripLastAssistantToolCalls(result);
           expectedIds.clear();
@@ -336,7 +343,8 @@ class LlmMessageMapper {
     // 序列末尾：处理残留未匹配的 expectedIds
     if (expectedIds.isNotEmpty) {
       _log.warn(
-        'sanitizeForLlm: 序列末尾仍有未匹配的 toolCallIds: $expectedIds，清除最后一条 assistant toolCalls',
+        'sanitizeForLlm: 序列末尾仍有未匹配的 toolCallIds=$expectedIds, '
+        '总消息数=${messages.length}, 触发 _stripLastAssistantToolCalls',
       );
       _stripLastAssistantToolCalls(result);
     }
@@ -511,9 +519,10 @@ class LlmMessageMapper {
   }
 
   /// 从 result 列表中找到最后一条含 toolCalls 的 assistant 消息，
-  /// 用 copyWith(clearToolCalls: true, type: 'text') 去掉其 toolCalls
+  /// 将 toolCalls 转为内联文本描述（而非静默丢弃），确保 LLM 能感知历史工具调用，
+  /// 避免因丢失记忆而重复发起相同的工具调用。
   ///
-  /// 如果清除 toolCalls 后 content 为空，填充占位文本以避免 API 报错
+  /// 如果清除 toolCalls 后 content 为空，填充工具调用描述文本以避免 API 报错
   /// （OpenAI 等要求 assistant 消息不能为空：必须有 content 或 tool_calls）
   static void _stripLastAssistantToolCalls(List<ChatMessage> result) {
     for (var i = result.length - 1; i >= 0; i--) {
@@ -522,13 +531,35 @@ class LlmMessageMapper {
           msg.toolCalls != null &&
           msg.toolCalls!.isNotEmpty) {
         final content = msg.content;
+        // 将 toolCalls 转为可读的内联文本描述，让 LLM 知道之前调用了什么
+        final toolSummary = msg.toolCalls!
+            .map((tc) {
+              final args = tc.arguments;
+              // 提取关键参数用于摘要，避免过长
+              String argsPreview;
+              if (args.length <= 3) {
+                argsPreview = args.entries
+                    .map((e) => '${e.key}=${_truncate('${e.value}', 80)}')
+                    .join(', ');
+              } else {
+                argsPreview = args.entries.take(3)
+                    .map((e) => '${e.key}=${_truncate('${e.value}', 80)}')
+                    .join(', ');
+                argsPreview += ', ...(共${args.length}个参数)';
+              }
+              return '${tc.name}($argsPreview)';
+            })
+            .join('; ');
+        final inlineNote = '[已调用工具: $toolSummary，但结果因消息序列修复被移除，请勿重复调用]';
+
+        final newContent = (content == null || content.trim().isEmpty)
+            ? inlineNote
+            : '$content\n$inlineNote';
+
         result[i] = msg.copyWith(
           clearToolCalls: true,
           type: 'text',
-          // 清除 toolCalls 后如果 content 为空，填充占位文本
-          content: (content == null || content.trim().isEmpty)
-              ? '[tool calls removed]'
-              : null,
+          content: newContent,
         );
         return;
       }
