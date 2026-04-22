@@ -1,4 +1,7 @@
 import '../../agent/tool/agent_tool.dart';
+import '../../utils/logger.dart';
+
+final _log = Logger('ConfigToolAdapter');
 
 /// Config Skill 工具适配器
 ///
@@ -27,13 +30,35 @@ class ConfigToolAdapter extends AgentTool {
         _invokeLlm = invokeLlm;
 
   @override
-  String get name => _name;
+  String get name {
+    if (_name.trim().isEmpty) {
+      _log.warn('Config Skill 工具名称为空, 使用 fallback');
+      return 'config_unnamed_${hashCode.toRadixString(36)}';
+    }
+    return _name;
+  }
 
   @override
-  String get description => _description;
+  String get description {
+    return _description.isEmpty ? 'Config skill tool: $_name' : _description;
+  }
 
   @override
-  Map<String, dynamic> get inputJsonSchema => _inputSchema;
+  Map<String, dynamic> get inputJsonSchema {
+    // 防御性校验：空 schema 时提供默认空参数 schema
+    if (_inputSchema.isEmpty) {
+      _log.debug('Config Skill 工具 "$_name" 的 inputSchema 为空, '
+          '使用默认空参数 schema');
+      return const {'type': 'object', 'properties': <String, dynamic>{}};
+    }
+    // 防御性校验：确保 schema 有 type 字段
+    if (_inputSchema['type'] == null) {
+      _log.debug('Config Skill 工具 "$_name" 的 inputSchema 缺少 "type" 字段, '
+          '补充为 "object"');
+      return {'type': 'object', ..._inputSchema};
+    }
+    return _inputSchema;
+  }
 
   @override
   bool get requiresPermission => _requiresPermission;

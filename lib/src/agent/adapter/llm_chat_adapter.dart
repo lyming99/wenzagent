@@ -740,7 +740,7 @@ class LlmChatAdapter implements IChatAdapter {
       '- `git_operations`：执行 Git 操作。\n'
       '- `env_info`：获取环境信息。\n'
       '- `web_fetch`：获取网页内容(http请求)。\n'
-      '- `web_search`：搜索互联网。\n\n'
+      '- `web_search_prime`：搜索互联网。\n\n'
       '### 工作流程\n\n'
       '对于每个用户任务，根据复杂度选择策略：\n\n'
       '**简单任务（直接执行）：**\n'

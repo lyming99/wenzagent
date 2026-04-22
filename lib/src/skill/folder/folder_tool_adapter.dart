@@ -1,7 +1,10 @@
 import 'dart:io';
 
 import '../../agent/tool/agent_tool.dart';
+import '../../utils/logger.dart';
 import 'skill_md_parser.dart';
+
+final _log = Logger('FolderToolAdapter');
 
 /// Folder Skill 工具定义
 class FolderToolDef {
@@ -142,13 +145,38 @@ class FolderToolAdapter extends AgentTool {
         _invokeLlm = invokeLlm;
 
   @override
-  String get name => _toolDef.name;
+  String get name {
+    final n = _toolDef.name;
+    if (n.trim().isEmpty) {
+      _log.warn('Folder Skill 工具名称为空 (skillPath=$_skillPath), 使用 fallback');
+      return 'folder_unnamed_${hashCode.toRadixString(36)}';
+    }
+    return n;
+  }
 
   @override
-  String get description => _toolDef.description;
+  String get description {
+    final desc = _toolDef.description;
+    return desc.isEmpty ? 'Folder skill tool: ${_toolDef.name}' : desc;
+  }
 
   @override
-  Map<String, dynamic> get inputJsonSchema => _toolDef.parameters;
+  Map<String, dynamic> get inputJsonSchema {
+    final schema = _toolDef.parameters;
+    // 防御性校验：空 schema 时提供默认空参数 schema
+    if (schema.isEmpty) {
+      _log.debug('Folder Skill 工具 "${_toolDef.name}" 的 parameters 为空, '
+          '使用默认空参数 schema (skillPath=$_skillPath)');
+      return const {'type': 'object', 'properties': <String, dynamic>{}};
+    }
+    // 防御性校验：确保 schema 有 type 字段
+    if (schema['type'] == null) {
+      _log.debug('Folder Skill 工具 "${_toolDef.name}" 的 parameters 缺少 "type" 字段, '
+          '补充为 "object" (skillPath=$_skillPath)');
+      return {'type': 'object', ...schema};
+    }
+    return schema;
+  }
 
   @override
   bool get requiresPermission => _toolDef.requiresPermission;

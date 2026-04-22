@@ -1,5 +1,9 @@
 import 'package:llm_dart/llm_dart.dart' as llm;
 
+import '../../utils/logger.dart';
+
+final _log = Logger('AgentTool');
+
 /// 工具执行结果
 class ToolResult {
   /// 返回给 LLM 的文本内容
@@ -87,22 +91,53 @@ abstract class AgentTool {
   ///
   /// 将 [inputJsonSchema] 转换为 llm_dart 的 [ParametersSchema]。
   /// Anthropic provider 要求 schema.type 必须为 "object"。
+  ///
+  /// 防御性处理：即使 [inputJsonSchema] 为空或格式异常，
+  /// 也会生成一个合法的空参数 schema（`{"type":"object","properties":{}}`），
+  /// 避免 LLM API 报 "parameters is empty" 错误。
   llm.Tool toLlmDartTool() {
+    // 防御性校验：工具名不能为空
+    if (name.trim().isEmpty) {
+      _log.warn('toLlmDartTool: 工具名为空 ($runtimeType), 使用 fallback 名称');
+    }
+    final toolName = name.trim().isEmpty ? 'unnamed_tool_${hashCode.toRadixString(36)}' : name;
+
     final schema = inputJsonSchema;
+
+    // 防御性校验：schema 为空时记录警告
+    if (schema.isEmpty) {
+      _log.warn('toLlmDartTool: 工具 $toolName 的 inputJsonSchema 为空');
+    }
+
     final propertiesRaw = schema['properties'] as Map<String, dynamic>? ?? {};
     final requiredList = (schema['required'] as List?)?.cast<String>() ?? [];
 
     final properties = <String, llm.ParameterProperty>{};
     for (final entry in propertiesRaw.entries) {
-      final propSchema = entry.value as Map<String, dynamic>;
+      final propSchema = entry.value;
+      // 防御性校验：跳过非 Map 类型的属性定义
+      if (propSchema is! Map<String, dynamic>) {
+        _log.warn('toLlmDartTool: 工具 $toolName 的属性 "${entry.key}" 的 schema 不是 Map, 跳过');
+        continue;
+      }
       properties[entry.key] = _parseParameterProperty(propSchema);
     }
 
+    // 确保 schemaType 有效（某些 API 要求必须为 "object"）
+    final schemaType = schema['type'] as String?;
+    if (schemaType == null || schemaType.trim().isEmpty) {
+      _log.debug('toLlmDartTool: 工具 $toolName 的 schema.type 为空, 使用默认 "object"');
+    }
+    final effectiveSchemaType = (schemaType != null && schemaType.trim().isNotEmpty)
+        ? schemaType
+        : 'object';
+
     return llm.Tool.function(
-      name: name,
-      description: description,
+      name: toolName,
+      // 确保 description 不为 null，某些 API 不接受空 description
+      description: description.isEmpty ? '$toolName tool' : description,
       parameters: llm.ParametersSchema(
-        schemaType: 'object',
+        schemaType: effectiveSchemaType,
         properties: properties,
         required: requiredList,
       ),

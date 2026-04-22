@@ -38,7 +38,7 @@ class SpawnSubAgentTool extends AgentTool {
     'code_symbols',
     'env_info',
     'web_fetch',
-    'web_search',
+    'web_search_prime',
   ];
 
   /// 子 Agent 执行器（由 AgentFactoryImpl 注入）

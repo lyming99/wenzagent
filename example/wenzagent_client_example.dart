@@ -2,9 +2,7 @@
 ///
 /// 参数：--host 127.0.0.1 --port 9900 --device-id test --device-name test-device
 ///
-/// 本示例提供两种方式：
-///   方式一：通过 Process 启动子进程（推荐，最接近真实使用方式）
-///   方式二：通过 Isolate.spawnUri 运行（纯 Dart，无进程开销）
+/// 本示例通过 Process 启动子进程来运行 wenzagent_client.dart。
 ///
 /// 用法：
 ///   dart run example/wenzagent_client_example.dart
@@ -12,7 +10,6 @@ library;
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
 
 // ---------------------------------------------------------------------------
 // 配置
@@ -48,42 +45,32 @@ Future<void> main(List<String> args) async {
   print('╚══════════════════════════════════════════════════╝');
   print('');
 
-  // 选择运行方式（默认方式一，可通过命令行参数切换）
-  await _runViaIsolate(clientArgs);
+  await _runViaProcess(clientArgs);
 }
 
-
 // ---------------------------------------------------------------------------
-// 方式二：通过 Isolate.spawnUri 运行
+// 通过 Process 启动子进程运行 wenzagent_client.dart
 // ---------------------------------------------------------------------------
 
-Future<void> _runViaIsolate(List<String> clientArgs) async {
+Future<void> _runViaProcess(List<String> clientArgs) async {
   final scriptPath = _resolveClientScript();
-  final scriptUri = Uri.file(scriptPath);
 
-  print('Launching: Isolate.spawnUri($scriptUri)');
+  print('Launching: dart $scriptPath ${clientArgs.join(' ')}');
   print('──────────────────────────────────────────────────');
 
-  final onExit = ReceivePort();
-
   try {
-    await Isolate.spawnUri(
-      scriptUri,
-      clientArgs,
-      null,
-      onExit: onExit.sendPort,
+    final process = await Process.start(
+      'dart',
+      ['run', scriptPath, ...clientArgs],
+      mode: ProcessStartMode.inheritStdio,
     );
 
-    // 等待 isolate 退出
-    await onExit.first;
+    final exitCode = await process.exitCode;
+
     print('──────────────────────────────────────────────────');
-    print('Client isolate has exited.');
+    print('Client process exited with code: $exitCode');
   } catch (e) {
-    onExit.close();
-    print('Isolate.spawnUri failed: $e');
-    print('');
-    print('This may happen when running from a snapshot.');
-    print('Try the Process mode instead (remove --isolate flag).');
+    print('Failed to start client process: $e');
   }
 }
 

@@ -16,7 +16,7 @@ class WebSearchTool extends AgentTool {
   static const int _searchTimeout = 15;
 
   @override
-  String get name => 'web_search';
+  String get name => 'web_search_prime';
 
   @override
   String get description =>

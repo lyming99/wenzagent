@@ -59,7 +59,7 @@ class BuiltinTools {
     'code_symbols',
     'env_info',
     'web_fetch',
-    'web_search',
+    'web_search_prime',
   };
 
   /// 获取所有内置工具

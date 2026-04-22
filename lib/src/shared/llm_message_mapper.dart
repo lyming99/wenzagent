@@ -32,20 +32,34 @@ class LlmMessageMapper {
       case MessageRole.assistant:
         // 包含多工具调用
         if (msg.toolCalls != null && msg.toolCalls!.isNotEmpty) {
-          return llm.ChatMessage.toolUse(
-            toolCalls: msg.toolCalls!.map((tc) => llm.ToolCall(
-                  id: tc.id,
-                  callType: 'function',
-                  function: llm.FunctionCall(
-                    name: tc.name,
-                    arguments: tc.argumentsJson,
-                  ),
-                )).toList(),
-            content: msg.content ?? '',
-          );
+          // 防御性校验：过滤掉 name 为空的 ToolCall
+          final validToolCalls = msg.toolCalls!
+              .where((tc) => tc.name.trim().isNotEmpty)
+              .toList();
+          if (validToolCalls.isNotEmpty) {
+            return llm.ChatMessage.toolUse(
+              toolCalls: validToolCalls.map((tc) => llm.ToolCall(
+                    id: tc.id,
+                    callType: 'function',
+                    function: llm.FunctionCall(
+                      name: tc.name,
+                      arguments: tc.argumentsJson,
+                    ),
+                  )).toList(),
+              content: msg.content ?? '',
+            );
+          } else {
+            _log.warn('toLlmDart: assistant 消息的所有 toolCall name 为空，降级为纯文本 (id=${msg.id})');
+            return llm.ChatMessage.assistant(msg.content ?? '');
+          }
         }
         // 包含单工具调用（向后兼容）
         if (msg.toolCallId != null && msg.toolName != null) {
+          // 防御性校验：name 为空时降级为纯文本
+          if (msg.toolName!.trim().isEmpty) {
+            _log.warn('toLlmDart: 单工具调用的 toolName 为空，降级为纯文本 (id=${msg.id})');
+            return llm.ChatMessage.assistant(msg.content ?? '');
+          }
           final argsJson = msg.toolArguments != null
               ? jsonEncode(msg.toolArguments)
               : '{}';
@@ -79,7 +93,7 @@ class LlmMessageMapper {
               id: r.toolCallId,
               callType: 'function',
               function: llm.FunctionCall(
-                name: r.name ?? '',
+                name: r.name?.isNotEmpty == true ? r.name! : 'unknown',
                 arguments: resultArguments,
               ),
             );
@@ -93,13 +107,16 @@ class LlmMessageMapper {
         final resultArguments = msg.isError
             ? jsonEncode({'error': msg.content ?? ''})
             : jsonEncode({'result': msg.content ?? ''});
+        // 防御性校验：确保 name 不为空
+        final toolName = msg.toolName?.isNotEmpty == true ? msg.toolName! : 'unknown';
+        final toolCallId = msg.toolCallId?.isNotEmpty == true ? msg.toolCallId! : '';
         return llm.ChatMessage.toolResult(
           results: [
             llm.ToolCall(
-              id: msg.toolCallId ?? '',
+              id: toolCallId,
               callType: 'function',
               function: llm.FunctionCall(
-                name: msg.toolName ?? '',
+                name: toolName,
                 arguments: resultArguments,
               ),
             ),
