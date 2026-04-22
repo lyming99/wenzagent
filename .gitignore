@@ -1,24 +1,28 @@
-# https://dart.dev/guides/libraries/private-files
-# Created by `dart pub`
+# Dependencies
 .dart_tool/
+.packages
 build/
-
-# Avoid committing pubspec.lock for library packages; see
-# https://dart.dev/guides/libraries/private-files#pubspeclock.
 pubspec.lock
-
-# Temporary test/debug output
-*.txt
-!QUICKSTART.md
-!CHANGELOG.md
-!LICENSE
-
-# OS files
-nul
-Thumbs.db
-.DS_Store
 
 # IDE
 .idea/
 .vscode/
 *.iml
+
+# OS
+.DS_Store
+Thumbs.db
+nul
+
+# Build output
+dist/
+
+# Data
+data/
+
+# Test output
+test_output.*
+test_db/
+
+# AI test config (contains sensitive keys)
+config/ai_test_config.yaml

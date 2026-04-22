@@ -110,6 +110,59 @@ dart run bin/wenzagent_client.dart --host <server-ip>
 - [Cached Agent Proxy Guide](doc/cached-agent-proxy-guide.md)
 - [Tool Call Status Frontend Guide](doc/tool-call-status-frontend-guide.md)
 
+## Using Ollama
+
+WenzAgent supports [Ollama](https://ollama.ai) as a local LLM provider, enabling fully local AI agents without cloud API keys.
+
+### Prerequisites
+
+1. Install Ollama: see [ollama.ai](https://ollama.ai)
+2. Start the service: `ollama serve`
+3. Pull a model: `ollama pull llama3`
+
+### Configuration
+
+Set the provider to `ollama` in your agent configuration:
+
+```yaml
+provider: ollama
+model: llama3
+baseUrl: http://localhost:11434   # Optional, this is the default
+apiKey: ""                          # Not needed for Ollama
+```
+
+### Model Discovery
+
+Use `OllamaClient` to list available models programmatically:
+
+```dart
+import 'package:wenzagent/wenzagent.dart';
+
+final client = OllamaClient();
+
+// Check if Ollama is running
+final healthy = await client.isHealthy();
+
+// List installed models
+final models = await client.listModels();
+for (final model in models) {
+  print('${model.name} (${model.size} bytes)');
+}
+
+// Get model details
+final detail = await client.showModel('llama3');
+print('Family: ${detail?.family}, Params: ${detail?.parameterSize}');
+```
+
+### Supported Providers
+
+| Provider | API Key Required | Default Base URL |
+|----------|-----------------|------------------|
+| `openai` | Yes | `https://api.openai.com/v1` |
+| `anthropic` | Yes | `https://api.anthropic.com` |
+| `google` | Yes | `https://generativelanguage.googleapis.com` |
+| `ollama` | No | `http://localhost:11434` |
+
 ## License
 
 See [LICENSE](LICENSE).

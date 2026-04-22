@@ -814,26 +814,23 @@ void main() {
 
     group('Todo数据同步 - 同步路径2：query>update store', () {
       test('syncFromRemote 后本地 TodoStore 包含远端所有 Topic', () async {
-        // 设置 Mock RPC 返回 current + pending + completed topics
+        // 设置 Mock RPC 返回 pending + completed topics
         final topicId1 = 'topic-1';
         final topicId2 = 'topic-2';
         final topicId3 = 'topic-3';
 
-        fixture.mockCurrentTopics = [
-          fixture.createTopicMap(id: topicId1, title: '当前主题', status: 'in_progress'),
-        ];
         fixture.mockPendingTopics = [
           fixture.createTopicMap(id: topicId2, title: '待处理主题', status: 'pending'),
-          // topicId1 同时出现在 pending 查询结果中（pending 包含 in_progress）
           fixture.createTopicMap(id: topicId1, title: '当前主题', status: 'in_progress'),
         ];
+        fixture.mockCurrentTopics = [];
         fixture.mockCompletedTopics = [
           fixture.createTopicMap(id: topicId3, title: '已完成主题', status: 'completed'),
         ];
 
         await fixture.cachedProxy.syncFromRemote();
 
-        // 验证：各状态查询（注意：pending 查询包含 in_progress 和 pending）
+        // 验证：各状态查询（pending 仅含 pending，不含 in_progress）
         final currentTopics =
             fixture.todoStore.findCurrentTopics(fixture.employeeId);
         expect(currentTopics.length, equals(1));
@@ -841,10 +838,9 @@ void main() {
 
         final pendingTopics =
             fixture.todoStore.findPendingTopics(fixture.employeeId);
-        // pending 查询返回 pending + in_progress 状态的 topics
-        expect(pendingTopics.length, equals(2));
-        expect(pendingTopics.map((t) => t.id).toSet(),
-            equals({topicId1, topicId2}));
+        // pending 查询仅返回 pending 状态的 topics（不含 in_progress）
+        expect(pendingTopics.length, equals(1));
+        expect(pendingTopics.first.id, equals(topicId2));
 
         final completedTopics =
             fixture.todoStore.findCompletedTopics(fixture.employeeId);
@@ -853,37 +849,36 @@ void main() {
       });
 
       test('syncFromRemote 后 Topic 去重正确', () async {
-        // 同一个 topic 同时出现在 current 和 completed 中
-        final duplicatedTopicId = 'topic-dup-1';
+        // pending 和 completed 结果集天然无交集（status 不同），无需去重
+        final topicId1 = 'topic-dup-1';
+        final topicId2 = 'topic-dup-2';
 
-        fixture.mockCurrentTopics = [
-          fixture.createTopicMap(
-              id: duplicatedTopicId, title: '重复主题', status: 'in_progress'),
+        fixture.mockPendingTopics = [
+          fixture.createTopicMap(id: topicId1, title: '待处理主题', status: 'pending'),
+          fixture.createTopicMap(id: topicId2, title: '进行中主题', status: 'in_progress'),
         ];
+        fixture.mockCurrentTopics = [];
         fixture.mockCompletedTopics = [
-          fixture.createTopicMap(
-              id: duplicatedTopicId, title: '重复主题', status: 'completed'),
+          fixture.createTopicMap(id: 'topic-done', title: '已完成主题', status: 'completed'),
         ];
-        fixture.mockPendingTopics = [];
 
         await fixture.cachedProxy.syncFromRemote();
 
-        // 验证：去重后只有 1 条（最后一次 upsert 覆盖）
+        // 验证：3 个 topic 全部同步到本地
         final allTopics =
             fixture.todoStore.findAllTopics(fixture.employeeId);
-        expect(allTopics.length, equals(1));
-        expect(allTopics.first.id, equals(duplicatedTopicId));
+        expect(allTopics.length, equals(3));
       });
 
       test('syncFromRemote 后每个 Topic 的 TaskItems 正确同步', () async {
         final topicId1 = 'topic-task-1';
         final topicId2 = 'topic-task-2';
 
-        fixture.mockCurrentTopics = [
+        fixture.mockPendingTopics = [
           fixture.createTopicMap(id: topicId1, title: '主题1', status: 'pending'),
           fixture.createTopicMap(id: topicId2, title: '主题2', status: 'pending'),
         ];
-        fixture.mockPendingTopics = [];
+        fixture.mockCurrentTopics = [];
         fixture.mockCompletedTopics = [];
 
         // 每个 topic 各 3 个 taskItem
@@ -940,11 +935,11 @@ void main() {
       });
 
       test('多次 syncFromRemote 幂等', () async {
-        fixture.mockCurrentTopics = [
+        fixture.mockPendingTopics = [
           fixture.createTopicMap(id: 'topic-1', title: '主题1'),
           fixture.createTopicMap(id: 'topic-2', title: '主题2'),
         ];
-        fixture.mockPendingTopics = [];
+        fixture.mockCurrentTopics = [];
         fixture.mockCompletedTopics = [];
         fixture.mockTaskItemsByTopic = {};
 
@@ -1068,13 +1063,10 @@ void main() {
 
         // 步骤2：syncFromRemote 拉取全量 Todo 数据
         final topicId = 'topic-coop-1';
-        fixture.mockCurrentTopics = [
-          fixture.createTopicMap(id: topicId, title: '协作主题', status: 'in_progress'),
-        ];
         fixture.mockPendingTopics = [
-          // pending 查询包含 in_progress
           fixture.createTopicMap(id: topicId, title: '协作主题', status: 'in_progress'),
         ];
+        fixture.mockCurrentTopics = [];
         fixture.mockCompletedTopics = [];
         fixture.mockTaskItemsByTopic = {
           topicId: [
@@ -1103,12 +1095,10 @@ void main() {
         fixture.mockActiveSpecs = [
           fixture.createSpecMap(id: 'spec-1', title: 'Spec 1'),
         ];
-        fixture.mockCurrentTopics = [
-          fixture.createTopicMap(id: 'topic-1', title: 'Topic 1', status: 'pending'),
-        ];
         fixture.mockPendingTopics = [
           fixture.createTopicMap(id: 'topic-1', title: 'Topic 1', status: 'pending'),
         ];
+        fixture.mockCurrentTopics = [];
         fixture.mockCompletedTopics = [];
         fixture.mockCompletedSpecs = [];
         fixture.mockTaskItemsByTopic = {};
@@ -1176,12 +1166,10 @@ void main() {
           fixture.createSpecMap(id: 'spec-mix-1', title: '混合Spec'),
         ];
         fixture.mockCompletedSpecs = [];
-        fixture.mockCurrentTopics = [
-          fixture.createTopicMap(id: 'topic-mix-1', title: '混合Topic', status: 'pending'),
-        ];
         fixture.mockPendingTopics = [
           fixture.createTopicMap(id: 'topic-mix-1', title: '混合Topic', status: 'pending'),
         ];
+        fixture.mockCurrentTopics = [];
         fixture.mockCompletedTopics = [];
         fixture.mockTaskItemsByTopic = {};
 
@@ -1321,7 +1309,7 @@ void main() {
         ));
 
         // Mock RPC 返回较新的数据
-        fixture.mockCurrentTopics = [
+        fixture.mockPendingTopics = [
           fixture.createTopicMap(
             id: 'topic-merge-1',
             title: '新主题',
@@ -1329,7 +1317,7 @@ void main() {
             updateTime: newTime,
           ),
         ];
-        fixture.mockPendingTopics = [];
+        fixture.mockCurrentTopics = [];
         fixture.mockCompletedTopics = [];
 
         await fixture.cachedProxy.syncFromRemote();
@@ -1368,10 +1356,10 @@ void main() {
         ));
 
         // Mock RPC 返回较新的 task item
-        fixture.mockCurrentTopics = [
+        fixture.mockPendingTopics = [
           fixture.createTopicMap(id: topicId, title: '任务合并测试'),
         ];
-        fixture.mockPendingTopics = [];
+        fixture.mockCurrentTopics = [];
         fixture.mockCompletedTopics = [];
         fixture.mockTaskItemsByTopic = {
           topicId: [
@@ -1417,7 +1405,7 @@ void main() {
         ));
 
         // Mock RPC 返回软删除的数据
-        fixture.mockCurrentTopics = [
+        fixture.mockPendingTopics = [
           fixture.createTopicMap(
             id: topicId,
             title: '待删除主题',
@@ -1425,7 +1413,7 @@ void main() {
             updateTime: now,
           ),
         ];
-        fixture.mockPendingTopics = [];
+        fixture.mockCurrentTopics = [];
         fixture.mockCompletedTopics = [];
         fixture.mockTaskItemsByTopic = {
           topicId: [

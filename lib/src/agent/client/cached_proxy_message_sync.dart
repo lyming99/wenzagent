@@ -329,29 +329,17 @@ mixin _CachedProxyMessageSync on _CachedAgentProxyBase {
   Future<void> _syncTodosFromRemote() async {
     if (_isDisposed || _proxy.isLocalMode) return;
     try {
-      // 1. 获取所有 topic（current + pending + completed）
-      final currentTopics = await _proxy.getCurrentTopics();
+      // 1. 获取所有 topic（pending + in_progress + completed）
       final pendingTopics = await _proxy.getPendingTopics();
       final completedTopics = await _proxy.getCompletedTopics(limit: 9999);
       final allTopicMaps = <Map<String, dynamic>>[
-        ...currentTopics,
         ...pendingTopics,
         ...completedTopics,
       ];
       if (allTopicMaps.isEmpty) return;
 
-      // 去重（同一个 topic 可能出现在多个查询结果中）
-      final seenTopicIds = <String>{};
-      final uniqueTopicMaps = <Map<String, dynamic>>[];
-      for (final t in allTopicMaps) {
-        final id = t['id'] as String?;
-        if (id != null && seenTopicIds.add(id)) {
-          uniqueTopicMaps.add(t);
-        }
-      }
-
       final todoStore = TodoStore(deviceId: _deviceId);
-      final topicItems = uniqueTopicMaps
+      final topicItems = allTopicMaps
           .map((t) => TodoTopicEntity.fromMap(t))
           .toList();
       final topicCount = todoStore.upsertAllTopicsFromRemote(topicItems);

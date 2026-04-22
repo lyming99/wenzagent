@@ -1,0 +1,40 @@
+# AI 连接测试配置
+# 复制此文件为 ai_test_config.yaml 并填入实际值
+#
+# 用法: dart run test/ai_connection_test.dart
+
+providers:
+  openai:
+    provider: openai
+    model: gpt-4o-mini
+    apiKey: sk-xxx
+    baseUrl: ""              # 可选，留空使用默认 https://api.openai.com/v1
+
+  anthropic:
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    apiKey: sk-ant-xxx
+    baseUrl: ""              # 可选，如第三方中转地址
+
+  google:
+    provider: google
+    model: gemini-2.0-flash
+    apiKey: AIzaXXX
+    baseUrl: ""
+
+  # Ollama 本地模型 — 无需 API Key
+  # 使用前请确保:
+  #   1. 已安装 Ollama: https://ollama.ai
+  #   2. 已启动服务: ollama serve
+  #   3. 已拉取模型: ollama pull llama3
+  ollama:
+    provider: ollama
+    model: llama3            # 可选: qwen2.5, gemma2, mistral 等
+    apiKey: ""               # Ollama 不需要 API Key
+    baseUrl: ""              # 留空自动使用 http://localhost:11434
+
+# 测试消息（可选，默认 "Hi"）
+testMessage: "Hi"
+
+# 超时秒数（可选，默认 30）
+timeout: 30

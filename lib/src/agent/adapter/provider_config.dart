@@ -54,11 +54,26 @@ class ProviderConfig {
         ? ContextCompressionConfig.fromMap(compressionMap)
         : null;
 
+    // Ollama 专用默认值
+    String? baseUrl = map['baseUrl'] as String?;
+    String model = map['model'] as String? ?? 'gpt-4o';
+
+    if (provider == LLMProvider.ollama) {
+      // Ollama 默认 baseUrl
+      if (baseUrl == null || baseUrl.isEmpty) {
+        baseUrl = 'http://localhost:11434';
+      }
+      // Ollama 默认模型
+      if (model == 'gpt-4o') {
+        model = 'llama3';
+      }
+    }
+
     return ProviderConfig(
       provider: provider,
-      model: map['model'] as String? ?? 'gpt-4o',
+      model: model,
       apiKey: map['apiKey'] as String?,
-      baseUrl: map['baseUrl'] as String?,
+      baseUrl: baseUrl,
       options: options,
       organization: map['organization'] as String?,
       compressionConfig: compressionConfig,

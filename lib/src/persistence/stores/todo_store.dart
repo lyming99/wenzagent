@@ -41,10 +41,10 @@ class TodoStore {
     return resultSet.map(_rowToTopic).toList();
   }
 
-  /// 查询未完成待办主题（pending + in_progress）
+  /// 查询待处理待办主题（pending，不含 in_progress）
   List<TodoTopicEntity> findPendingTopics(String employeeId) {
     final resultSet = _db.select(
-      "SELECT * FROM todo_topics WHERE employee_id = ? AND deleted = 0 AND status IN ('pending', 'in_progress') ORDER BY sort_order ASC, create_time ASC",
+      "SELECT * FROM todo_topics WHERE employee_id = ? AND deleted = 0 AND status = 'pending' ORDER BY sort_order ASC, create_time ASC",
       [employeeId],
     );
     return resultSet.map(_rowToTopic).toList();

@@ -527,7 +527,10 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
     if (config.options.maxTokens != null) {
       builder.maxTokens(config.options.maxTokens!);
     } else {
-      builder.maxTokens(32000);
+      // Ollama 本地模型上下文窗口通常较小，使用保守默认值
+      final defaultMaxTokens =
+          config.provider == LLMProvider.ollama ? 4096 : 32000;
+      builder.maxTokens(defaultMaxTokens);
     }
     builder.reasoning(false);
 
@@ -539,7 +542,11 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
       builder.stopSequences(config.options.stop!);
     }
     builder.enableLogging(true);
-    builder.timeout(const Duration(minutes: 30));
+    // Ollama 本地推理可能较慢，适当延长超时
+    final timeout = config.provider == LLMProvider.ollama
+        ? const Duration(minutes: 60)
+        : const Duration(minutes: 30);
+    builder.timeout(timeout);
     return await builder.build();
   }
 

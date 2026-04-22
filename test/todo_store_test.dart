@@ -183,15 +183,14 @@ void main() {
       expect(all.length, equals(3));
     });
 
-    test('findPendingTopics 返回 pending 和 in_progress 主题', () {
+    test('findPendingTopics 返回 pending 主题（不含 in_progress）', () {
       store.saveTopic(createTopic(id: 't-pending', status: 'pending'));
       store.saveTopic(createTopic(id: 't-inprog', status: 'in_progress'));
       store.saveTopic(createTopic(id: 't-completed', status: 'completed'));
 
       final pending = store.findPendingTopics(employeeId);
-      expect(pending.length, equals(2));
-      final statuses = pending.map((t) => t.status).toSet();
-      expect(statuses, containsAll(['pending', 'in_progress']));
+      expect(pending.length, equals(1));
+      expect(pending.first.status, equals('pending'));
     });
 
     test('findCurrentTopics 返回 in_progress 主题', () {
