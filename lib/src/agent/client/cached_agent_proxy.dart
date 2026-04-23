@@ -11,7 +11,6 @@ import '../../shared/chat_message.dart' show ToolCall;
 import '../../shared/shared.dart' as shared;
 import '../../service/message_store_service.dart';
 import '../../service/session_manager.dart';
-import '../../persistence/stores/mark_read_queue_store.dart';
 import '../../persistence/persistence.dart';
 import '../../utils/logger.dart';
 
@@ -50,10 +49,7 @@ abstract class _CachedAgentProxyBase {
 
   String get _employeeId;
 
-  MarkReadQueueStore get _markReadQueueStore;
-
   // ===== 回调 =====
-  void Function(String employeeId, String? fromDeviceId)? get onMarkAsRead;
 
   void Function(String employeeId, Map<String, dynamic> summaryData)?
   get onSessionSummaryUpdated;
@@ -188,8 +184,6 @@ abstract class _CachedAgentProxyBase {
 
   void _cleanupStaleToolCallMessages();
 
-  Future<void> _flushMarkAsReadQueue();
-
   Future<void> _syncRemoteStateAndPermission();
 }
 
@@ -217,18 +211,9 @@ class CachedAgentProxy extends _CachedAgentProxyBase
   final String _deviceId;
   @override
   final String _employeeId;
-  @override
-  final MarkReadQueueStore _markReadQueueStore;
 
   /// 底层 AgentProxy 实例（供需要直接访问RPC的调用方使用）
   AgentProxy get proxy => _proxy;
-
-  /// 标记已读回调（由 DeviceClient 注入）
-  ///
-  /// 当用户通过 CachedAgentProxy.markMessagesAsRead() 标记已读时，
-  /// 回调通知 DeviceClient 执行本地标记 + 跨设备广播
-  @override
-  final void Function(String employeeId, String? fromDeviceId)? onMarkAsRead;
 
   /// 会话摘要更新回调（由 DeviceAgentManager 注入）
   ///
@@ -328,14 +313,11 @@ class CachedAgentProxy extends _CachedAgentProxyBase
     required MessageStoreService messageStore,
     required String deviceId,
     required String employeeId,
-    required MarkReadQueueStore markReadQueueStore,
-    this.onMarkAsRead,
     this.onSessionSummaryUpdated,
   }) : _proxy = proxy,
        _messageStore = messageStore,
        _deviceId = deviceId,
-       _employeeId = employeeId,
-       _markReadQueueStore = markReadQueueStore {
+       _employeeId = employeeId {
     // 关键：只在远程模式下启用缓存
   }
 
@@ -408,9 +390,6 @@ class CachedAgentProxy extends _CachedAgentProxyBase
       } catch (e) {
         _CachedAgentProxyBase._log.error('同步远程状态失败', e);
       }
-
-      // 同步完成后，重发待处理的标记已读队列
-      await _flushMarkAsReadQueue();
 
       // 检查是否有更新的同步请求
       if (_syncVersion > myVersion) {
@@ -1231,89 +1210,6 @@ class CachedAgentProxy extends _CachedAgentProxyBase
   /// 从本地数据库统计 assistant 且 is_read=0 的消息数量
   Future<int> getUnreadCount() async {
     return _messageStore.getUnreadCount(_deviceId, _employeeId);
-  }
-
-  /// 查询当前会话的未读消息 ID 列表
-  ///
-  /// 从本地数据库查询 assistant 且 is_read=0 的消息 UUID 列表，
-  /// 按创建时间升序排列。
-  Future<List<String>> getUnreadMessageIds() async {
-    return _messageStore.getUnreadMessageIds(_deviceId, _employeeId);
-  }
-
-  /// 标记当前会话的所有消息为已读
-  ///
-  /// 用户打开会话窗口时调用此方法，会：
-  /// 1. 通过 [onMarkAsRead] 回调通知 DeviceClient（本地标记 + 跨设备广播）
-  /// 2. 持久化标记已读请求到本地队列（确保断线重连后重发）
-  /// 3. 通过 [_proxy] RPC 通知远程 Agent 记录已读状态
-  void markMessagesAsRead({List<String>? messageIds}) {
-    onMarkAsRead?.call(_employeeId, _deviceId);
-
-    // 持久化到标记已读队列（远程模式）
-    if (!_proxy.isLocalMode) {
-      _markReadQueueStore.enqueue(
-        employeeId: _employeeId,
-        readerDeviceId: _deviceId,
-        messageIds: messageIds,
-      );
-    }
-
-    // 通知远程 Agent 记录已读状态（fire-and-forget）
-    _proxy
-        .markMessagesAsRead(readerDeviceId: _deviceId, messageIds: messageIds)
-        .then((_) {
-          // 远程调用成功，清空该员工的队列
-          _markReadQueueStore.clear(employeeId: _employeeId);
-          // 不再远程同步 summary，仅通知 UI 刷新（已读状态由 onMarkAsRead 回调处理）
-          _notifyMessagesChanged();
-        })
-        .catchError((_) {
-          // 远程调用失败，队列保留，断线重连后会重发
-          _CachedAgentProxyBase._log.error('标记已读远程调用失败，已保留到队列等待重发');
-        });
-  }
-
-  /// 标记所有消息为已读（通过 RPC 通知远程 Agent）
-  ///
-  /// 当远程设备需要标记已读时，通过此方法 RPC 调用远程 Agent 的 markAllMessagesAsRead。
-  Future<void> markAllMessagesAsRead(String deviceId) {
-    return _proxy.markAllMessagesAsRead(deviceId);
-  }
-
-  /// 基于 seq 批量标记已读
-  ///
-  /// 将 seq <= readSeq 的所有未读消息标记为已读。
-  /// 适用于"用户已浏览到某条消息位置"的场景。
-  void markMessagesAsReadBySeq({
-    required String readerDeviceId,
-    required int readSeq,
-  }) {
-    // 1. 本地 DB 批量标记已读
-    _messageStore.markAsReadBySeqInDb(_deviceId, _employeeId, readSeq);
-
-    // 2. 通知远程 Agent
-    _proxy
-        .markMessagesAsReadBySeq(readerDeviceId: _deviceId, readSeq: readSeq)
-        .then((_) {
-          // 成功，仅通知 UI 刷新
-          _notifyMessagesChanged();
-        })
-        .catchError((_) {
-          _CachedAgentProxyBase._log.error('按 seq 标记已读远程调用失败');
-        });
-
-    // 3. 通知 UI 刷新
-    _notifyMessagesChanged();
-  }
-
-  /// 查询消息已读状态
-  ///
-  /// 设备重新打开时从 Agent 查询哪些消息已读
-  Future<MessagesReadStatusResult> getMessagesReadStatus({
-    required String deviceId,
-  }) {
-    return _proxy.getMessagesReadStatus(deviceId: deviceId);
   }
 
   // ===== 缓存相关属性（仅远程模式有效） =====

@@ -53,7 +53,6 @@ void main() async {
     messageStore: messageStore,
     deviceId: deviceId,
     employeeId: employeeId,
-    markReadQueueStore: MarkReadQueueStore(deviceId: deviceId),
   );
 
   // ============================================================
@@ -306,9 +305,11 @@ void main() async {
   }
 
   // --- 5.8 标记已读 ---
+  // 注意：标记已读应通过 DeviceClient 统一调用，不再通过 CachedAgentProxy
+  // final client = DeviceClient.getInstance(deviceId);
+  // client.markAllMessagesAsRead(employeeId: employeeId);
   void markAllAsRead() {
-    cachedProxy.markAllMessagesAsRead(deviceId);
-    print('已标记所有消息为已读');
+    print('已标记所有消息为已读（通过 DeviceClient.markAllMessagesAsRead）');
   }
 
   // ============================================================
@@ -663,9 +664,7 @@ void _handlePermissionRequest(
 // │                     已读标记                                     │
 // ├───────────────────────────────────────────────────────────────────┤
 // │ getUnreadCount()            获取未读数 -> Future<int>             │
-// │ getUnreadMessageIds()       获取未读ID列表 -> Future<List>        │
-// │ clearAllUnread()            清除全部未读 -> Future<void>          │
-// │ markMessagesAsRead()        标记已读 (void, fire-and-forget)     │
+// │                     (标记已读通过 DeviceClient.markAllMessagesAsRead) │
 // ├───────────────────────────────────────────────────────────────────┤
 // │                     状态快照                                     │
 // ├───────────────────────────────────────────────────────────────────┤

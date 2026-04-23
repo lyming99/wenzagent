@@ -206,25 +206,6 @@ class DeviceAgentManager {
         messageStore: _messageStoreService,
         deviceId: targetDeviceId,
         employeeId: employeeId,
-        markReadQueueStore: MarkReadQueueStore(deviceId: _deviceId),
-        onMarkAsRead: (empId, fromDevId) async {
-          // 1. 先同步更新 DB（messages + session_summary），确保后续广播携带最新数据
-          final dbUnreadCount = await _notificationManager.markMessagesAsReadInDb(empId, fromDevId);
-          // 2. 更新内存层
-          _stateHolder.notificationHub.markAllAsRead(
-            employeeId: empId,
-            fromDeviceId: fromDevId,
-          );
-          // 3. 用 DB 统计修正内存缓存（DB 是权威数据源）
-          if (dbUnreadCount >= 0) {
-            _stateHolder.notificationHub.adjustUnreadCountFromDb(
-              employeeId: empId,
-              count: dbUnreadCount,
-            );
-          }
-          // 4. 广播到远程设备（此时 DB 已更新，广播携带正确的 unread_count=0）
-          _broadcastReadStatus(employeeId: empId, fromDeviceId: fromDevId);
-        },
         onSessionSummaryUpdated: (empId, summaryData) {
           final summary = SessionSummaryEntity.fromMap(summaryData);
           // DB 写入已由 _syncSessionSummaryFromRemote 内部完成，此处仅更新内存 + UI
@@ -281,25 +262,6 @@ class DeviceAgentManager {
       messageStore: _messageStoreService,
       deviceId: targetDeviceId,
       employeeId: employeeId,
-      markReadQueueStore: MarkReadQueueStore(deviceId: _deviceId),
-      onMarkAsRead: (empId, fromDevId) async {
-        // 1. 先同步更新 DB（messages + session_summary），确保后续广播携带最新数据
-        final dbUnreadCount = await _notificationManager.markMessagesAsReadInDb(empId, fromDevId);
-        // 2. 更新内存层
-        _stateHolder.notificationHub.markAllAsRead(
-          employeeId: empId,
-          fromDeviceId: fromDevId,
-        );
-        // 3. 用 DB 统计修正内存缓存（DB 是权威数据源）
-        if (dbUnreadCount >= 0) {
-          _stateHolder.notificationHub.adjustUnreadCountFromDb(
-            employeeId: empId,
-            count: dbUnreadCount,
-          );
-        }
-        // 4. 广播到远程设备（此时 DB 已更新，广播携带正确的 unread_count=0）
-        _broadcastReadStatus(employeeId: empId, fromDeviceId: fromDevId);
-      },
       onSessionSummaryUpdated: (empId, summaryData) {
         final summary = SessionSummaryEntity.fromMap(summaryData);
         // DB 写入已由 _syncSessionSummaryFromRemote 内部完成，此处仅更新内存 + UI

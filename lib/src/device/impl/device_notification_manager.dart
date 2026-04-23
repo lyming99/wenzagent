@@ -100,7 +100,7 @@ class DeviceNotificationManager {
 
   Future<void> setCurrentOpenSession({required String employeeId, String? fromDeviceId}) async {
     _currentOpenSession = OpenSessionState(employeeId: employeeId, fromDeviceId: fromDeviceId);
-    markAllMessagesAsRead(employeeId: employeeId, fromDeviceId: fromDeviceId);
+    markAllMessagesAsRead(employeeId: employeeId, targetDeviceId: fromDeviceId);
   }
 
   void clearCurrentOpenSession() {
@@ -109,32 +109,33 @@ class DeviceNotificationManager {
 
   // ===== 已读管理 =====
 
-  void markAllMessagesAsRead({required String employeeId, String? fromDeviceId}) {
-    // 使用 fromDeviceId（消息所在设备）而非本机 _deviceId，确保远程会话也能正确更新 DB
-    final targetDeviceId = fromDeviceId ?? _deviceId;
+  void markAllMessagesAsRead({required String employeeId, String? targetDeviceId}) {
+    // 使用 targetDeviceId（消息所在设备）而非本机 _deviceId，确保远程会话也能正确更新 DB
+    final deviceId = targetDeviceId ?? _deviceId;
     // 1. 先写 DB（messages + session_summary），确保广播时数据已是最新
     //    markAsReadInDb 内部已同步更新 session_summary.unread_count = 0
-    _messageStoreService.markAsReadInDb(targetDeviceId, employeeId);
+    _messageStoreService.markAsReadInDb(deviceId, employeeId);
     // 2. 更新内存层
-    _stateHolder.notificationHub.markAllAsRead(employeeId: employeeId, fromDeviceId: fromDeviceId);
+    _stateHolder.notificationHub.markAllAsRead(employeeId: employeeId, fromDeviceId: targetDeviceId);
     // 3. 广播到远程设备（携带已读后的最新摘要）
-    _broadcastReadStatus(employeeId: employeeId, fromDeviceId: fromDeviceId);
+    _broadcastReadStatus(employeeId: employeeId, targetDeviceId: targetDeviceId);
     // 4. 通知 agent 层
-    _notifyAgentReadStatus(employeeId: employeeId, fromDeviceId: fromDeviceId);
+    _notifyAgentReadStatus(employeeId: employeeId, targetDeviceId: targetDeviceId);
   }
 
   void markAllMessagesAsReadGlobal() {
-    _stateHolder.notificationHub.markAllAsReadGlobal();
-    _broadcastReadStatusGlobal();
-    _markAllMessagesAsReadInDbGlobal();
+    final employeeIds = _stateHolder.notificationHub.unreadEmployeeIds;
+    for (final employeeId in employeeIds) {
+      markAllMessagesAsRead(employeeId: employeeId);
+    }
   }
 
   Future<void> syncReadStatusFromAgent({required String employeeId}) async {
-    final proxy = _agentManager.getAgentProxy(employeeId);
-    if (proxy == null) return;
+    final cachedProxy = _agentManager.getAgentProxy(employeeId);
+    if (cachedProxy == null) return;
 
     try {
-      final result = await proxy.getMessagesReadStatus(deviceId: _deviceId);
+      final result = await cachedProxy.proxy.getMessagesReadStatus(deviceId: _deviceId);
       final readStatus = result.readStatus;
 
       for (final entry in readStatus.entries) {
@@ -453,33 +454,26 @@ class DeviceNotificationManager {
     }
   }
 
-  void _markAllMessagesAsReadInDbGlobal() {
-    final employeeIds = _stateHolder.notificationHub.unreadEmployeeIds;
-    for (final employeeId in employeeIds) {
-      _messageStoreService.markAsReadInDb(_deviceId, employeeId);
-    }
-  }
-
   // ===== 广播已读状态 =====
 
   void _broadcastReadStatus({
     required String employeeId,
-    String? fromDeviceId,
+    String? targetDeviceId,
   }) {
     final lanClient = _connectionManager.lanClient;
     if (lanClient == null || !lanClient.isConnected) return;
 
-    // 使用 fromDeviceId（消息所在设备）查找摘要，确保远程会话也能获取正确的摘要
-    final targetDeviceId = fromDeviceId ?? _deviceId;
+    // 使用 targetDeviceId（消息所在设备）查找摘要，确保远程会话也能获取正确的摘要
+    final deviceId = targetDeviceId ?? _deviceId;
     // 发送完整摘要数据，使远程设备能正确更新 session summary
-    final summary = _messageStoreService.getLatestMessageSummary(targetDeviceId, employeeId);
+    final summary = _messageStoreService.getLatestMessageSummary(deviceId, employeeId);
 
     final msg = LanMessage(
       type: LanMessageType.agentSessionSummaryChanged,
       fromId: _deviceId,
       content: jsonEncode({
         'employeeId': employeeId,
-        'fromDeviceId': fromDeviceId,
+        'fromDeviceId': targetDeviceId,
         'readerDeviceId': _deviceId,
         'summary': summary?.toMap(),
       }),
@@ -489,28 +483,24 @@ class DeviceNotificationManager {
     lanClient.sendLanMessage(msg);
   }
 
-  void _broadcastReadStatusGlobal() {
-    final lanClient = _connectionManager.lanClient;
-    if (lanClient == null || !lanClient.isConnected) return;
-
-    final msg = LanMessage(
-      type: LanMessageType.agentMessageReadStatus,
-      fromId: _deviceId,
-      content: '{"global":true,"readerDeviceId":"$_deviceId"}',
-      topic: _topic,
-    );
-
-    lanClient.sendLanMessage(msg);
-  }
-
-  void _notifyAgentReadStatus({required String employeeId, String? fromDeviceId}) {
-    final agent = _agentManager.getLocalAgent(employeeId);
-    if (agent == null) return;
-    agent.markMessagesAsRead(
-      deviceId: _deviceId,
-      employeeId: employeeId,
-    ).catchError((e) {
-      _log.debug('notifyAgentReadStatus failed: $e');
-    });
+  void _notifyAgentReadStatus({required String employeeId, String? targetDeviceId}) {
+    final localAgent = _agentManager.getLocalAgent(employeeId);
+    if (localAgent != null) {
+      // 本地 Agent：直接调用
+      localAgent.markMessagesAsRead(
+        deviceId: _deviceId,
+        employeeId: employeeId,
+      ).catchError((e) {
+        _log.debug('notifyAgentReadStatus failed: $e');
+      });
+    } else {
+      // 远程 Agent：通过 RPC
+      final proxy = _agentManager.getAgentProxy(employeeId);
+      if (proxy != null) {
+        final deviceId = targetDeviceId ?? _deviceId;
+        proxy.proxy.markAllMessagesAsRead(deviceId)
+            .catchError((e) { _log.debug('notifyRemoteAgentReadStatus failed: $e'); });
+      }
+    }
   }
 }

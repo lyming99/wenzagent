@@ -702,20 +702,20 @@ class DeviceClient {
 
   Future<void> markAllMessagesAsRead({
     required String employeeId,
-    String? fromDeviceId,
+    String? targetDeviceId,
   }) async {
-    final targetDeviceId = fromDeviceId ?? _deviceId;
-    if (targetDeviceId == _deviceId) {
-      // 本地设备：直接通过 notificationManager 标记已读
+    final deviceId = targetDeviceId ?? _deviceId;
+    if (deviceId == _deviceId) {
+      // 本地设备：通过 notificationManager 统一处理 DB + memory + broadcast + agent
       _notificationManager.markAllMessagesAsRead(
         employeeId: employeeId,
-        fromDeviceId: fromDeviceId,
+        targetDeviceId: deviceId,
       );
     } else {
-      // 远程设备：通过 RPC 调用远程设备的 markAllMessagesAsRead
+      // 远程设备：通过 RPC 调用远程 Agent 的 markAllMessagesAsRead
       final proxy = _agentManager.getAgentProxy(employeeId);
       if (proxy != null) {
-        await proxy.markAllMessagesAsRead(targetDeviceId);
+        await proxy.proxy.markAllMessagesAsRead(deviceId);
       }
     }
   }

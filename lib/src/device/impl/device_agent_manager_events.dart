@@ -240,33 +240,6 @@ extension DeviceAgentManagerEvents on DeviceAgentManager {
     lanClient.sendLanMessage(msg);
   }
 
-  /// 广播已读状态到 LAN（发送 session summary 而非旧的 read status）
-  void _broadcastReadStatus({
-    required String employeeId,
-    String? fromDeviceId,
-  }) {
-    final lanClient = _connectionManager.lanClient;
-    if (lanClient == null || !lanClient.isConnected) return;
-
-    // 使用 fromDeviceId（消息所在设备）查找摘要，确保远程会话也能获取正确的摘要
-    final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-    final summary = summaryStore.getSummary(employeeId, deviceId: fromDeviceId ?? _deviceId);
-
-    final msg = LanMessage(
-      type: LanMessageType.agentSessionSummaryChanged,
-      fromId: _deviceId,
-      content: jsonEncode({
-        'employeeId': employeeId,
-        'fromDeviceId': fromDeviceId,
-        'readerDeviceId': _deviceId,
-        'summary': summary?.toMap(),
-      }),
-      topic: _topic,
-    );
-
-    lanClient.sendLanMessage(msg);
-  }
-
   /// 广播会话摘要到 LAN（助手消息完成后调用）
   void _broadcastSessionSummary({required String employeeId}) {
     final lanClient = _connectionManager.lanClient;

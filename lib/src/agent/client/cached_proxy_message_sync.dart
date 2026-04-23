@@ -198,39 +198,6 @@ mixin _CachedProxyMessageSync on _CachedAgentProxyBase {
     _CachedAgentProxyBase._log.info('已清理 ${staleIds.length} 条残留工具调用消息');
   }
 
-  /// 重发待处理的标记已读队列
-  ///
-  /// 断线重连后，自动重新发送之前失败的标记已读请求。
-  /// 每条请求独立发送，成功的立即移除，失败的保留等待下次重发。
-  @override
-  Future<void> _flushMarkAsReadQueue() async {
-    if (_isDisposed || _proxy.isLocalMode) return;
-
-    final pending = _markReadQueueStore.getPending(employeeId: _employeeId);
-    if (pending.isEmpty) return;
-
-    _CachedAgentProxyBase._log.info('开始重发 ${pending.length} 条待处理的标记已读请求');
-
-    final successIds = <int>[];
-    for (final entry in pending) {
-      try {
-        await _proxy.markMessagesAsRead(
-          readerDeviceId: entry.readerDeviceId,
-          messageIds: entry.messageIds,
-        );
-        successIds.add(entry.id);
-      } catch (e) {
-        // 单条失败不影响后续发送，保留在队列中等待下次重发
-        _CachedAgentProxyBase._log.error('重发标记已读请求失败: ${entry.id}', e);
-      }
-    }
-
-    if (successIds.isNotEmpty) {
-      _markReadQueueStore.removeAll(successIds);
-      _CachedAgentProxyBase._log.info('标记已读队列已清理 ${successIds.length} 条成功记录');
-    }
-  }
-
   /// 同步远程会话状态和权限请求
   ///
   /// 在初始化时查询远程 Agent 状态，如果正在等待权限，则查询并缓存权限请求。

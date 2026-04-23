@@ -516,7 +516,7 @@ class MessageStore {
   /// 批量标记指定员工的消息为已读（SQL 直接更新，返回受影响行数）
   ///
   /// 使用单次 UPDATE 批量标记 is_read=1，不再逐条分配 seq。
-  /// 已读状态的跨设备同步通过 MarkReadQueueStore + RPC 广播实现。
+  /// 已读状态的跨设备同步通过 DeviceNotificationManager + RPC 广播实现。
   int markAsReadByEmployee(String employeeId, {String deviceId = ''}) {
     final now = DateTime.now().millisecondsSinceEpoch;
 
