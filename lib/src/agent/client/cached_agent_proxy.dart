@@ -1181,7 +1181,7 @@ class CachedAgentProxy extends _CachedAgentProxyBase
 
     // 2. 通知远程 Agent
     _proxy.markMessagesAsReadBySeq(
-      readerDeviceId: readerDeviceId,
+      readerDeviceId: _deviceId,
       readSeq: readSeq,
     ).then((_) {
       // 成功，仅通知 UI 刷新

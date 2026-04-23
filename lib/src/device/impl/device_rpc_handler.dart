@@ -56,6 +56,7 @@ class DeviceRpcHandler {
   }
 
   void _registerAgentMethods(RemoteCallServer rpcServer) {
+    _log.debug('R_registerAgentMethods');
     // Agent 对话操作
     rpcServer.register(AgentRpcConfig.methodSendMessage, (params) async {
       final request = SendMessageRequest.fromMap(params);

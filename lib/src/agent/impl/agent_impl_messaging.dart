@@ -286,13 +286,20 @@ mixin _AgentImplMessaging on _AgentImplBase {
     // 如果未指定消息ID列表，则标记该员工的所有消息为已读
     final ids = messageIds;
     if (ids != null && ids.isNotEmpty) {
+      // 持久化到 DB：逐条标记指定消息为已读
+      final store = MessageStore(deviceId: deviceId);
       for (final messageId in ids) {
+        store.markAsReadByUuid(messageId);
         _messageReadStatus[messageId] ??= {};
         _messageReadStatus[messageId]![readerDeviceId] = DateTime.now();
       }
       _AgentImplBase._log.info('已标记设备 $readerDeviceId 对 ${ids.length} 条消息的已读状态');
     } else {
-      // 获取所有消息并标记已读
+      // 持久化到 DB：批量标记该员工所有消息为已读
+      final store = MessageStore(deviceId: deviceId);
+      store.markAsReadByEmployee(employeeId, deviceId: deviceId);
+
+      // 更新内存缓存
       final allMessages = await _chatAdapter.getSessionMessages(employeeId);
       for (final message in allMessages) {
         _messageReadStatus[message.id] ??= {};
@@ -323,24 +330,25 @@ mixin _AgentImplMessaging on _AgentImplBase {
   }) async {
     _touch();
 
-    // 获取所有消息，筛选 seq <= readSeq 的 assistant 未读消息
-    final allMessages = await _chatAdapter.getSessionMessages(employeeId);
-    int markedCount = 0;
-    for (final message in allMessages) {
-      if (message.role != 'assistant') continue;
-      final seq = message.metadata?['seq'] as int? ?? 0;
-      if (seq <= 0 || seq > readSeq) continue;
+    // 1. 持久化到 DB：批量标记 seq <= readSeq 的 assistant 未读消息为已读
+    final store = MessageStore(deviceId: deviceId);
+    final affected = store.markAsReadBySeq(employeeId, readSeq, deviceId: deviceId);
 
-      _messageReadStatus[message.id] ??= {};
-      _messageReadStatus[message.id]![readerDeviceId] = DateTime.now();
-      markedCount++;
+    // 2. 更新内存缓存：从 DB 已读结果同步，避免全量加载消息
+    final now = DateTime.now();
+    final readStatusMap = store.getReadStatusMap(employeeId, deviceId: deviceId);
+    for (final entry in readStatusMap.entries) {
+      if (entry.value) {
+        _messageReadStatus[entry.key] ??= {};
+        _messageReadStatus[entry.key]![readerDeviceId] ??= now;
+      }
     }
 
     _AgentImplBase._log.info(
-      '已按 seq=$readSeq 标记设备 $readerDeviceId 对 $markedCount 条消息的已读状态',
+      '已按 seq=$readSeq 标记设备 $readerDeviceId 对 $affected 条消息的已读状态（DB 持久化）',
     );
 
-    // 广播已读状态变更事件
+    // 3. 广播已读状态变更事件
     _eventController.add(
       AgentEvent(
         type: AgentEventType.messageReadStatusChanged,
@@ -359,14 +367,22 @@ mixin _AgentImplMessaging on _AgentImplBase {
     required String deviceId,
     required String employeeId,
   }) async {
-    // 获取该员工的所有消息
-    final allMessages = await _chatAdapter.getSessionMessages(employeeId);
+    // 优先从 DB 读取已读状态（持久化数据，进程重启后仍有效）
+    final store = MessageStore(deviceId: deviceId);
+    final dbReadStatus = store.getReadStatusMap(employeeId, deviceId: deviceId);
 
+    // 合并内存缓存（内存中可能有尚未落盘的实时数据）
     final readStatus = <String, bool>{};
-    for (final message in allMessages) {
-      final messageReadMap = _messageReadStatus[message.id];
-      readStatus[message.id] =
-          messageReadMap != null && messageReadMap.containsKey(deviceId);
+
+    // 先写入 DB 数据
+    for (final entry in dbReadStatus.entries) {
+      readStatus[entry.key] = entry.value;
+    }
+
+    // 再用内存数据补充（DB 中没有但内存中有的消息）
+    for (final entry in _messageReadStatus.entries) {
+      readStatus[entry.key] =
+          entry.value.containsKey(deviceId);
     }
 
     return MessagesReadStatusResult(

@@ -439,6 +439,31 @@ class MessageStore {
     return result.first['cnt'] as int;
   }
 
+  /// 获取指定员工所有消息的已读状态（按 device_id 隔离）
+  ///
+  /// 返回 Map<uuid, is_read>，用于 Agent 侧恢复已读状态。
+  /// 只返回 assistant 角色且未删除的消息。
+  Map<String, bool> getReadStatusMap(String employeeId, {String deviceId = ''}) {
+    if (deviceId.isNotEmpty) {
+      final resultSet = _db.select(
+        'SELECT uuid, is_read FROM messages WHERE employee_id = ? AND device_id = ? AND role = ? AND deleted = 0',
+        [employeeId, deviceId, 'assistant'],
+      );
+      return {
+        for (final row in resultSet)
+          row['uuid'] as String: (row['is_read'] as int) == 1
+      };
+    }
+    final resultSet = _db.select(
+      'SELECT uuid, is_read FROM messages WHERE employee_id = ? AND role = ? AND deleted = 0',
+      [employeeId, 'assistant'],
+    );
+    return {
+      for (final row in resultSet)
+        row['uuid'] as String: (row['is_read'] as int) == 1
+    };
+  }
+
   /// 获取指定员工的未读消息 ID 列表（按 device_id 隔离）
   List<String> getUnreadMessageIds(String employeeId, {String deviceId = ''}) {
     if (deviceId.isNotEmpty) {
@@ -475,6 +500,17 @@ class MessageStore {
       [employeeId],
     );
     return resultSet.map((row) => row['uuid'] as String).toList();
+  }
+
+  /// 按 UUID 标记单条消息为已读
+  ///
+  /// 用于 Agent 侧按消息 ID 逐条标记已读的场景。
+  void markAsReadByUuid(String uuid) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _db.execute(
+      'UPDATE messages SET is_read = 1, update_time = ? WHERE uuid = ? AND is_read = 0 AND deleted = 0',
+      [now, uuid],
+    );
   }
 
   /// 批量标记指定员工的消息为已读（SQL 直接更新，返回受影响行数）

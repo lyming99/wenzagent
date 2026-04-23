@@ -1,15 +1,16 @@
-/// Example: 模拟调用 bin/wenzagent_client.dart 的 main 方法
+/// Example: 直接调用 bin/wenzagent_client.dart 的 main 方法
 ///
 /// 参数：--host 127.0.0.1 --port 9900 --device-id test --device-name test-device
 ///
-/// 本示例通过 Process 启动子进程来运行 wenzagent_client.dart。
+/// 本示例通过 Isolate.spawnUri 在同一进程内以独立 Isolate 运行 client，
+/// 而非通过 Process 启动子进程。
 ///
 /// 用法：
 ///   dart run example/wenzagent_client_example.dart
 library;
 
-import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 // ---------------------------------------------------------------------------
 // 配置
@@ -27,7 +28,7 @@ const _extraArgs = <String>[]; // 可追加额外参数，如 '--log-level', 'de
 // ---------------------------------------------------------------------------
 
 Future<void> main(List<String> args) async {
-  final clientArgs = [
+  final clientArgs = <String>[
     '--host', _host,
     '--port', _port,
     '--device-id', _deviceId,
@@ -45,33 +46,41 @@ Future<void> main(List<String> args) async {
   print('╚══════════════════════════════════════════════════╝');
   print('');
 
-  await _runViaProcess(clientArgs);
+  await _runViaIsolate(clientArgs);
 }
 
 // ---------------------------------------------------------------------------
-// 通过 Process 启动子进程运行 wenzagent_client.dart
+// 通过 Isolate.spawnUri 在同一进程内运行 wenzagent_client.dart
 // ---------------------------------------------------------------------------
 
-Future<void> _runViaProcess(List<String> clientArgs) async {
-  final scriptPath = _resolveClientScript();
+Future<void> _runViaIsolate(List<String> clientArgs) async {
+  final scriptUri = Uri.file(_resolveClientScript());
 
-  print('Launching: dart $scriptPath ${clientArgs.join(' ')}');
+  print('Spawning Isolate: $scriptUri');
+  print('Args: ${clientArgs.join(' ')}');
   print('──────────────────────────────────────────────────');
 
+  final receivePort = ReceivePort();
+
   try {
-    final process = await Process.start(
-      'dart',
-      ['run', scriptPath, ...clientArgs],
-      mode: ProcessStartMode.inheritStdio,
+    final isolate = await Isolate.spawnUri(
+      scriptUri,
+      clientArgs,
+      receivePort.sendPort,
     );
 
-    final exitCode = await process.exitCode;
+    // 监听 isolate 消息
+    await receivePort.first;
 
-    print('──────────────────────────────────────────────────');
-    print('Client process exited with code: $exitCode');
+    isolate.kill(priority: Isolate.immediate);
   } catch (e) {
-    print('Failed to start client process: $e');
+    print('Failed to spawn isolate: $e');
+  } finally {
+    receivePort.close();
   }
+
+  print('──────────────────────────────────────────────────');
+  print('Client isolate finished.');
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +89,6 @@ Future<void> _runViaProcess(List<String> clientArgs) async {
 
 /// 项目根目录
 String get _projectRoot {
-  // 从当前脚本位置推导项目根目录
   final script = Platform.script.toFilePath();
   // example/wenzagent_client_example.dart -> 项目根
   final exampleDir = File(script).parent.path;

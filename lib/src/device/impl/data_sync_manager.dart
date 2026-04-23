@@ -430,6 +430,7 @@ class DataSyncManager {
             .map((s) => SessionSummaryEntity.fromMap(s as Map<String, dynamic>))
             .toList();
         for (final summary in summaries) {
+          print("${summary.deviceId}==>${summary.unreadCount}");
           // 保留远程摘要的原始 deviceId（employeeId + deviceId 隔离）
           summaryStore.upsertFromRemote(summary);
         }
