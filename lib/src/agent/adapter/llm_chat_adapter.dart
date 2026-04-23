@@ -25,7 +25,7 @@ part 'llm_stream_handler.dart';
 part 'llm_tool_calling_loop.dart';
 
 /// Tool calling 循环最大迭代次数
-const int _maxToolCallIterations = 1000;
+const int _maxToolCallIterations = 200;
 
 class _NotReplyRecord {
   int notReplyCount = 0;
