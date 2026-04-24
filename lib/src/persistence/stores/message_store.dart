@@ -543,7 +543,7 @@ class MessageStore {
 
   /// 基于 seq 批量标记已读
   ///
-  /// 将 seq <= readSeq 的所有 assistant 未读消息标记为已读，返回受影响行数
+  @override
   int markAsReadBySeq(String employeeId, int readSeq, {String deviceId = ''}) {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (deviceId.isNotEmpty) {

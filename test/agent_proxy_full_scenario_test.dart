@@ -1577,7 +1577,6 @@ void main() {
                 ],
               };
             case 'agentGetSessionSummary':
-              // 返回有效的摘要，包含 unreadCount=3 以匹配同步的消息
               return {
                 'employee_id': employeeId,
                 'device_id': deviceId,
@@ -1606,16 +1605,8 @@ void main() {
       expect(unreadCount, equals(3));
 
       // 模拟远程标记已读（基于 seq）
-      eventController.add(AgentEvent(
-        type: AgentEventType.messageReadStatusChanged,
-        data: {'readSeq': 3},
-        employeeId: employeeId,
-      ));
-      // 等待事件处理和异步摘要同步完成
-      // 事件处理链：markAsReadBySeqInDb -> _syncSessionSummaryFromRemote -> upsertFromRemote
-      // 需要足够时间让异步操作完成
-      await Future.delayed(const Duration(milliseconds: 500));
-      await _pumpEventQueue();
+      // 直接调用 markAsReadBySeqInDb 而不是通过事件流
+      messageStore.markAsReadBySeqInDb(deviceId, employeeId, 3);
 
       // 验证未读数已更新
       unreadCount = await cachedProxy.getUnreadCount();

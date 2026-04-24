@@ -66,11 +66,14 @@ extension _StreamHandler on LlmChatAdapter {
   /// LLM 流式调用，返回 AI 文本、工具调用列表等
   ///
   /// 通过 [onChunk] 回调逐块推送文本给调用方。
+  /// [allSentToolCallIds] 当前会话已发送给 LLM 的所有 tool_call_id 集合（跨轮次累积），
+  /// 用于 sanitizeForLlm 时确保 tool_result 能匹配到正确的 tool_call。
   Future<_LlmStreamResult> callLlmStream({
     required String? systemPrompt,
     required bool hasTools,
     required bool streamCancelled,
     CancellationToken? cancellationToken,
+    Set<String>? allSentToolCallIds,
     void Function(String chunk)? onChunk,
   }) async {
     // 构建消息列表
@@ -90,7 +93,10 @@ extension _StreamHandler on LlmChatAdapter {
       );
     }
 
-    final sanitized = shared.LlmMessageMapper.sanitizeForLlm(chatMsgs);
+    final sanitized = shared.LlmMessageMapper.sanitizeForLlm(
+      chatMsgs,
+      knownToolCallIds: allSentToolCallIds,
+    );
     final llmMessages = shared.LlmMessageMapper.toLlmDartList(sanitized);
 
     // 构建工具列表

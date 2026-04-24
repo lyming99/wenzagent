@@ -296,8 +296,18 @@ class LlmMessageMapper {
   /// - 异步工具执行期间消息注入导致的顺序错乱
   /// - alreadyCallsSet 跳过执行但 assistant 消息已记录
   /// - 上下文压缩后保留孤立 tool result
-  static List<ChatMessage> sanitizeForLlm(List<ChatMessage> messages) {
+  ///
+  /// [knownToolCallIds] 可选的跨轮次累积 tool_call_id 集合，用于多轮 tool calling 场景。
+  /// 当为空或 null 时，回退到仅匹配最近一轮 assistant 的 tool_call_id（旧行为）。
+  /// 当提供时，tool_result 只要在 knownToolCallIds 中即可保留，无需匹配最近一轮。
+  static List<ChatMessage> sanitizeForLlm(
+    List<ChatMessage> messages, {
+    Set<String>? knownToolCallIds,
+  }) {
     if (messages.isEmpty) return messages;
+
+    // 判断是否启用跨轮次累积匹配模式
+    final useKnownIds = knownToolCallIds != null && knownToolCallIds.isNotEmpty;
 
     final result = <ChatMessage>[];
     final expectedIds = <String>{};
@@ -306,15 +316,27 @@ class LlmMessageMapper {
       if (msg.role == MessageRole.assistant &&
           msg.toolCalls != null &&
           msg.toolCalls!.isNotEmpty) {
-        // 如果之前有未匹配的 tool_call_id，清除上一条 assistant 的 toolCalls
+        // 如果之前有未匹配的 tool_call_id
         if (expectedIds.isNotEmpty) {
-          _log.warn(
-            'sanitizeForLlm: 新 assistant(toolCalls) 但有未匹配的 expectedIds=$expectedIds, '
-            '新 toolCallIds=${msg.toolCalls!.map((tc) => tc.id).toList()}, '
-            '触发 _stripLastAssistantToolCalls',
-          );
-          _stripLastAssistantToolCalls(result);
-          expectedIds.clear();
+          // 跨轮次模式：不清除上一轮的 toolCalls，保留所有 assistant(toolCalls)
+          // 因为 knownToolCallIds 保证所有 tool_call_id 都已知，tool_result 可匹配任一轮次
+          if (!useKnownIds) {
+            // 旧行为：清除上一条 assistant 的 toolCalls
+            _log.warn(
+              'sanitizeForLlm: 新 assistant(toolCalls) 但有未匹配的 expectedIds=$expectedIds, '
+              '新 toolCallIds=${msg.toolCalls!.map((tc) => tc.id).toList()}, '
+              '触发 _stripLastAssistantToolCalls',
+            );
+            _stripLastAssistantToolCalls(result);
+          } else {
+            _log.debug(
+              'sanitizeForLlm: 跨轮次模式，保留之前未匹配的 expectedIds=$expectedIds, '
+              '新增 toolCallIds=${msg.toolCalls!.map((tc) => tc.id).toList()}',
+            );
+          }
+          if (!useKnownIds) {
+            expectedIds.clear();
+          }
         }
         // 记录本轮所有 tool_call_id
         for (final tc in msg.toolCalls!) {
@@ -323,9 +345,10 @@ class LlmMessageMapper {
         result.add(msg);
       } else if (msg.role == MessageRole.tool) {
         if (msg.isToolResultGroup) {
-          // 分组 tool result：只保留 expectedIds 中存在的
+          // 分组 tool result：只保留 expectedIds 或 knownToolCallIds 中存在的
           final validResults = msg.toolResults!
-              .where((r) => expectedIds.contains(r.toolCallId))
+              .where((r) => expectedIds.contains(r.toolCallId) ||
+                  (useKnownIds && knownToolCallIds.contains(r.toolCallId)))
               .toList();
           for (final r in validResults) {
             expectedIds.remove(r.toolCallId);
@@ -353,7 +376,9 @@ class LlmMessageMapper {
         } else {
           // 单条 tool result
           final toolCallId = msg.toolCallId ?? '';
-          if (toolCallId.isEmpty || !expectedIds.contains(toolCallId)) {
+          final isValid = expectedIds.contains(toolCallId) ||
+              (useKnownIds && knownToolCallIds.contains(toolCallId));
+          if (toolCallId.isEmpty || !isValid) {
             _log.warn('sanitizeForLlm: 丢弃孤立 tool result (toolCallId=$toolCallId)');
             continue;
           }
@@ -363,20 +388,29 @@ class LlmMessageMapper {
       } else {
         // user / system 等非 tool 消息
         if (expectedIds.isNotEmpty) {
-          _log.warn(
-            'sanitizeForLlm: 遇到 ${msg.role} 消息但有未匹配的 toolCallIds=$expectedIds, '
-            'msgId=${msg.id}, content=${_truncate(msg.content ?? '', 60)}, '
-            '触发 _stripLastAssistantToolCalls',
-          );
-          _stripLastAssistantToolCalls(result);
-          expectedIds.clear();
+          if (!useKnownIds) {
+            // 旧行为：清除上一条 assistant 的 toolCalls
+            _log.warn(
+              'sanitizeForLlm: 遇到 ${msg.role} 消息但有未匹配的 toolCallIds=$expectedIds, '
+              'msgId=${msg.id}, content=${_truncate(msg.content ?? '', 60)}, '
+              '触发 _stripLastAssistantToolCalls',
+            );
+            _stripLastAssistantToolCalls(result);
+            expectedIds.clear();
+          } else {
+            // 跨轮次模式：不干预，保留未匹配的 expectedIds
+            // 因为 tool_result 可能出现在后续消息中
+            _log.debug(
+              'sanitizeForLlm: 跨轮次模式，遇到 ${msg.role} 消息时保留未匹配的 expectedIds=$expectedIds',
+            );
+          }
         }
         result.add(msg);
       }
     }
 
     // 序列末尾：处理残留未匹配的 expectedIds
-    if (expectedIds.isNotEmpty) {
+    if (expectedIds.isNotEmpty && !useKnownIds) {
       _log.warn(
         'sanitizeForLlm: 序列末尾仍有未匹配的 toolCallIds=$expectedIds, '
         '总消息数=${messages.length}, 触发 _stripLastAssistantToolCalls',

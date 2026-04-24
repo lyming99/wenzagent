@@ -289,6 +289,9 @@ class LlmChatAdapter implements IChatAdapter {
         int consecutiveDuplicateCount = 0;
         var notReplyRecord = _NotReplyRecord(maxNotReplyCount: 5);
         var alreadyCallsSet = <String>{};
+        // 已发送给 LLM 的所有 tool_call_id 集合（跨轮次累积）
+        // 用于 sanitizeForLlm 校验，确保 tool_result 能匹配到任一轮次的 tool_call
+        var allSentToolCallIds = <String>{};
         for (
           var iteration = 0;
           iteration < _maxToolCallIterations;
@@ -305,6 +308,7 @@ class LlmChatAdapter implements IChatAdapter {
             hasTools: hasTools,
             streamCancelled: streamCancelled,
             cancellationToken: cancellationToken,
+            allSentToolCallIds: allSentToolCallIds,
             onChunk: (chunk) => controller.add(StreamResponse.chunk(chunk)),
           );
 
@@ -407,6 +411,11 @@ class LlmChatAdapter implements IChatAdapter {
             deviceId!,
             pendingAssistantMsg,
           );
+
+          // 记录本轮 tool_call_id 到跨轮次累积集合
+          for (final tc in chatToolCalls) {
+            allSentToolCallIds.add(tc.id);
+          }
 
           // 权限检查 + 并行执行工具
           final execResult = await executeToolCalls(

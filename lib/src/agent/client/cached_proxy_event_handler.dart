@@ -452,8 +452,7 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
       _messageStore.markAsReadInDb(_deviceId, _employeeId);
     }
 
-    // 刷新 summary 并通知 UI
-    _syncSessionSummaryFromRemote();
+    // 通知 UI 刷新（不触发远程摘要同步，避免 upsertFromRemote 的 MAX 语义覆盖本地已读状态）
     _notifyMessagesChanged();
   }
 

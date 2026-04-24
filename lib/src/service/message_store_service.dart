@@ -455,8 +455,12 @@ class MessageStoreServiceImpl implements MessageStoreService {
 
   @override
   int markAsReadBySeqInDb(String deviceId, String employeeId, int readSeq) {
+    // 修复：先更新 messages 表的 is_read，再使用 affected 数量直接更新 summary。
+    // 之前的 BUG：先更新 messages.is_read=1，再查询 is_read=0 的数量得到 delta=0，
+    // 导致 summary 的 unread_count 不会减少。
     final affected = _store.markAsReadBySeq(employeeId, readSeq, deviceId: deviceId);
-    _summaryStore.markAsReadBySeq(employeeId, readSeq, deviceId: deviceId);
+    // 直接使用 affected 值来更新 summary，避免再次查询 messages 表
+    _summaryStore.decrementUnreadCount(employeeId, affected, deviceId: deviceId);
     return affected;
   }
 

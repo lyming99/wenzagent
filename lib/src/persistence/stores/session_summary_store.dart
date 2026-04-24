@@ -172,6 +172,21 @@ class SessionSummaryStore {
     }
   }
 
+  /// 直接减少未读计数（用于 markAsReadBySeqInDb 的修复）
+  ///
+  /// 当 MessageStore 已经将消息标记为已读后，不能再查询 messages 表获取 delta，
+  /// 因为 is_read 已被更新为 1。此时需要调用方传入已知的 affected 数量。
+  void decrementUnreadCount(String employeeId, int delta, {String deviceId = ''}) {
+    if (delta <= 0) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _db.execute('''
+      UPDATE session_summary SET
+        unread_count = MAX(unread_count - ?, 0),
+        update_time = ?
+      WHERE employee_id = ? AND device_id = ?
+    ''', [delta, now, employeeId, deviceId]);
+  }
+
   /// 标记已读（单次 UPDATE，O(1)）
   void markAsRead(String employeeId, {String deviceId = ''}) {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -185,7 +200,10 @@ class SessionSummaryStore {
 
   /// 基于 seq 批量标记已读（按实际标记数量减少 unread_count）
   void markAsReadBySeq(String employeeId, int readSeq, {String deviceId = ''}) {
-    // 先统计符合条件的未读消息数量
+    // 注意：此方法在 MessageStore.markAsReadBySeq 之后调用，
+    // 此时 messages 表的 is_read 已被更新为 1，所以 delta 会是 0。
+    // 修复方案：使用 MessageStoreServiceImpl 中的 decrementUnreadCount 代替。
+    // 此方法保留用于其他调用场景（如直接调用而非通过 markAsReadBySeqInDb）。
     final countResult = _db.select(
       'SELECT COUNT(*) as cnt FROM messages '
       'WHERE employee_id = ? AND device_id = ? AND role = ? AND is_read = 0 AND deleted = 0 AND seq <= ?',
