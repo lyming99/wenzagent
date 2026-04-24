@@ -26,3 +26,5 @@ test_db/
 
 # AI test config (contains sensitive keys)
 config/ai_test_config.yaml
+/data
+/dist
