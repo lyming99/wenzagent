@@ -100,7 +100,12 @@ class DatabaseManager {
 
   /// 获取数据库连接
   Database get db {
-    assert(_db != null, 'DatabaseManager 未初始化，请先调用 initialize()');
+    if (_db == null) {
+      throw StateError(
+        'DatabaseManager 未初始化，请先调用 initialize()。'
+        '当前实例可能尚未执行初始化流程。',
+      );
+    }
     return _db!;
   }
 

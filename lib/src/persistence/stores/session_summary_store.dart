@@ -17,7 +17,14 @@ class SessionSummaryStore {
   SessionSummaryStore({String? deviceId, DatabaseManager? dbManager})
       : _dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
 
-  Database get _db => _dbManager.db;
+  Database get _db {
+    if (!_dbManager.isInitialized) {
+      throw StateError(
+        '$runtimeType: DatabaseManager 未初始化，请先调用 initialize()。',
+      );
+    }
+    return _dbManager.db;
+  }
 
   /// 确保 session_summary 表存在（用于测试环境直接调用）
   void ensureTable() {

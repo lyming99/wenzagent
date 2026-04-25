@@ -17,7 +17,14 @@ class MessageStore {
   MessageStore({String? deviceId, DatabaseManager? dbManager})
       : _dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
 
-  Database get _db => _dbManager.db;
+  Database get _db {
+    if (!_dbManager.isInitialized) {
+      throw StateError(
+        '$runtimeType: DatabaseManager 未初始化，请先调用 initialize()。',
+      );
+    }
+    return _dbManager.db;
+  }
 
   /// 暴露 DatabaseManager，供关联 Store 复用（如 SyncWatermarkStore）
   DatabaseManager get dbManager => _dbManager;
