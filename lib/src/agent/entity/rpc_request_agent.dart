@@ -866,3 +866,99 @@ class ClearFileOperationsRequest {
     );
   }
 }
+
+// ===== 远程文件读写请求 =====
+
+/// 读取远程文件请求
+class ReadFileRequest {
+  final String path;
+  final int? offset;
+  final int? limit;
+  final int? maxBytes;
+
+  const ReadFileRequest({
+    required this.path,
+    this.offset,
+    this.limit,
+    this.maxBytes,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'path': path,
+    if (offset != null) 'offset': offset,
+    if (limit != null) 'limit': limit,
+    if (maxBytes != null) 'maxBytes': maxBytes,
+  };
+
+  factory ReadFileRequest.fromMap(Map<String, dynamic> map) {
+    return ReadFileRequest(
+      path: map['path'] as String,
+      offset: map['offset'] as int?,
+      limit: map['limit'] as int?,
+      maxBytes: map['maxBytes'] as int?,
+    );
+  }
+}
+
+/// 写入远程文件请求
+class WriteFileRequest {
+  final String path;
+  final String contentBase64;
+  final bool append;
+
+  const WriteFileRequest({
+    required this.path,
+    required this.contentBase64,
+    this.append = false,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'path': path,
+    'contentBase64': contentBase64,
+    'append': append,
+  };
+
+  factory WriteFileRequest.fromMap(Map<String, dynamic> map) {
+    return WriteFileRequest(
+      path: map['path'] as String,
+      contentBase64: map['contentBase64'] as String,
+      append: map['append'] as bool? ?? false,
+    );
+  }
+}
+
+/// 请求远程文件下载 URL
+class DownloadFileRequest {
+  final String path;
+
+  const DownloadFileRequest({required this.path});
+
+  Map<String, dynamic> toMap() => {'path': path};
+
+  factory DownloadFileRequest.fromMap(Map<String, dynamic> map) {
+    return DownloadFileRequest(path: map['path'] as String);
+  }
+}
+
+/// 请求远程文件上传 URL
+class UploadFileRequest {
+  final String path;
+  final bool overwrite;
+
+  const UploadFileRequest({
+    required this.path,
+    this.overwrite = true,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'path': path,
+    'overwrite': overwrite,
+  };
+
+  factory UploadFileRequest.fromMap(Map<String, dynamic> map) {
+    return UploadFileRequest(
+      path: map['path'] as String,
+      overwrite: map['overwrite'] as bool? ?? true,
+    );
+  }
+}

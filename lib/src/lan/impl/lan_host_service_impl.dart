@@ -8,6 +8,7 @@ import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../../device/impl/file_transfer_token_manager.dart';
 import '../../entity/lan_client.dart';
 import '../../entity/lan_device_info.dart';
 import '../../entity/lan_message.dart';
@@ -270,6 +271,10 @@ class LanHostServiceImpl implements LanHostService {
         return await _handleFileDownload(request);
       } else if (request.method == 'GET' && path == 'api/devices/online') {
         return await _handleGetOnlineDevices(request);
+      } else if (request.method == 'GET' && path == 'file-download') {
+        return await _handleRemoteFileDownload(request);
+      } else if (request.method == 'POST' && path == 'file-upload') {
+        return await _handleRemoteFileUpload(request);
       }
       return shelf.Response.notFound('Not found');
     };
@@ -353,6 +358,129 @@ class LanHostServiceImpl implements LanHostService {
       return shelf.Response.internalServerError(
         body: jsonEncode({'error': '$e'}),
         headers: {'Content-Type': 'application/json'},
+      );
+    }
+  }
+
+  /// 处理远程文件下载 HTTP 请求
+  ///
+  /// 通过临时 Token 鉴权，读取目标设备上的指定文件并流式返回。
+  /// 支持 Range 头实现断点续传。
+  Future<shelf.Response> _handleRemoteFileDownload(shelf.Request request) async {
+    final token = request.url.queryParameters['token'];
+    if (token == null || token.isEmpty) {
+      return shelf.Response.badRequest(body: 'Missing token');
+    }
+
+    // 验证并消费 Token
+    final transferToken = FileTransferTokenManager.validateAndConsume(token, 'download');
+    if (transferToken == null) {
+      return shelf.Response.forbidden('Invalid or expired token');
+    }
+
+    final filePath = transferToken.filePath;
+    final file = File(filePath);
+
+    if (!await file.exists()) {
+      return shelf.Response.notFound('File not found');
+    }
+
+    final fileSize = await file.length();
+    final fileName = filePath.split(Platform.pathSeparator).last;
+
+    // 处理 Range 请求（断点续传）
+    final rangeHeader = request.headers['range'];
+    if (rangeHeader != null) {
+      final match = RegExp(r'bytes=(\d+)-(\d*)').firstMatch(rangeHeader);
+      if (match != null) {
+        final start = int.parse(match.group(1)!);
+        final end = match.group(2) != null && match.group(2)!.isNotEmpty
+            ? int.parse(match.group(2)!)
+            : fileSize - 1;
+
+        if (start >= fileSize || end >= fileSize || start > end) {
+          return shelf.Response(416, headers: {
+            'content-range': 'bytes */$fileSize',
+          });
+        }
+
+        final stream = file.openRead(start, end + 1);
+        return shelf.Response(206, body: stream, headers: {
+          'content-type': 'application/octet-stream',
+          'content-disposition': 'attachment; filename="$fileName"',
+          'content-range': 'bytes $start-$end/$fileSize',
+          'content-length': '${end - start + 1}',
+          'accept-ranges': 'bytes',
+        });
+      }
+    }
+
+    // 全量下载
+    final stream = file.openRead();
+    return shelf.Response.ok(stream, headers: {
+      'content-type': 'application/octet-stream',
+      'content-disposition': 'attachment; filename="$fileName"',
+      'content-length': '$fileSize',
+      'accept-ranges': 'bytes',
+    });
+  }
+
+  /// 处理远程文件上传 HTTP 请求
+  ///
+  /// 通过临时 Token 鉴权，将请求体写入目标设备上的指定路径。
+  Future<shelf.Response> _handleRemoteFileUpload(shelf.Request request) async {
+    final token = request.url.queryParameters['token'];
+    if (token == null || token.isEmpty) {
+      return shelf.Response.badRequest(body: 'Missing token');
+    }
+
+    // 验证并消费 Token
+    final transferToken = FileTransferTokenManager.validateAndConsume(token, 'upload');
+    if (transferToken == null) {
+      return shelf.Response.forbidden('Invalid or expired token');
+    }
+
+    final filePath = transferToken.filePath;
+    final overwrite = transferToken.overwrite;
+
+    try {
+      // 确保父目录存在
+      final file = File(filePath);
+      final parentDir = file.parent;
+      if (!await parentDir.exists()) {
+        await parentDir.create(recursive: true);
+      }
+
+      // 检查文件是否已存在
+      if (await file.exists() && !overwrite) {
+        return shelf.Response(409, body: 'File already exists');
+      }
+
+      // 流式写入
+      final sink = file.openWrite(mode: FileMode.write);
+      int totalBytes = 0;
+
+      try {
+        await for (final chunk in request.read()) {
+          sink.add(chunk);
+          totalBytes += chunk.length;
+        }
+        await sink.close();
+      } catch (e) {
+        await sink.close();
+        // 清理不完整的文件
+        try { await file.delete(); } catch (_) {}
+        return shelf.Response.internalServerError(body: 'Write failed: $e');
+      }
+
+      return shelf.Response.ok(jsonEncode({
+        'status': 'ok',
+        'bytesWritten': totalBytes,
+        'filePath': filePath,
+      }), headers: {'Content-Type': 'application/json'});
+    } catch (e) {
+      return shelf.Response.internalServerError(
+        body: 'Upload failed: $e',
       );
     }
   }

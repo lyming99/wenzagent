@@ -3,7 +3,12 @@ library;
 
 export 'agent_event.dart';
 export 'agent_message.dart';
+export 'directory_listing_result.dart';
+export 'file_info_result.dart';
 export 'file_operation_result.dart';
+export 'file_read_result.dart';
+export 'file_transfer_url_result.dart';
+export 'file_write_result.dart';
 export 'message_input.dart';
 export 'messages_read_status_result.dart';
 export 'pending_message.dart';

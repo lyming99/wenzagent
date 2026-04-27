@@ -227,6 +227,28 @@ class AgentRpcUtil {
     return _rpcCall(AgentRpcConfig.methodRenameFile, request.toMap());
   }
 
+  // ===== Agent 远程文件读写 =====
+
+  /// 读取远程文件
+  Future<Map<String, dynamic>> readFile(ReadFileRequest request) async {
+    return _rpcCall(AgentRpcConfig.methodReadFile, request.toMap());
+  }
+
+  /// 写入远程文件
+  Future<Map<String, dynamic>> writeFile(WriteFileRequest request) async {
+    return _rpcCall(AgentRpcConfig.methodWriteFile, request.toMap());
+  }
+
+  /// 请求远程文件下载 URL
+  Future<Map<String, dynamic>> downloadFile(DownloadFileRequest request) async {
+    return _rpcCall(AgentRpcConfig.methodDownloadFile, request.toMap());
+  }
+
+  /// 请求远程文件上传 URL
+  Future<Map<String, dynamic>> uploadFile(UploadFileRequest request) async {
+    return _rpcCall(AgentRpcConfig.methodUploadFile, request.toMap());
+  }
+
   // ===== Agent 权限管理 =====
 
   /// 响应权限请求

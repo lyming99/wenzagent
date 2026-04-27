@@ -585,6 +585,91 @@ class _RemoteOps {
     return FileOpResult.fromMap(result);
   }
 
+  // ===== 远程文件读写 =====
+
+  /// 读取远程设备文件内容
+  ///
+  /// [path] 远程设备上的文件路径
+  /// [offset] 起始字节偏移
+  /// [limit] 读取字节数限制
+  /// [maxBytes] 最大读取字节数（默认 200KB）
+  Future<FileReadResult> readFile(String path, {int? offset, int? limit, int? maxBytes}) async {
+    final request = ReadFileRequest(
+      path: path,
+      offset: offset,
+      limit: limit,
+      maxBytes: maxBytes,
+    );
+    final result = await _rpcUtil.readFile(request);
+    return FileReadResult.fromMap(result);
+  }
+
+  /// 写入远程设备文件
+  ///
+  /// [path] 远程设备上的文件路径
+  /// [content] 要写入的内容（字符串）
+  /// [append] 是否追加模式（默认覆盖）
+  Future<FileWriteResult> writeFile(String path, String content, {bool append = false}) async {
+    final contentBase64 = base64Encode(utf8.encode(content));
+    final request = WriteFileRequest(
+      path: path,
+      contentBase64: contentBase64,
+      append: append,
+    );
+    final result = await _rpcUtil.writeFile(request);
+    return FileWriteResult.fromMap(result);
+  }
+
+  /// 写入远程设备文件（字节模式）
+  ///
+  /// [path] 远程设备上的文件路径
+  /// [bytes] 要写入的字节数据
+  /// [append] 是否追加模式
+  Future<FileWriteResult> writeFileBytes(String path, List<int> bytes, {bool append = false}) async {
+    final contentBase64 = base64Encode(bytes);
+    final request = WriteFileRequest(
+      path: path,
+      contentBase64: contentBase64,
+      append: append,
+    );
+    final result = await _rpcUtil.writeFile(request);
+    return FileWriteResult.fromMap(result);
+  }
+
+  /// 请求远程文件下载 Token
+  ///
+  /// 返回临时 Token 信息，客户端需自行通过 HTTP 下载文件。
+  /// URL 格式：http://{hostIp}:{hostPort}/file-download?token={token}
+  Future<FileDownloadUrlResult> requestDownloadToken(String path) async {
+    final request = DownloadFileRequest(path: path);
+    final result = await _rpcUtil.downloadFile(request);
+    // 从 RPC 响应中提取远程设备的 HTTP 地址，拼接完整下载 URL
+    final hostIp = result['hostIp'] as String? ?? '';
+    final hostPort = result['hostPort'] as int? ?? 0;
+    final token = result['token'] as String? ?? '';
+    if (hostIp.isNotEmpty && hostPort > 0 && token.isNotEmpty) {
+      result['url'] = 'http://$hostIp:$hostPort/file-download?token=$token';
+    }
+    return FileDownloadUrlResult.fromMap(result);
+  }
+
+  /// 请求远程文件上传 Token
+  ///
+  /// 返回临时 Token 信息，客户端需自行通过 HTTP 上传文件。
+  /// URL 格式：http://{hostIp}:{hostPort}/file-upload?token={token}
+  Future<FileUploadUrlResult> requestUploadToken(String path, {bool overwrite = true}) async {
+    final request = UploadFileRequest(path: path, overwrite: overwrite);
+    final result = await _rpcUtil.uploadFile(request);
+    // 从 RPC 响应中提取远程设备的 HTTP 地址，拼接完整上传 URL
+    final hostIp = result['hostIp'] as String? ?? '';
+    final hostPort = result['hostPort'] as int? ?? 0;
+    final token = result['token'] as String? ?? '';
+    if (hostIp.isNotEmpty && hostPort > 0 && token.isNotEmpty) {
+      result['url'] = 'http://$hostIp:$hostPort/file-upload?token=$token';
+    }
+    return FileUploadUrlResult.fromMap(result);
+  }
+
   // ===== 事件处理 =====
 
   /// 订阅远程事件流

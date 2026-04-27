@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../agent/client/cached_agent_proxy.dart';
 import '../agent/entity/entity.dart';
+import '../agent/rpc/agent_rpc_config.dart';
 import '../agent/notification/agent_notification_hub.dart';
 import '../entity/lan_device_info.dart';
 import '../entity/lan_message.dart';
@@ -582,6 +583,132 @@ class DeviceClient {
     employeeId: employeeId,
     targetDeviceId: targetDeviceId,
   );
+
+  // ===== 远程设备文件操作 =====
+
+  /// 调用远程设备的文件操作 RPC
+  ///
+  /// 通用方法，不依赖特定 employee，直接通过 RPC 通道调用远程设备。
+  Future<Map<String, dynamic>> invokeFileRpc({
+    required String toDeviceId,
+    required String method,
+    required Map<String, dynamic> params,
+  }) {
+    if (!_connectionManager.isConnected) {
+      throw StateError('未连接到服务器');
+    }
+    return _connectionManager.invokeRemote(toDeviceId, method, params);
+  }
+
+  /// 列出远程设备目录内容
+  Future<DirectoryListingResult> listRemoteDirectory({
+    required String toDeviceId,
+    required String path,
+  }) async {
+    final result = await invokeFileRpc(
+      toDeviceId: toDeviceId,
+      method: AgentRpcConfig.methodListDirectory,
+      params: {'path': path},
+    );
+    return DirectoryListingResult.fromMap(result);
+  }
+
+  /// 获取远程设备文件/目录信息
+  Future<FileInfoResult> getRemoteFileInfo({
+    required String toDeviceId,
+    required String path,
+  }) async {
+    final result = await invokeFileRpc(
+      toDeviceId: toDeviceId,
+      method: AgentRpcConfig.methodGetFileInfo,
+      params: {'path': path},
+    );
+    return FileInfoResult.fromMap(result);
+  }
+
+  /// 读取远程设备文件内容（小文件，Base64 编码返回）
+  Future<FileReadResult> readRemoteFile({
+    required String toDeviceId,
+    required String path,
+    int? offset,
+    int? limit,
+    int? maxBytes,
+  }) async {
+    final params = <String, dynamic>{'path': path};
+    if (offset != null) params['offset'] = offset;
+    if (limit != null) params['limit'] = limit;
+    if (maxBytes != null) params['maxBytes'] = maxBytes;
+
+    final result = await invokeFileRpc(
+      toDeviceId: toDeviceId,
+      method: AgentRpcConfig.methodReadFile,
+      params: params,
+    );
+    return FileReadResult.fromMap(result);
+  }
+
+  /// 写入远程设备文件
+  Future<FileWriteResult> writeRemoteFile({
+    required String toDeviceId,
+    required String path,
+    required String contentBase64,
+    bool append = false,
+  }) async {
+    final result = await invokeFileRpc(
+      toDeviceId: toDeviceId,
+      method: AgentRpcConfig.methodWriteFile,
+      params: {
+        'path': path,
+        'contentBase64': contentBase64,
+        'append': append,
+      },
+    );
+    return FileWriteResult.fromMap(result);
+  }
+
+  /// 请求远程设备文件下载 Token
+  Future<FileDownloadUrlResult> requestRemoteDownloadToken({
+    required String toDeviceId,
+    required String path,
+  }) async {
+    final result = await invokeFileRpc(
+      toDeviceId: toDeviceId,
+      method: AgentRpcConfig.methodDownloadFile,
+      params: {'path': path},
+    );
+    // 从 RPC 响应中提取远程设备的 HTTP 地址，拼接完整下载 URL
+    final hostIp = result['hostIp'] as String? ?? '';
+    final hostPort = result['hostPort'] as int? ?? 0;
+    final token = result['token'] as String? ?? '';
+    if (hostIp.isNotEmpty && hostPort > 0 && token.isNotEmpty) {
+      result['url'] = 'http://$hostIp:$hostPort/file-download?token=$token';
+    }
+    return FileDownloadUrlResult.fromMap(result);
+  }
+
+  /// 请求远程设备文件上传 Token
+  Future<FileUploadUrlResult> requestRemoteUploadToken({
+    required String toDeviceId,
+    required String path,
+    bool overwrite = true,
+  }) async {
+    final result = await invokeFileRpc(
+      toDeviceId: toDeviceId,
+      method: AgentRpcConfig.methodUploadFile,
+      params: {
+        'path': path,
+        'overwrite': overwrite,
+      },
+    );
+    // 从 RPC 响应中提取远程设备的 HTTP 地址，拼接完整上传 URL
+    final hostIp = result['hostIp'] as String? ?? '';
+    final hostPort = result['hostPort'] as int? ?? 0;
+    final token = result['token'] as String? ?? '';
+    if (hostIp.isNotEmpty && hostPort > 0 && token.isNotEmpty) {
+      result['url'] = 'http://$hostIp:$hostPort/file-upload?token=$token';
+    }
+    return FileUploadUrlResult.fromMap(result);
+  }
 
   // ===== LAN消息扩展 =====
 

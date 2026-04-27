@@ -61,6 +61,13 @@ class AgentRpcConfig {
   static const String methodDeleteFile = 'agentDeleteFile';
   static const String methodRenameFile = 'agentRenameFile';
 
+  // ===== Agent 远程文件读写 =====
+
+  static const String methodReadFile = 'agentReadFile';
+  static const String methodWriteFile = 'agentWriteFile';
+  static const String methodDownloadFile = 'agentDownloadFile';
+  static const String methodUploadFile = 'agentUploadFile';
+
   // ===== Agent 技能管理 =====
 
   static const String methodSetSkills = 'agentSetSkills';

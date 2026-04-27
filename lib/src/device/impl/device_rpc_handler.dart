@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import '../../agent/agent_state.dart';
@@ -13,6 +14,8 @@ import '../app_context.dart';
 import 'data_sync_manager.dart';
 import 'device_agent_manager.dart';
 import 'device_config_manager.dart';
+import 'file_transfer_token_manager.dart';
+import '../../lan/impl/lan_host_service_impl.dart';
 
 /// RPC 方法注册器
 ///
@@ -472,8 +475,7 @@ class DeviceRpcHandler {
 
     // 文件系统操作
     rpcServer.register(AgentRpcConfig.methodCheckPathExists, (params) async {
-      final request = CheckPathExistsRequest.fromMap(params);
-      final path = request.path;
+      final path = params['path'] as String;
       try {
         final dir = await Directory(path).exists();
         if (dir) {
@@ -487,8 +489,8 @@ class DeviceRpcHandler {
     });
 
     rpcServer.register(AgentRpcConfig.methodListDirectory, (params) async {
-      final request = ListDirectoryRequest.fromMap(params);
-      final dir = Directory(request.path);
+      final path = params['path'] as String;
+      final dir = Directory(path);
       if (!await dir.exists()) {
         return {'items': [], 'error': '目录不存在'};
       }
@@ -526,8 +528,7 @@ class DeviceRpcHandler {
     });
 
     rpcServer.register(AgentRpcConfig.methodGetFileInfo, (params) async {
-      final request = GetFileInfoRequest.fromMap(params);
-      final path = request.path;
+      final path = params['path'] as String;
       try {
         final file = File(path);
         if (await file.exists()) {
@@ -562,9 +563,9 @@ class DeviceRpcHandler {
     });
 
     rpcServer.register(AgentRpcConfig.methodCreateDirectory, (params) async {
-      final request = CreateDirectoryRequest.fromMap(params);
+      final path = params['path'] as String;
       try {
-        await Directory(request.path).create(recursive: true);
+        await Directory(path).create(recursive: true);
         return {'success': true};
       } catch (e) {
         return {'success': false, 'error': e.toString()};
@@ -572,8 +573,7 @@ class DeviceRpcHandler {
     });
 
     rpcServer.register(AgentRpcConfig.methodDeleteFile, (params) async {
-      final request = DeleteFileRequest.fromMap(params);
-      final path = request.path;
+      final path = params['path'] as String;
       try {
         final file = File(path);
         if (await file.exists()) {
@@ -592,16 +592,17 @@ class DeviceRpcHandler {
     });
 
     rpcServer.register(AgentRpcConfig.methodRenameFile, (params) async {
-      final request = RenameFileRequest.fromMap(params);
+      final oldPath = params['oldPath'] as String;
+      final newPath = params['newPath'] as String;
       try {
-        final entity = File(request.oldPath);
+        final entity = File(oldPath);
         if (await entity.exists()) {
-          await entity.rename(request.newPath);
+          await entity.rename(newPath);
           return {'success': true};
         }
-        final dir = Directory(request.oldPath);
+        final dir = Directory(oldPath);
         if (await dir.exists()) {
-          await dir.rename(request.newPath);
+          await dir.rename(newPath);
           return {'success': true};
         }
         return {'success': false, 'error': '路径不存在'};
@@ -781,6 +782,162 @@ class DeviceRpcHandler {
       return {'success': true};
     });
 
+    // ===== 远程文件读写 =====
+
+    rpcServer.register(AgentRpcConfig.methodReadFile, (params) async {
+      final request = ReadFileRequest.fromMap(params);
+      final path = request.path;
+
+      try {
+        final file = File(path);
+        if (!await file.exists()) {
+          return {'success': false, 'error': '文件不存在: $path'};
+        }
+
+        final stat = await file.stat();
+        final fileSize = stat.size;
+
+        final offset = request.offset;
+        final limit = request.limit;
+
+        // 分块读取模式：指定了 offset 或 limit 时，按范围读取，不限制大小
+        if (offset != null || limit != null) {
+          final start = offset?.clamp(0, fileSize) ?? 0;
+          final readLen = limit ?? (fileSize - start);
+          final end = (start + readLen).clamp(start, fileSize);
+
+          // 使用 RandomAccessFile 按范围读取，避免加载整个文件到内存
+          final raf = await file.open();
+          try {
+            await raf.setPosition(start);
+            final bytes = await raf.read(end - start);
+            final contentBase64 = base64Encode(bytes);
+            return {
+              'success': true,
+              'contentBase64': contentBase64,
+              'fileSize': fileSize,
+              'offset': start,
+              'length': bytes.length,
+              'truncated': (start + bytes.length) < fileSize,
+            };
+          } finally {
+            await raf.close();
+          }
+        }
+
+        // 整体读取模式：受 maxBytes 限制（默认 200KB）
+        final maxBytes = request.maxBytes ?? 200 * 1024;
+        if (fileSize > maxBytes) {
+          return {
+            'success': false,
+            'error': '文件过大: ${_formatFileSize(fileSize)}，超过限制: ${_formatFileSize(maxBytes)}',
+            'fileSize': fileSize,
+          };
+        }
+
+        final bytes = await file.readAsBytes();
+        final contentBase64 = base64Encode(bytes);
+
+        return {
+          'success': true,
+          'contentBase64': contentBase64,
+          'fileSize': fileSize,
+          'offset': 0,
+          'length': bytes.length,
+          'truncated': false,
+        };
+      } catch (e) {
+        return {'success': false, 'error': '读取文件失败: $e'};
+      }
+    });
+
+    rpcServer.register(AgentRpcConfig.methodWriteFile, (params) async {
+      final request = WriteFileRequest.fromMap(params);
+      final path = request.path;
+
+      try {
+        final bytes = base64Decode(request.contentBase64);
+
+        // 确保父目录存在
+        final file = File(path);
+        final parentDir = file.parent;
+        if (!await parentDir.exists()) {
+          await parentDir.create(recursive: true);
+        }
+
+        final sink = file.openWrite(mode: request.append ? FileMode.append : FileMode.write);
+        sink.add(bytes);
+        await sink.close();
+
+        return {
+          'success': true,
+          'bytesWritten': bytes.length,
+        };
+      } catch (e) {
+        return {'success': false, 'error': '写入文件失败: $e'};
+      }
+    });
+
+    rpcServer.register(AgentRpcConfig.methodDownloadFile, (params) async {
+      final request = DownloadFileRequest.fromMap(params);
+      final path = request.path;
+
+      try {
+        final file = File(path);
+        if (!await file.exists()) {
+          return {'success': false, 'error': '文件不存在: $path'};
+        }
+
+        final stat = await file.stat();
+        final fileName = path.split(Platform.pathSeparator).last;
+
+        // 生成临时 Token
+        final transferToken = FileTransferTokenManager.generateDownloadToken(
+          deviceId: _deviceId,
+          filePath: path,
+        );
+
+        // 构建 URL（使用 Host IP 和端口）
+        // 附加本机 HTTP 服务地址，供调用方拼接完整下载 URL
+        return {
+          'success': true,
+          'token': transferToken.token,
+          'expiresIn': 300,
+          'fileSize': stat.size,
+          'fileName': fileName,
+          'hostIp': LanHostServiceImpl.instance.localIp ?? '',
+          'hostPort': LanHostServiceImpl.instance.port,
+        };
+      } catch (e) {
+        return {'success': false, 'error': '生成下载链接失败: $e'};
+      }
+    });
+
+    rpcServer.register(AgentRpcConfig.methodUploadFile, (params) async {
+      final request = UploadFileRequest.fromMap(params);
+      final path = request.path;
+
+      try {
+        // 生成临时 Token
+        final transferToken = FileTransferTokenManager.generateUploadToken(
+          deviceId: _deviceId,
+          filePath: path,
+          overwrite: request.overwrite,
+        );
+
+        // 附加本机 HTTP 服务地址，供调用方拼接完整上传 URL
+        return {
+          'success': true,
+          'token': transferToken.token,
+          'expiresIn': 300,
+          'hostIp': LanHostServiceImpl.instance.localIp ?? '',
+          'hostPort': LanHostServiceImpl.instance.port,
+        };
+      } catch (e) {
+        return {'success': false, 'error': '生成上传链接失败: $e'};
+      }
+    });
+
     // 文件操作追踪
     rpcServer.register(AgentRpcConfig.methodGetFileOperations, (params) async {
       final request = GetFileOperationsRequest.fromMap(params);
@@ -802,6 +959,14 @@ class DeviceRpcHandler {
       await agent.clearFileOperations();
       return {'success': true};
     });
+  }
+
+  /// 格式化文件大小
+  static String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   void _registerHostMethods(RemoteCallServer rpcServer) {
