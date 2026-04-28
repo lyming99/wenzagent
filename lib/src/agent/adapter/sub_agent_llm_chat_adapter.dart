@@ -232,6 +232,11 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
                   id: const Uuid().v4(),
                   employeeId: _sessionId!,
                   content: aiContent,
+                  // 必须保存 thinking，DeepSeek V4 等模型要求 reasoning_content
+                  // 在多轮对话中必须回传
+                  thinking: llmResult.aiThinkingBuffer.isNotEmpty
+                      ? llmResult.aiThinkingBuffer.toString()
+                      : null,
                 ),
               );
             }

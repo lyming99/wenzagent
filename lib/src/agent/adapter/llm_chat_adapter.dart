@@ -340,6 +340,11 @@ class LlmChatAdapter implements IChatAdapter {
                   id: const Uuid().v4(),
                   employeeId: currentEmployeeUuid!,
                   content: aiContent,
+                  // 必须保存 thinking，DeepSeek V4 等模型要求 reasoning_content
+                  // 在多轮对话中必须回传
+                  thinking: llmResult.aiThinkingBuffer.isNotEmpty
+                      ? llmResult.aiThinkingBuffer.toString()
+                      : null,
                 ),
               );
             }
@@ -484,6 +489,8 @@ class LlmChatAdapter implements IChatAdapter {
                   id: const Uuid().v4(),
                   employeeId: currentEmployeeUuid!,
                   content: endResult.content,
+                  // 必须保存 thinking，DeepSeek V4 等模型要求 reasoning_content 回传
+                  thinking: pendingAssistantMsg.thinking,
                 ),
               );
             }
