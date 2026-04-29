@@ -15,6 +15,7 @@ export 'builtin/file_list_tool.dart';
 export 'builtin/content_search_tool.dart';
 export 'builtin/command_execute_tool.dart';
 export 'builtin/file_info_tool.dart';
+export 'builtin/file_copy_tool.dart';
 export 'builtin/file_delete_tool.dart';
 export 'builtin/directory_create_tool.dart';
 export 'builtin/spawn_sub_agent_tool.dart';

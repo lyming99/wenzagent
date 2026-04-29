@@ -29,6 +29,7 @@ class SpawnSubAgentTool extends AgentTool {
     'file_list',
     'content_search',
     'file_info',
+    'file_copy',
     'file_delete',
     'file_patch',
     'directory_create',

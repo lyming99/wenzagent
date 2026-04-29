@@ -7,6 +7,7 @@ import 'command_execute_tool.dart';
 import 'content_search_tool.dart';
 import 'directory_create_tool.dart';
 import 'env_info_tool.dart';
+import 'file_copy_tool.dart';
 import 'file_delete_tool.dart';
 import 'file_info_tool.dart';
 import 'file_list_tool.dart';
@@ -50,6 +51,7 @@ class BuiltinTools {
     'file_list',
     'content_search',
     'file_info',
+    'file_copy',
     'file_delete',
     'file_patch',
     'directory_create',
@@ -75,6 +77,7 @@ class BuiltinTools {
       BgCommandTool(),
       GitOperationsTool(),
       FileInfoTool(),
+      FileCopyTool(),
       FileDeleteTool(),
       DirectoryCreateTool(),
       ScheduleTaskTool(),
@@ -110,6 +113,7 @@ class BuiltinTools {
       FileListTool(),
       ContentSearchTool(),
       FileInfoTool(),
+      FileCopyTool(),
       FileDeleteTool(),
       DirectoryCreateTool(),
       FilePatchTool(),

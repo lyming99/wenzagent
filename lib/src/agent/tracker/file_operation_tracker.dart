@@ -13,6 +13,7 @@ class FileOperationTracker {
 
   /// 需要追踪的工具名称集合
   static const _trackedTools = {
+    'file_copy',
     'file_write',
     'file_delete',
     'file_patch',
@@ -87,6 +88,11 @@ class FileOperationTracker {
       if (createIfMissing == true) {
         extra['createIfMissing'] = true;
       }
+    } else if (toolName == 'file_copy') {
+      final source = arguments['source'] as String?;
+      if (source != null) {
+        extra['source'] = source;
+      }
     } else if (toolName == 'file_delete') {
       final isDirectory = arguments['is_directory'] as bool?;
       if (isDirectory == true) {
@@ -129,6 +135,8 @@ class FileOperationTracker {
         // 如果结果中包含 "created" 或 "new file" 之类的信息，视为创建
         // 默认视为修改
         return FileOperationType.modified;
+      case 'file_copy':
+        return FileOperationType.created;
       case 'file_delete':
         return FileOperationType.deleted;
       case 'file_patch':

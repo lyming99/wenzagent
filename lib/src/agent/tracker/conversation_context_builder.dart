@@ -13,6 +13,7 @@ class ConversationContextBuilder {
 
   /// 文件操作类工具名称（这些工具的结果已在文件操作段落中体现）
   static const _fileToolNames = {
+    'file_copy',
     'file_write',
     'file_delete',
     'file_patch',
