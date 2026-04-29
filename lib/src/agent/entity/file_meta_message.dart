@@ -27,6 +27,12 @@ class FileMetaMessage {
   /// MIME 类型（可选，用于前端预览判断）
   final String? mimeType;
 
+  /// 消息角色（user / assistant），用于持久化时区分发送方
+  final String? role;
+
+  /// 所属会话 / 员工 ID，用于持久化到正确的会话
+  final String? employeeId;
+
   const FileMetaMessage({
     required this.fileId,
     required this.fileName,
@@ -35,6 +41,8 @@ class FileMetaMessage {
     required this.filePath,
     required this.fromDeviceId,
     this.mimeType,
+    this.role,
+    this.employeeId,
   });
 
   factory FileMetaMessage.fromJson(Map<String, dynamic> json) =>
@@ -46,6 +54,8 @@ class FileMetaMessage {
         filePath: json['filePath'] as String,
         fromDeviceId: json['fromDeviceId'] as String,
         mimeType: json['mimeType'] as String?,
+        role: json['role'] as String?,
+        employeeId: json['employeeId'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -56,10 +66,13 @@ class FileMetaMessage {
         'filePath': filePath,
         'fromDeviceId': fromDeviceId,
         if (mimeType != null) 'mimeType': mimeType,
+        if (role != null) 'role': role,
+        if (employeeId != null) 'employeeId': employeeId,
       };
 
   @override
   String toString() =>
       'FileMetaMessage(fileId: $fileId, fileName: $fileName, '
-      'fileSize: $fileSize, fromDeviceId: $fromDeviceId)';
+      'fileSize: $fileSize, fromDeviceId: $fromDeviceId, '
+      'role: $role, employeeId: $employeeId)';
 }

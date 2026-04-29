@@ -42,6 +42,7 @@ class MessageRecord {
   final int? inputTokens;
   final int? outputTokens;
   final int isRead; // 0 or 1
+  final String? metadata; // JSON String
   final int deleted; // 0 or 1
   final int createTime; // millisecondsSinceEpoch
   final int updateTime; // millisecondsSinceEpoch
@@ -63,6 +64,7 @@ class MessageRecord {
     this.inputTokens,
     this.outputTokens,
     this.isRead = 0,
+    this.metadata,
     this.deleted = 0,
     required this.createTime,
     required this.updateTime,
@@ -103,6 +105,9 @@ class MessageMapper {
       inputTokens: msg.inputTokens,
       outputTokens: msg.outputTokens,
       isRead: msg.isRead ? 1 : 0,
+      metadata: msg.metadata != null && msg.metadata!.isNotEmpty
+          ? jsonEncode(msg.metadata)
+          : null,
       deleted: msg.deleted ? 1 : 0,
       createTime: msg.createdAt.millisecondsSinceEpoch,
       updateTime: (msg.updatedAt ?? msg.createdAt).millisecondsSinceEpoch,
@@ -132,6 +137,7 @@ class MessageMapper {
       record.inputTokens,
       record.outputTokens,
       record.isRead,
+      record.metadata,
       record.deleted,
       record.createTime,
       record.updateTime,
@@ -164,6 +170,7 @@ class MessageMapper {
       seq: row['seq'] as int? ?? 0,
       deleted: (row['deleted'] as int? ?? 0) != 0,
       isRead: (row['is_read'] as int? ?? 0) != 0,
+      metadata: _parseJsonMap(row['metadata']),
       inputTokens: row['input_tokens'] as int?,
       outputTokens: row['output_tokens'] as int?,
     );
@@ -189,6 +196,7 @@ class MessageMapper {
       seq: record.seq,
       deleted: record.deleted != 0,
       isRead: record.isRead != 0,
+      metadata: _parseJsonMap(record.metadata),
       inputTokens: record.inputTokens,
       outputTokens: record.outputTokens,
     );

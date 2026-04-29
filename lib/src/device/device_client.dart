@@ -768,9 +768,17 @@ class DeviceClient {
   /// [fromDeviceId] 和 [filePath] 自行通过 RPC → Token → HTTP 链路下载。
   ///
   /// [toDeviceId] 为 null 时广播给所有在线设备。
+  /// [role] 消息角色（user / assistant），默认 user。
+  /// [employeeId] 所属会话 ID，持久化到对应会话的消息列表。
+  /// [fileId] 可选，外部指定的文件 ID（用于与调用方消息 ID 对齐，防止重复）。
+  /// [messageId] 可选，外部指定的消息 ID（默认自动生成 UUID v4）。
   Future<void> sendFileMeta({
     required String filePath,
     String? toDeviceId,
+    String role = 'user',
+    String? employeeId,
+    String? fileId,
+    String? messageId,
   }) async {
     final file = File(filePath);
     if (!await file.exists()) {
@@ -780,24 +788,27 @@ class DeviceClient {
     final fileName = p.basename(filePath);
     final fileSize = await file.length();
     final hash = sha256.convert(await file.readAsBytes()).toString();
-    final fileId = const Uuid().v4();
+    final actualFileId = fileId ?? const Uuid().v4();
+    final actualMsgId = messageId ?? const Uuid().v4();
 
     final meta = FileMetaMessage(
-      fileId: fileId,
+      fileId: actualFileId,
       fileName: fileName,
       fileSize: fileSize,
       sha256: hash,
       filePath: filePath,
       fromDeviceId: deviceId,
+      role: role,
+      employeeId: employeeId,
     );
 
     final message = LanMessage(
-      id: const Uuid().v4(),
+      id: actualMsgId,
       type: LanMessageType.file,
       fromId: deviceId,
       toDeviceId: toDeviceId,
       content: jsonEncode(meta.toJson()),
-      fileId: fileId,
+      fileId: actualFileId,
       fileName: fileName,
       fileSize: fileSize,
       fileHash: hash,
@@ -807,6 +818,27 @@ class DeviceClient {
       await sendLanMessageTo(toDeviceId, message);
     } else {
       await sendLanMessage(message);
+    }
+
+    // 持久化到本地 DB
+    if (employeeId != null) {
+      try {
+        final chatMsg = ChatMessage.file(
+          id: actualMsgId,
+          employeeId: employeeId,
+          role: MessageRole.fromString(role),
+          fileName: fileName,
+          fileSize: fileSize,
+          fileId: actualFileId,
+          fileHash: hash,
+          filePath: filePath,
+          fromDeviceId: deviceId,
+          deviceId: deviceId,
+        );
+        await _messageStoreService.addMessage(deviceId, chatMsg);
+      } catch (e) {
+        _log.warn('文件消息持久化失败: $e');
+      }
     }
   }
 

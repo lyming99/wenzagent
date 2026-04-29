@@ -50,6 +50,32 @@ mixin _AgentImplMessaging on _AgentImplBase {
       // 立即通过 memoryManager 持久化用户消息（分配 seq 并写入 DB），
       // 确保在返回 RPC 响应前消息已持久化，避免同步导致消息被清空
       if (_chatAdapter case final LlmChatAdapter adapter) {
+        // 文件消息：使用 ChatMessage.file() 持久化，携带文件元信息
+        if (input.type == 'file') {
+          final meta = input.metadata ?? {};
+          final fileMessage = ChatMessage.file(
+            id: finalMessageId,
+            employeeId: employeeId,
+            role: MessageRole.user,
+            fileName: meta['fileName'] as String? ?? input.content,
+            fileSize: meta['fileSize'] as int? ?? 0,
+            fileId: meta['fileId'] as String? ?? finalMessageId,
+            fileHash: meta['sha256'] as String? ?? meta['fileHash'] as String? ?? '',
+            filePath: meta['filePath'] as String? ?? '',
+            fromDeviceId: meta['fromDeviceId'] as String?,
+            mimeType: meta['mimeType'] as String?,
+            deviceId: deviceId,
+          );
+          adapter.memoryManager.addMessage(
+            employeeId,
+            deviceId,
+            fileMessage,
+          );
+          _AgentImplBase._log.debug('文件消息已提前持久化: $finalMessageId');
+          // 文件消息不提交到 LLM 处理器，直接返回
+          return finalMessageId;
+        }
+
         final userMessage = ChatMessage.user(
           id: finalMessageId,
           employeeId: employeeId,

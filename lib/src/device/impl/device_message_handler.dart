@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:uuid/uuid.dart';
+
 import '../../agent/entity/agent_event.dart';
 import '../../agent/entity/agent_message.dart';
+import '../../agent/entity/file_meta_message.dart';
 import '../../entity/lan_device_info.dart';
 import '../../entity/lan_message.dart';
 import '../../persistence/persistence.dart';
@@ -127,9 +130,10 @@ class DeviceMessageHandler {
 
   /// 处理接收到的文件元信息消息
   ///
-  /// 仅解析元信息并记录日志，不自动下载。
+  /// 解析元信息、记录日志，并持久化到本地 DB（当 [FileMetaMessage.role]
+  /// 和 [FileMetaMessage.employeeId] 存在时）。
   /// 上层（wenzflow UI）通过监听 lanMessage 流获取元信息后决定是否下载。
-  void _handleFileMessage(LanMessage msg) {
+  Future<void> _handleFileMessage(LanMessage msg) async {
     try {
       final content = msg.content;
       if (content == null || content.isEmpty) return;
@@ -138,8 +142,35 @@ class DeviceMessageHandler {
       // 确保 fromDeviceId 使用 msg.fromId（可信来源）
       metaMap['fromDeviceId'] ??= msg.fromId;
 
-      _log.info('收到文件元信息: ${metaMap['fileName']} '
-          '(${metaMap['fileSize']} bytes) from ${msg.fromId}');
+      final meta = FileMetaMessage.fromJson(metaMap);
+
+      _log.info('收到文件元信息: ${meta.fileName} '
+          '(${meta.fileSize} bytes) from ${msg.fromId} '
+          'role=${meta.role} employeeId=${meta.employeeId}');
+
+      // 持久化到本地 DB（仅当发送方携带了 role 和 employeeId 时）
+      if (meta.role != null && meta.employeeId != null) {
+        try {
+          final chatMsg = ChatMessage.file(
+            id: msg.id ?? const Uuid().v4(),
+            employeeId: meta.employeeId!,
+            role: MessageRole.fromString(meta.role!),
+            fileName: meta.fileName,
+            fileSize: meta.fileSize,
+            fileId: meta.fileId,
+            fileHash: meta.sha256,
+            filePath: meta.filePath,
+            fromDeviceId: meta.fromDeviceId,
+            mimeType: meta.mimeType,
+            deviceId: _deviceId,
+          );
+          final store = MessageStoreService.getInstance(_deviceId);
+          await store.addMessage(_deviceId, chatMsg);
+          _log.debug('文件消息已持久化: ${meta.fileName}');
+        } catch (e) {
+          _log.warn('文件消息持久化失败: $e');
+        }
+      }
     } catch (e) {
       _log.warn('解析文件元信息失败: $e');
     }

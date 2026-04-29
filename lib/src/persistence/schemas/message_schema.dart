@@ -21,6 +21,7 @@ class MessageSchema {
         input_tokens      INTEGER,
         output_tokens     INTEGER,
         is_read           INTEGER DEFAULT 0,
+        metadata          TEXT,
         deleted           INTEGER DEFAULT 0,
         create_time       INTEGER NOT NULL,
         update_time       INTEGER NOT NULL,
@@ -35,5 +36,12 @@ class MessageSchema {
       CREATE INDEX IF NOT EXISTS idx_messages_seq
         ON messages(seq);
     ''');
+
+    // 迁移：为已有数据库增加 metadata 列
+    try {
+      db.execute('ALTER TABLE messages ADD COLUMN metadata TEXT');
+    } catch (_) {
+      // 列已存在，忽略
+    }
   }
 }

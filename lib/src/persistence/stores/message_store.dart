@@ -168,8 +168,8 @@ class MessageStore {
         uuid, employee_id, device_id, role, type, content,
         tool_call_id, tool_name, tool_arguments, tool_result, tool_calls,
         processing_status, processing_error, input_tokens, output_tokens,
-        is_read, deleted, create_time, update_time, seq
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_read, metadata, deleted, create_time, update_time, seq
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', _messageToParams(msg, effDeviceId));
 
     if (updateWatermark) {
@@ -205,8 +205,8 @@ class MessageStore {
         uuid, employee_id, device_id, role, type, content,
         tool_call_id, tool_name, tool_arguments, tool_result, tool_calls,
         processing_status, processing_error, input_tokens, output_tokens,
-        is_read, deleted, create_time, update_time, seq
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_read, metadata, deleted, create_time, update_time, seq
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', _messageToParams(msg, effDeviceId));
     if (updateWatermark) {
       _updateWatermarkLastSeq(msg.employeeId, msg.seq, deviceId: effDeviceId);
@@ -295,8 +295,8 @@ class MessageStore {
             uuid, employee_id, device_id, role, type, content,
             tool_call_id, tool_name, tool_arguments, tool_result, tool_calls,
             processing_status, processing_error, input_tokens, output_tokens,
-            is_read, deleted, create_time, update_time, seq
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            is_read, metadata, deleted, create_time, update_time, seq
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', _messageToParams(msg, effDeviceId));
       }
       // 更新 sync_watermark.last_seq

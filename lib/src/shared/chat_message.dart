@@ -431,6 +431,44 @@ class ChatMessage {
     );
   }
 
+  /// 文件消息
+  ///
+  /// [role] 区分发送方（user / assistant）。
+  /// [type] 固定为 `'file'`，文件元信息存入 [metadata]。
+  factory ChatMessage.file({
+    required String id,
+    required String employeeId,
+    required MessageRole role,
+    required String fileName,
+    required int fileSize,
+    required String fileId,
+    required String fileHash,
+    required String filePath,
+    String? fromDeviceId,
+    String? mimeType,
+    DateTime? createdAt,
+    String? deviceId,
+  }) {
+    return ChatMessage(
+      id: id,
+      employeeId: employeeId,
+      role: role,
+      type: 'file',
+      content: fileName,
+      createdAt: createdAt ?? DateTime.now(),
+      deviceId: deviceId,
+      metadata: {
+        'fileId': fileId,
+        'fileName': fileName,
+        'fileSize': fileSize,
+        'fileHash': fileHash,
+        'filePath': filePath,
+        if (fromDeviceId != null) 'fromDeviceId': fromDeviceId,
+        if (mimeType != null) 'mimeType': mimeType,
+      },
+    );
+  }
+
   // ── 序列化 ──
 
   /// 转换为 JSON Map（用于网络传输 / 持久化）
