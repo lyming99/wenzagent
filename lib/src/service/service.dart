@@ -10,4 +10,6 @@ export 'employee_config_service.dart';
 export 'scheduled_task_manager.dart';
 export 'task_executor.dart';
 export 'sub_agent_executor.dart';
+export 'global_skill_manager.dart';
+export 'project_manager.dart';
 export 'entity/agent_runtime_config.dart';

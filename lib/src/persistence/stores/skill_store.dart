@@ -34,6 +34,7 @@ class SkillStore {
       'enabled': row['enabled'],
       'sortOrder': row['sort_order'],
       'deleted': row['deleted'],
+      'deleteTime': row['delete_time'],
       'createTime': row['create_time'],
       'updateTime': row['update_time'],
     });
@@ -77,8 +78,8 @@ class SkillStore {
     _db.execute('''
       INSERT OR REPLACE INTO skills (
         uuid, employee_id, device_id, name, description, skill_type,
-        config, enabled, sort_order, deleted, create_time, update_time
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        config, enabled, sort_order, deleted, delete_time, create_time, update_time
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', [
       entity.uuid,
       entity.employeeId,
@@ -90,6 +91,7 @@ class SkillStore {
       entity.enabled,
       entity.sortOrder,
       entity.deleted,
+      entity.deleteTime?.millisecondsSinceEpoch,
       entity.createTime.millisecondsSinceEpoch,
       entity.updateTime.millisecondsSinceEpoch,
     ]);
@@ -107,8 +109,8 @@ class SkillStore {
   /// 删除技能（软删除）
   Future<void> delete(String? deviceId, String uuid) async {
     _db.execute(
-      'UPDATE skills SET deleted = 1 WHERE uuid = ?',
-      [uuid],
+      'UPDATE skills SET deleted = 1, delete_time = ? WHERE uuid = ?',
+      [DateTime.now().millisecondsSinceEpoch, uuid],
     );
   }
 
@@ -124,8 +126,8 @@ class SkillStore {
   ) async {
     final effDeviceId = deviceId ?? '';
     _db.execute(
-      'UPDATE skills SET deleted = 1 WHERE employee_id = ? AND device_id = ?',
-      [employeeId, effDeviceId],
+      'UPDATE skills SET deleted = 1, delete_time = ? WHERE employee_id = ? AND device_id = ?',
+      [DateTime.now().millisecondsSinceEpoch, employeeId, effDeviceId],
     );
   }
 
@@ -137,5 +139,25 @@ class SkillStore {
       [employeeId, effDeviceId],
     );
     return resultSet.first['cnt'] as int;
+  }
+
+  /// 查找单个技能（包含已删除的，用于同步合并场景）
+  Future<AiEmployeeSkillEntity?> findIncludingDeleted(String uuid) async {
+    final resultSet = _db.select(
+      'SELECT * FROM skills WHERE uuid = ?',
+      [uuid],
+    );
+    for (final row in resultSet) {
+      return _rowToEntity(row);
+    }
+    return null;
+  }
+
+  /// 获取所有技能（包含已删除的，用于同步拉取）
+  Future<List<AiEmployeeSkillEntity>> findAll() async {
+    final resultSet = _db.select(
+      'SELECT * FROM skills ORDER BY sort_order ASC',
+    );
+    return resultSet.map(_rowToEntity).toList();
   }
 }

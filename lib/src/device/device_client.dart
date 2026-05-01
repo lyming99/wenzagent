@@ -581,6 +581,22 @@ class DeviceClient {
   Future<void> broadcastSessionToAllDevices(String employeeId) =>
       _dataSyncManager.broadcastSessionToAllDevices(employeeId);
 
+  /// 同步技能数据（从远端拉取最新技能到本地）
+  Future<void> syncSkillsFromDevices() =>
+      _dataSyncManager.syncSkillsFromDevices();
+
+  /// 广播员工技能到所有在线设备（创建/更新后调用）
+  Future<void> broadcastSkillToAllDevices(String employeeId) =>
+      _dataSyncManager.broadcastSkillToAllDevices(employeeId);
+
+  /// 广播全局技能到所有在线设备
+  Future<void> broadcastGlobalSkillsToAllDevices() =>
+      _dataSyncManager.broadcastGlobalSkillsToAllDevices();
+
+  /// 删除技能并同步到其他设备
+  Future<void> deleteSkillWithSync(String skillId) =>
+      _dataSyncManager.deleteSkillWithSync(skillId);
+
   /// 同步员工到指定远程设备
   Future<bool> syncEmployeeToDevice({
     required String employeeId,

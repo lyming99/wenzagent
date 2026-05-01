@@ -10,3 +10,8 @@ export 'spec_item_entity.dart';
 export 'todo_topic_entity.dart';
 export 'todo_task_item_entity.dart';
 export 'file_operation_entity.dart';
+export 'global_skill_entity.dart';
+export 'project_entity.dart';
+export 'project_module_entity.dart';
+export 'project_skill_entity.dart';
+export 'project_issue_entity.dart';

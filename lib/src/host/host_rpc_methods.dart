@@ -1,5 +1,4 @@
 import '../persistence/persistence.dart';
-import '../persistence/store_merge_util.dart';
 import '../rpc/remote_call_server.dart';
 import '../service/service.dart';
 import 'client_session_manager.dart';
@@ -42,6 +41,12 @@ class HostRpcConfig {
   // ===== Todo 同步 =====
   static const String methodGetTodos = 'hostGetTodos';
   static const String methodSyncTodos = 'hostSyncTodos';
+
+  // ===== 技能同步 =====
+  static const String methodGetAllSkills = 'hostGetAllSkills';
+  static const String methodSyncSkills = 'hostSyncSkills';
+  static const String methodGetGlobalSkills = 'hostGetGlobalSkills';
+  static const String methodSyncGlobalSkills = 'hostSyncGlobalSkills';
 
   // ===== 设备管理 =====
   static const String methodGetOnlineDevices = 'getOnlineDevices';
@@ -392,6 +397,107 @@ void registerHostRpcMethods({
       }
     }
     return {'count': count};
+  });
+
+  // ===== 技能同步方法 =====
+
+  // 获取所有技能（含已删除）
+  rpcServer.register(HostRpcConfig.methodGetAllSkills, (params) async {
+    final includeDeleted = params['includeDeleted'] as bool? ?? false;
+    final skills = includeDeleted
+        ? await skillManager.getAllSkills()
+        : await skillManager.getAllSkills().then(
+            (list) => list.where((s) => s.deleted != 1).toList());
+    return {'skills': skills.map((s) => s.toMap()).toList()};
+  });
+
+  // 同步技能数据（逐条合并）
+  rpcServer.register(HostRpcConfig.methodSyncSkills, (params) async {
+    final skillsData = params['skills'] as List;
+    final skills = skillsData
+        .map((s) => AiEmployeeSkillEntity.fromMap(s as Map<String, dynamic>))
+        .toList();
+
+    for (final skill in skills) {
+      final existing = await skillManager.getSkillIncludingDeleted(skill.uuid);
+      if (existing == null) {
+        // 本地不存在 → 直接保存
+        await skillManager.createSkill(skill);
+      } else {
+        // 合并：deleteTime 独立比较，数据按 updateTime 合并
+        final mergeResult = StoreMergeUtil.mergeDeleteState(
+          localDeleteTime: existing.deleteTime,
+          localDeleted: existing.deleted,
+          remoteDeleteTime: skill.deleteTime,
+          remoteDeleted: skill.deleted,
+          localUpdateTime: existing.updateTime,
+          remoteUpdateTime: skill.updateTime,
+        );
+        final shouldUpdateData = StoreMergeUtil.shouldUpdateData(
+            existing.updateTime, skill.updateTime);
+        final shouldUpdateDelete =
+            mergeResult.mergedDeleteTime != existing.deleteTime ||
+                mergeResult.mergedDeleted != existing.deleted;
+
+        if (shouldUpdateData || shouldUpdateDelete) {
+          final base = shouldUpdateData ? skill : existing;
+          await skillManager.updateSkill(base.copyWith(
+            deleted: mergeResult.mergedDeleted,
+            deleteTime: mergeResult.mergedDeleteTime,
+          ));
+        }
+      }
+    }
+    return {'count': skills.length};
+  });
+
+  // 获取全局技能（含已删除）
+  rpcServer.register(HostRpcConfig.methodGetGlobalSkills, (params) async {
+    final includeDeleted = params['includeDeleted'] as bool? ?? false;
+    final globalSkillManager = GlobalSkillManager.getInstance('');
+    final skills = includeDeleted
+        ? await globalSkillManager.getAllSkillsIncludingDeleted()
+        : await globalSkillManager.getAllSkills();
+    return {'skills': skills.map((s) => s.toMap()).toList()};
+  });
+
+  // 同步全局技能数据（逐条合并）
+  rpcServer.register(HostRpcConfig.methodSyncGlobalSkills, (params) async {
+    final skillsData = params['skills'] as List;
+    final skills = skillsData
+        .map((s) => GlobalSkillEntity.fromMap(s as Map<String, dynamic>))
+        .toList();
+    final globalSkillManager = GlobalSkillManager.getInstance('');
+
+    for (final skill in skills) {
+      final existing = await globalSkillManager.getSkillIncludingDeleted(skill.uuid);
+      if (existing == null) {
+        await globalSkillManager.createSkill(skill);
+      } else {
+        final mergeResult = StoreMergeUtil.mergeDeleteState(
+          localDeleteTime: existing.deleteTime,
+          localDeleted: existing.deleted,
+          remoteDeleteTime: skill.deleteTime,
+          remoteDeleted: skill.deleted,
+          localUpdateTime: existing.updateTime,
+          remoteUpdateTime: skill.updateTime,
+        );
+        final shouldUpdateData = StoreMergeUtil.shouldUpdateData(
+            existing.updateTime, skill.updateTime);
+        final shouldUpdateDelete =
+            mergeResult.mergedDeleteTime != existing.deleteTime ||
+                mergeResult.mergedDeleted != existing.deleted;
+
+        if (shouldUpdateData || shouldUpdateDelete) {
+          final base = shouldUpdateData ? skill : existing;
+          await globalSkillManager.updateSkill(base.copyWith(
+            deleted: mergeResult.mergedDeleted,
+            deleteTime: mergeResult.mergedDeleteTime,
+          ));
+        }
+      }
+    }
+    return {'count': skills.length};
   });
 
   // 获取在线设备列表

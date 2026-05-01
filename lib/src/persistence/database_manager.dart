@@ -20,6 +20,9 @@ import 'migrations/v12_migration.dart';
 import 'migrations/v13_migration.dart';
 import 'migrations/v14_migration.dart';
 import 'migrations/v15_migration.dart';
+import 'migrations/v16_migration.dart';
+import 'migrations/v17_migration.dart';
+import 'migrations/v18_migration.dart';
 
 /// 数据库管理器
 ///
@@ -77,7 +80,7 @@ class DatabaseManager {
   bool _initialized = false;
 
   /// 当前 schema 版本号
-  static const int currentVersion = 15;
+  static const int currentVersion = 18;
 
   /// 版本迁移注册表
   ///
@@ -98,6 +101,9 @@ class DatabaseManager {
     V13Migration(),
     V14Migration(),
     V15Migration(),
+    V16Migration(),
+    V17Migration(),
+    V18Migration(),
   ];
 
   /// 获取数据库连接

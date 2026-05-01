@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:uuid/uuid.dart';
 
@@ -56,6 +56,12 @@ abstract class SkillManager {
   /// 删除技能
   Future<void> deleteSkill(String uuid);
 
+  /// 获取单个技能（包含已删除的，用于同步合并场景）
+  Future<AiEmployeeSkillEntity?> getSkillIncludingDeleted(String uuid);
+
+  /// 获取所有技能（包含已删除的，用于同步拉取）
+  Future<List<AiEmployeeSkillEntity>> getAllSkills();
+
   /// 启用/禁用技能
   Future<void> setSkillEnabled(String uuid, bool enabled);
 
@@ -109,10 +115,24 @@ class SkillManagerImpl implements SkillManager {
   @override
   Future<void> deleteSkill(String uuid) async {
     final skill = await getSkill(uuid);
-    await _store.delete(_deviceId, uuid);
-    if (skill != null) {
-      _notifyChange(SkillChangeType.deleted, skill);
-    }
+    if (skill == null) return;
+    final updated = skill.copyWith(
+      deleted: 1,
+      deleteTime: DateTime.now(),
+      updateTime: DateTime.now(),
+    );
+    await _store.saveWithDeviceId(_deviceId, updated);
+    _notifyChange(SkillChangeType.deleted, updated);
+  }
+
+  @override
+  Future<AiEmployeeSkillEntity?> getSkillIncludingDeleted(String uuid) async {
+    return _store.findIncludingDeleted(uuid);
+  }
+
+  @override
+  Future<List<AiEmployeeSkillEntity>> getAllSkills() async {
+    return _store.findAll();
   }
 
   @override

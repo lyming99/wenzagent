@@ -1,13 +1,10 @@
-/// AI员工技能实体
-class AiEmployeeSkillEntity {
+/// 全局技能实体（独立于员工）
+///
+/// 与 AiEmployeeSkillEntity 不同，GlobalSkillEntity 不绑定到特定员工，
+/// 而是作为全局技能库存在，可被任意员工引用。
+class GlobalSkillEntity {
   /// 技能UUID
   final String uuid;
-
-  /// 员工UUID
-  String employeeId;
-
-  /// 设备ID
-  String deviceId;
 
   /// 技能名称
   String name;
@@ -15,7 +12,7 @@ class AiEmployeeSkillEntity {
   /// 技能描述
   String? description;
 
-  /// 技能类型 (mcp/note/file)
+  /// 技能类型 (config/folder)
   String skillType;
 
   /// 技能配置 (JSON)
@@ -39,13 +36,11 @@ class AiEmployeeSkillEntity {
   /// 更新时间
   DateTime updateTime;
 
-  AiEmployeeSkillEntity({
+  GlobalSkillEntity({
     required this.uuid,
-    required this.employeeId,
-    this.deviceId = '',
     required this.name,
     this.description,
-    this.skillType = 'mcp',
+    this.skillType = 'config',
     this.config,
     this.enabled = 1,
     this.sortOrder = 0,
@@ -56,14 +51,12 @@ class AiEmployeeSkillEntity {
   });
 
   /// 从Map创建
-  factory AiEmployeeSkillEntity.fromMap(Map<String, dynamic> map) {
-    return AiEmployeeSkillEntity(
+  factory GlobalSkillEntity.fromMap(Map<String, dynamic> map) {
+    return GlobalSkillEntity(
       uuid: map['uuid'] as String,
-      employeeId: map['employeeId'] as String,
-      deviceId: map['deviceId'] as String? ?? '',
       name: map['name'] as String,
       description: map['description'] as String?,
-      skillType: map['skillType'] as String? ?? 'mcp',
+      skillType: map['skillType'] as String? ?? 'config',
       config: map['config'] as String?,
       enabled: map['enabled'] as int? ?? 1,
       sortOrder: map['sortOrder'] as int? ?? 0,
@@ -71,14 +64,17 @@ class AiEmployeeSkillEntity {
       deleteTime: map['deleteTime'] != null
           ? (map['deleteTime'] is DateTime
               ? map['deleteTime'] as DateTime
-              : DateTime.fromMillisecondsSinceEpoch(map['deleteTime'] as int))
+              : DateTime.fromMillisecondsSinceEpoch(
+                  map['deleteTime'] as int))
           : null,
       createTime: map['createTime'] is DateTime
           ? map['createTime'] as DateTime
-          : DateTime.fromMillisecondsSinceEpoch(map['createTime'] as int? ?? 0),
+          : DateTime.fromMillisecondsSinceEpoch(
+              map['createTime'] as int? ?? 0),
       updateTime: map['updateTime'] is DateTime
           ? map['updateTime'] as DateTime
-          : DateTime.fromMillisecondsSinceEpoch(map['updateTime'] as int? ?? 0),
+          : DateTime.fromMillisecondsSinceEpoch(
+              map['updateTime'] as int? ?? 0),
     );
   }
 
@@ -86,8 +82,6 @@ class AiEmployeeSkillEntity {
   Map<String, dynamic> toMap() {
     return {
       'uuid': uuid,
-      'employeeId': employeeId,
-      'deviceId': deviceId,
       'name': name,
       'description': description,
       'skillType': skillType,
@@ -105,10 +99,8 @@ class AiEmployeeSkillEntity {
   static const _sentinel = Object();
 
   /// 复制并修改
-  AiEmployeeSkillEntity copyWith({
+  GlobalSkillEntity copyWith({
     String? uuid,
-    String? employeeId,
-    String? deviceId,
     String? name,
     String? description,
     String? skillType,
@@ -120,10 +112,8 @@ class AiEmployeeSkillEntity {
     DateTime? createTime,
     DateTime? updateTime,
   }) {
-    return AiEmployeeSkillEntity(
+    return GlobalSkillEntity(
       uuid: uuid ?? this.uuid,
-      employeeId: employeeId ?? this.employeeId,
-      deviceId: deviceId ?? this.deviceId,
       name: name ?? this.name,
       description: description ?? this.description,
       skillType: skillType ?? this.skillType,
@@ -141,6 +131,6 @@ class AiEmployeeSkillEntity {
 
   @override
   String toString() {
-    return 'AiEmployeeSkillEntity(uuid: $uuid, name: $name, skillType: $skillType)';
+    return 'GlobalSkillEntity(uuid: $uuid, name: $name, skillType: $skillType)';
   }
 }

@@ -1,11 +1,5 @@
 import '../../host/host_rpc_methods.dart';
 import '../../persistence/persistence.dart';
-import '../../persistence/store_merge_util.dart';
-import '../../persistence/stores/spec_store.dart';
-import '../../persistence/entities/spec_item_entity.dart';
-import '../../persistence/stores/todo_store.dart';
-import '../../persistence/entities/todo_topic_entity.dart';
-import '../../persistence/entities/todo_task_item_entity.dart';
 import '../../service/service.dart';
 import '../../utils/logger.dart';
 import '../app_context.dart';
@@ -35,6 +29,12 @@ class DataSyncManager {
     _deviceId,
   );
   late final DeviceAgentManager _agentManager = DeviceAgentManager.getInstance(
+    _deviceId,
+  );
+  late final SkillManager _skillManager = SkillManager.getInstance(
+    _deviceId,
+  );
+  late final GlobalSkillManager _globalSkillManager = GlobalSkillManager.getInstance(
     _deviceId,
   );
 
@@ -95,7 +95,7 @@ class DataSyncManager {
     await _doSyncTodosFromDevices();
   }
 
-  /// 同步全部数据（员工+会话+会话摘要+spec，并行执行）
+  /// 同步全部数据（员工+会话+会话摘要+spec+技能，并行执行）
   Future<void> syncAllFromDevices() async {
     final (changedEmployeeIds, changedSessionIds, _) = await (
       _doSyncEmployeesFromDevices(),
@@ -106,6 +106,9 @@ class DataSyncManager {
     _doSyncSpecsFromDevices();
     // todo 同步不需要等待其他同步完成
     _doSyncTodosFromDevices();
+    // 技能同步不需要等待其他同步完成
+    _doSyncSkillsFromDevices();
+    _doSyncGlobalSkillsFromDevices();
     if (changedEmployeeIds.isNotEmpty || changedSessionIds.isNotEmpty) {
       _stateHolder.notifyDataSynced(DataSyncEvent(
         changedEmployeeIds: changedEmployeeIds,
@@ -292,6 +295,73 @@ class DataSyncManager {
     } catch (e) {
       _log.error('同步员工到设备 $targetDeviceId 失败', e);
       return false;
+    }
+  }
+
+  /// 从其他设备同步技能数据
+  Future<void> syncSkillsFromDevices() async {
+    await _doSyncSkillsFromDevices();
+    await _doSyncGlobalSkillsFromDevices();
+  }
+
+  /// 广播员工技能到所有在线设备（创建/更新后调用）
+  Future<void> broadcastSkillToAllDevices(String employeeId) async {
+    if (!_connectionManager.isConnected) return;
+    try {
+      final skills = await _skillManager.getSkills(employeeId);
+      if (skills.isEmpty) return;
+      final devices = await _deviceRegistry.getOnlineDevices();
+      for (final device in devices) {
+        if (device.id == _deviceId) continue;
+        try {
+          await _connectionManager.invokeRemote(
+            device.id,
+            HostRpcConfig.methodSyncSkills,
+            {'skills': skills.map((s) => s.toMap()).toList()},
+          );
+        } catch (e) {
+          _log.debug('broadcastSkill to device ${device.id} failed: $e');
+        }
+      }
+    } catch (e) {
+      _log.debug('broadcastSkillToAllDevices failed: $e');
+    }
+  }
+
+  /// 广播全局技能到所有在线设备
+  Future<void> broadcastGlobalSkillsToAllDevices() async {
+    if (!_connectionManager.isConnected) return;
+    try {
+      final skills = await _globalSkillManager.getAllSkills();
+      if (skills.isEmpty) return;
+      final devices = await _deviceRegistry.getOnlineDevices();
+      for (final device in devices) {
+        if (device.id == _deviceId) continue;
+        try {
+          await _connectionManager.invokeRemote(
+            device.id,
+            HostRpcConfig.methodSyncGlobalSkills,
+            {'skills': skills.map((s) => s.toMap()).toList()},
+          );
+        } catch (e) {
+          _log.debug('broadcastGlobalSkill to device ${device.id} failed: $e');
+        }
+      }
+    } catch (e) {
+      _log.debug('broadcastGlobalSkillsToAllDevices failed: $e');
+    }
+  }
+
+  /// 删除技能并同步到其他设备
+  Future<void> deleteSkillWithSync(String skillId) async {
+    final skill = await _skillManager.getSkillIncludingDeleted(skillId);
+    await _skillManager.deleteSkill(skillId);
+    if (skill != null) {
+      _syncSkillDeleteToDevices(skill.copyWith(
+        deleted: 1,
+        deleteTime: DateTime.now(),
+        updateTime: DateTime.now(),
+      ));
     }
   }
 
@@ -557,6 +627,148 @@ class DataSyncManager {
         _log.debug('syncSessionDeleteToDevices failed: $e');
       }
     });
+  }
+
+  /// 将技能删除同步到所有在线设备
+  void _syncSkillDeleteToDevices(AiEmployeeSkillEntity skill) {
+    Future(() async {
+      if (!_connectionManager.isConnected) return;
+      try {
+        final devices = await _deviceRegistry.getOnlineDevices();
+        for (final device in devices) {
+          if (device.id == _deviceId) continue;
+          try {
+            await _connectionManager.invokeRemote(
+              device.id,
+              HostRpcConfig.methodSyncSkills,
+              {
+                'skills': [skill.toMap()],
+              },
+            );
+          } catch (e) {
+            _log.debug('syncSkillDelete to device ${device.id} failed: $e');
+          }
+        }
+      } catch (e) {
+        _log.debug('syncSkillDeleteToDevices failed: $e');
+      }
+    });
+  }
+
+  // ===== 技能同步内部实现 =====
+
+  Future<void> _doSyncSkillsFromDevices() async {
+    if (!_connectionManager.isConnected) return;
+    final devices = await _deviceRegistry.getOnlineDevices();
+    for (final device in devices) {
+      if (device.id == _deviceId) continue;
+      try {
+        final result = await _connectionManager.invokeRemote(
+          device.id,
+          HostRpcConfig.methodGetAllSkills,
+          {'includeDeleted': true},
+        );
+        for (final data in (result['skills'] as List? ?? [])) {
+          final remote = AiEmployeeSkillEntity.fromMap(data as Map<String, dynamic>);
+          final existing = await _skillManager.getSkillIncludingDeleted(remote.uuid);
+          if (existing == null) {
+            if (remote.deleted != 1) {
+              await _skillManager.createSkill(remote);
+            }
+          } else {
+            await _mergeAndSaveSkill(existing, remote);
+          }
+        }
+      } catch (e) {
+        _log.debug('syncSkills from device ${device.id} failed: $e');
+      }
+    }
+  }
+
+  Future<void> _doSyncGlobalSkillsFromDevices() async {
+    if (!_connectionManager.isConnected) return;
+    final devices = await _deviceRegistry.getOnlineDevices();
+    for (final device in devices) {
+      if (device.id == _deviceId) continue;
+      try {
+        final result = await _connectionManager.invokeRemote(
+          device.id,
+          HostRpcConfig.methodGetGlobalSkills,
+          {'includeDeleted': true},
+        );
+        for (final data in (result['skills'] as List? ?? [])) {
+          final remote = GlobalSkillEntity.fromMap(data as Map<String, dynamic>);
+          final existing = await _globalSkillManager.getSkillIncludingDeleted(remote.uuid);
+          if (existing == null) {
+            if (remote.deleted != 1) {
+              await _globalSkillManager.createSkill(remote);
+            }
+          } else {
+            await _mergeAndSaveGlobalSkill(existing, remote);
+          }
+        }
+      } catch (e) {
+        _log.debug('syncGlobalSkills from device ${device.id} failed: $e');
+      }
+    }
+  }
+
+  Future<bool> _mergeAndSaveSkill(
+    AiEmployeeSkillEntity existing,
+    AiEmployeeSkillEntity remote,
+  ) async {
+    final mergeResult = StoreMergeUtil.mergeDeleteState(
+      localDeleteTime: existing.deleteTime,
+      localDeleted: existing.deleted,
+      remoteDeleteTime: remote.deleteTime,
+      remoteDeleted: remote.deleted,
+      localUpdateTime: existing.updateTime,
+      remoteUpdateTime: remote.updateTime,
+    );
+    final shouldUpdateData = StoreMergeUtil.shouldUpdateData(
+        existing.updateTime, remote.updateTime);
+    final shouldUpdateDelete =
+        mergeResult.mergedDeleteTime != existing.deleteTime ||
+            mergeResult.mergedDeleted != existing.deleted;
+    if (shouldUpdateData || shouldUpdateDelete) {
+      await _skillManager.updateSkill(
+        (shouldUpdateData ? remote : existing).copyWith(
+          deleted: mergeResult.mergedDeleted,
+          deleteTime: mergeResult.mergedDeleteTime,
+        ),
+      );
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> _mergeAndSaveGlobalSkill(
+    GlobalSkillEntity existing,
+    GlobalSkillEntity remote,
+  ) async {
+    final mergeResult = StoreMergeUtil.mergeDeleteState(
+      localDeleteTime: existing.deleteTime,
+      localDeleted: existing.deleted,
+      remoteDeleteTime: remote.deleteTime,
+      remoteDeleted: remote.deleted,
+      localUpdateTime: existing.updateTime,
+      remoteUpdateTime: remote.updateTime,
+    );
+    final shouldUpdateData = StoreMergeUtil.shouldUpdateData(
+        existing.updateTime, remote.updateTime);
+    final shouldUpdateDelete =
+        mergeResult.mergedDeleteTime != existing.deleteTime ||
+            mergeResult.mergedDeleted != existing.deleted;
+    if (shouldUpdateData || shouldUpdateDelete) {
+      await _globalSkillManager.updateSkill(
+        (shouldUpdateData ? remote : existing).copyWith(
+          deleted: mergeResult.mergedDeleted,
+          deleteTime: mergeResult.mergedDeleteTime,
+        ),
+      );
+      return true;
+    }
+    return false;
   }
 
   // ===== 合并逻辑 =====

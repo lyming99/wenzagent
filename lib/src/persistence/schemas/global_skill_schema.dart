@@ -1,15 +1,14 @@
 import 'package:sqlite3/sqlite3.dart';
 
-/// skills 表 schema
-class SkillSchema {
+/// global_skills 表 schema
+class GlobalSkillSchema {
   static void create(Database db) {
     db.execute('''
-      CREATE TABLE IF NOT EXISTS skills (
+      CREATE TABLE IF NOT EXISTS global_skills (
         uuid         TEXT PRIMARY KEY,
-        employee_id  TEXT NOT NULL,
         name         TEXT NOT NULL,
         description  TEXT,
-        skill_type   TEXT DEFAULT 'mcp',
+        skill_type   TEXT DEFAULT 'config',
         config       TEXT,
         enabled      INTEGER DEFAULT 1,
         sort_order   INTEGER DEFAULT 0,
@@ -18,10 +17,6 @@ class SkillSchema {
         create_time  INTEGER NOT NULL,
         update_time  INTEGER NOT NULL
       );
-    ''');
-    db.execute('''
-      CREATE INDEX IF NOT EXISTS idx_skills_employee
-        ON skills(employee_id);
     ''');
   }
 }
