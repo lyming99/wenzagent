@@ -10,6 +10,7 @@ library;
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
@@ -96,6 +97,12 @@ class _FakeLanClientService implements LanClientService {
 
   @override
   Future<void> reconnect() async {}
+
+  @override
+  void sendBinaryMessage(Uint8List data) {}
+
+  @override
+  Stream<BinaryChunkEvent> get binaryChunkStream => const Stream.empty();
 }
 
 // ═══════════════════════════════════════════════════════════════

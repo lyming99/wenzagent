@@ -1,0 +1,20 @@
+00:00 +0: loading test/device/download_file_by_meta_e2e_test.dart
+00:00 +0: downloadFileByMeta E2E small file download via binary frames
+[TEST] serverPort=58907, A=dev-A-2e411568, B=dev-B-2e411568
+[TEST] clients connected, starting stream...
+[TEST] event: isDone=false, requestId=de6c7339, chunkLen=0
+[TEST] subscribing to binaryChunkStream with reqId=de6c7339-b4b7-43d8-85df-64344ac73a72
+[TEST] event: isDone=true, requestId=de6c7339, chunkLen=null
+[TEST] stream loop done, waiting for binary...
+00:05 +0 -1: downloadFileByMeta E2E small file download via binary frames [E]
+  TimeoutException after 0:00:05.000000: Future not completed
+  test\device\download_file_by_meta_e2e_test.dart 421:9  main.<fn>.<fn>
+  
+00:05 +0 -1: downloadFileByMeta E2E large file multi-chunk download
+00:35 +0 -2: downloadFileByMeta E2E large file multi-chunk download [E]
+  TimeoutException after 0:00:30.000000: Test timed out after 30 seconds. See https://pub.dev/packages/test#timeouts
+  dart:isolate  _RawReceivePort._handleMessage
+  
+00:35 +0 -2: downloadFileByMeta E2E empty file download
+00:35 +1 -2: downloadFileByMeta E2E file not found RPC error
+00:35 +2 -2: downloadFileByMeta E2E progress callback per chunk

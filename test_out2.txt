@@ -1,0 +1,42 @@
+00:00 +0: loading test/device/download_file_by_meta_e2e_test.dart
+00:00 +0: downloadFileByMeta E2E small file download via binary frames
+[TEST] serverPort=57669, A=dev-A-e640ab81, B=dev-B-e640ab81
+[TEST] clients connected, starting stream...
+[TEST] event: isDone=false, requestId=ebe8abdc, chunkLen=0
+[TEST] subscribing to binaryChunkStream with reqId=ebe8abdc-4558-4b77-98d7-2a5c67e1518a
+[TEST] event: isDone=true, requestId=ebe8abdc, chunkLen=null
+[TEST] stream loop done, waiting for binary...
+00:05 +0 -1: downloadFileByMeta E2E small file download via binary frames [E]
+  TimeoutException after 0:00:05.000000: Future not completed
+  test\device\download_file_by_meta_e2e_test.dart 425:9  main.<fn>.<fn>
+  
+00:05 +0 -1: downloadFileByMeta E2E large file multi-chunk download
+00:35 +0 -2: downloadFileByMeta E2E large file multi-chunk download [E]
+  TimeoutException after 0:00:30.000000: Test timed out after 30 seconds. See https://pub.dev/packages/test#timeouts
+  dart:isolate  _RawReceivePort._handleMessage
+  
+00:35 +0 -2: downloadFileByMeta E2E empty file download
+00:35 +1 -2: downloadFileByMeta E2E file not found RPC error
+00:35 +2 -2: downloadFileByMeta E2E progress callback per chunk
+01:05 +2 -3: downloadFileByMeta E2E progress callback per chunk [E]
+  TimeoutException after 0:00:30.000000: Test timed out after 30 seconds. See https://pub.dev/packages/test#timeouts
+  dart:isolate  _RawReceivePort._handleMessage
+  
+01:05 +2 -3: downloadFileByMeta E2E requestId propagation through RPC stream
+01:05 +3 -3: downloadFileByMeta E2E SHA256 mismatch detection and file deletion
+01:35 +3 -4: downloadFileByMeta E2E SHA256 mismatch detection and file deletion [E]
+  TimeoutException after 0:00:30.000000: Test timed out after 30 seconds. See https://pub.dev/packages/test#timeouts
+  dart:isolate  _RawReceivePort._handleMessage
+  
+01:35 +3 -4: Some tests failed.
+
+Failing tests:
+  test/device/download_file_by_meta_e2e_test.dart: downloadFileByMeta E2E SHA256 mismatch detection and file deletion
+  test/device/download_file_by_meta_e2e_test.dart: downloadFileByMeta E2E large file multi-chunk download
+  test/device/download_file_by_meta_e2e_test.dart: downloadFileByMeta E2E progress callback per chunk
+  test/device/download_file_by_meta_e2e_test.dart: downloadFileByMeta E2E small file download via binary frames
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.
+
+d:\project\GitHub\wenzagent>

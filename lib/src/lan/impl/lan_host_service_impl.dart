@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
@@ -228,11 +229,17 @@ class LanHostServiceImpl implements LanHostService {
 
       channel.stream.listen(
         (data) {
-          try {
-            final msg = LanMessage.fromJson(_parseJson(data));
-            _handleClientMessage(clientId, msg);
-          } catch (e) {
-            _log.warn('parse client message failed: $e');
+          if (data is String) {
+            // 文本消息（现有逻辑）
+            try {
+              final msg = LanMessage.fromJson(_parseJson(data));
+              _handleClientMessage(clientId, msg);
+            } catch (e) {
+              _log.warn('parse client message failed: $e');
+            }
+          } else {
+            // 二进制消息转发
+            _handleBinaryForward(clientId, data);
           }
         },
         onDone: () {
@@ -893,5 +900,52 @@ class LanHostServiceImpl implements LanHostService {
   Map<String, dynamic> _parseJson(dynamic data) {
     final str = data is String ? data : String.fromCharCodes(data);
     return jsonDecode(str) as Map<String, dynamic>;
+  }
+
+  /// 处理二进制消息转发
+  ///
+  /// 解析二进制帧头中的 toDeviceId，定向转发给目标设备。
+  /// 不解析 payload 内容，直接转发原始字节（零拷贝）。
+  ///
+  /// 帧格式：
+  /// [0]    0x01 版本
+  /// [1]    0x02 binaryChunk
+  /// [2..5] toDeviceId 长度 (uint32 BE)
+  /// [6..M] toDeviceId (UTF-8)
+  /// [M+1..] requestId + flags + payload（不解析）
+  void _handleBinaryForward(String fromClientId, dynamic data) {
+    try {
+      final bytes = data is Uint8List
+          ? data
+          : Uint8List.fromList(data as List<int>);
+
+      // 最小帧头：version(1) + type(1) + toDeviceIdLen(4) = 6
+      if (bytes.length < 6) return;
+      if (bytes[0] != 0x01) return; // 版本检查
+      if (bytes[1] != 0x02) return; // 类型检查
+
+      // 解析 toDeviceId
+      final toDeviceIdLen = ByteData.sublistView(bytes, 2, 6).getUint32(0);
+      if (bytes.length < 6 + toDeviceIdLen) return;
+      final toDeviceId = utf8.decode(bytes.sublist(6, 6 + toDeviceIdLen));
+
+      // ignore: avoid_print
+      print('[HOST-BIN-FWD] from=$fromClientId, to=$toDeviceId, totalBytes=${bytes.length}, clients=${_clients.map((c) => c.deviceId).toList()}');
+
+      if (toDeviceId.isEmpty) return;
+
+      // 查找目标设备并转发
+      final idx = _clients.indexWhere((c) => c.deviceId == toDeviceId);
+      if (idx != -1 && _clients[idx].id != fromClientId) {
+        try {
+          _clientChannels[idx].sink.add(bytes);
+        } catch (e) {
+          _log.warn('binary forward to device $toDeviceId failed: $e');
+          _markClientOffline(idx, reason: '二进制消息转发失败');
+        }
+      }
+    } catch (e) {
+      _log.warn('handle binary forward failed: $e');
+    }
   }
 }

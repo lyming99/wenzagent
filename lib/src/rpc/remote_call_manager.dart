@@ -74,19 +74,8 @@ class RemoteCallManager {
     _setupTimeout(requestId, timeout);
 
     try {
-      final response = await completer.future;
-      if (response['success'] == true) {
-        return response['result'] as T;
-      } else {
-        final error = response['error'] as Map<String, dynamic>?;
-        if (error != null) {
-          throw RpcException(
-            error['code'] as int? ?? RpcConfig.errorCodeInternalError,
-            error['message'] as String? ?? '未知错误',
-          );
-        }
-        throw Exception('RPC 调用失败');
-      }
+      final result = await completer.future;
+      return result as T;
     } catch (e) {
       _cleanupRequest(requestId);
       rethrow;
@@ -94,7 +83,36 @@ class RemoteCallManager {
   }
 
   /// 发起流式 RPC 调用
+  ///
+  /// 返回的 Stream 在首个事件中携带 [requestId]，
+  /// 调用方可通过 [requestId] 关联二进制通道的数据。
+  ///
+  /// **重要**：如果需要提前知道 requestId（例如在二进制帧到达前开始过滤），
+  /// 请使用 [invokeStreamWithId]，它返回 (requestId, stream) 对。
   Stream<RpcStreamEvent> invokeStream(
+    String method,
+    Map<String, dynamic> params, {
+    required String toDeviceId,
+    int timeout = RpcConfig.streamTimeout,
+  }) {
+    final result = invokeStreamWithId(
+      method,
+      params,
+      toDeviceId: toDeviceId,
+      timeout: timeout,
+    );
+    return result.stream;
+  }
+
+  /// 发起流式 RPC 调用，同时返回 requestId 和 stream
+  ///
+  /// 与 [invokeStream] 不同，此方法在发送 RPC 请求前就生成 requestId，
+  /// 允许调用方在二进制帧到达前就开始按 requestId 过滤。
+  ///
+  /// 这解决了 downloadFileByMeta 中的时序问题：
+  /// 二进制帧可能在第一个 RPC 文本事件到达之前就已到达，
+  /// 如果此时 requestId 尚未设置，帧数据会被静默丢弃。
+  ({String requestId, Stream<RpcStreamEvent> stream}) invokeStreamWithId(
     String method,
     Map<String, dynamic> params, {
     required String toDeviceId,
@@ -106,7 +124,13 @@ class RemoteCallManager {
 
     final requestId = _uuid.v4();
 
-    // 创建请求
+    // 创建 StreamController（在发送请求之前，确保 listener 已就绪）
+    final controller = StreamController<RpcStreamEvent>(
+      onCancel: () => _cleanupRequest(requestId),
+    );
+    _pendingStreams[requestId] = controller;
+
+    // 创建请求并发送
     final request = RpcRequest(
       requestId: requestId,
       method: method,
@@ -116,21 +140,14 @@ class RemoteCallManager {
       timeout: timeout,
     );
 
-    // 发送消息
     _sendRpcRequest(request);
-
-    // 创建 StreamController
-    final controller = StreamController<RpcStreamEvent>(
-      onCancel: () => _cleanupRequest(requestId),
-    );
-    _pendingStreams[requestId] = controller;
 
     // 设置超时（timeout <= 0 表示不设置超时，用于长连接流）
     if (timeout > 0) {
       _setupTimeout(requestId, timeout);
     }
 
-    return controller.stream;
+    return (requestId: requestId, stream: controller.stream);
   }
 
   /// 处理收到的 RPC 响应
@@ -166,7 +183,10 @@ class RemoteCallManager {
       final controller = _pendingStreams[chunk.requestId];
 
       if (controller != null && !controller.isClosed) {
-        controller.add(RpcStreamEvent.chunk(chunk.chunk));
+        // 将 requestId 注入事件，供调用方关联二进制通道
+        controller.add(
+          RpcStreamEvent.chunk(chunk.chunk, requestId: chunk.requestId),
+        );
       }
     } catch (e) {
       _log.warn('handle RPC stream chunk failed: $e');
@@ -184,7 +204,9 @@ class RemoteCallManager {
       if (controller != null && !controller.isClosed) {
         _timeoutTimers.remove(end.requestId)?.cancel();
 
-        controller.add(RpcStreamEvent.done(end.result ?? {}));
+        controller.add(
+          RpcStreamEvent.done(end.result ?? {}, requestId: end.requestId),
+        );
         controller.close();
 
         _pendingStreams.remove(end.requestId);
@@ -214,7 +236,7 @@ class RemoteCallManager {
                 errorData['code'] as int? ?? RpcConfig.errorCodeInternalError,
                 errorData['message'] as String? ?? '未知错误',
               )
-            : Exception('RPC 调用失败');
+            : RpcException(RpcConfig.errorCodeInternalError, '未知错误');
 
         completer.completeError(error);
         _pendingRequests.remove(requestId);
@@ -231,7 +253,7 @@ class RemoteCallManager {
                 errorData['code'] as int? ?? RpcConfig.errorCodeInternalError,
                 errorData['message'] as String? ?? '未知错误',
               )
-            : Exception('RPC 流式调用失败');
+            : RpcException(RpcConfig.errorCodeInternalError, '未知错误');
 
         controller.addError(error);
         controller.close();
@@ -242,41 +264,36 @@ class RemoteCallManager {
     }
   }
 
-  /// 取消指定请求
-  void cancel(String requestId) {
-    _cleanupRequest(requestId);
-  }
-
-  /// 清理资源
+  /// 释放资源
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
 
-    // 清理所有待处理请求
-    for (final completer in _pendingRequests.values) {
-      if (!completer.isCompleted) {
-        completer.completeError('RemoteCallManager 已释放');
-      }
-    }
-    _pendingRequests.clear();
-
-    // 清理所有待处理流式请求
-    for (final controller in _pendingStreams.values) {
-      if (!controller.isClosed) {
-        controller.close();
-      }
-    }
-    _pendingStreams.clear();
-
-    // 清理所有定时器
     for (final timer in _timeoutTimers.values) {
       timer.cancel();
     }
     _timeoutTimers.clear();
+
+    for (final completer in _pendingRequests.values) {
+      if (!completer.isCompleted) {
+        completer.completeError(
+            Exception('RemoteCallManager 已释放'));
+      }
+    }
+    _pendingRequests.clear();
+
+    for (final controller in _pendingStreams.values) {
+      if (!controller.isClosed) {
+        controller.addError(
+            Exception('RemoteCallManager 已释放'));
+        controller.close();
+      }
+    }
+    _pendingStreams.clear();
   }
 
-  // ===== 私有方法 =====
+  // ===== 内部方法 =====
 
-  /// 发送 RPC 请求消息
   void _sendRpcRequest(RpcRequest request) {
     final message = LanMessage(
       id: _uuid.v4(),
@@ -318,15 +335,12 @@ class RemoteCallManager {
     _timeoutTimers[requestId] = timer;
   }
 
-  /// 清理请求
   void _cleanupRequest(String requestId) {
+    _timeoutTimers.remove(requestId)?.cancel();
     _pendingRequests.remove(requestId);
-
     final controller = _pendingStreams.remove(requestId);
     if (controller != null && !controller.isClosed) {
       controller.close();
     }
-
-    _timeoutTimers.remove(requestId)?.cancel();
   }
 }

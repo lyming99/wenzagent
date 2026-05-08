@@ -5,8 +5,10 @@ import '../../entity/lan_message.dart';
 import '../../host/host_rpc_methods.dart';
 import '../../utils/logger.dart';
 import '../../lan/impl/lan_client_service_impl.dart';
+import '../../lan/lan_client_service.dart';
 import '../../rpc/remote_call_manager.dart';
 import '../../rpc/remote_call_server.dart';
+import '../../rpc/rpc_protocol.dart';
 import '../app_context.dart';
 import '../device_client.dart';
 import 'async_lock.dart';
@@ -220,6 +222,45 @@ class DeviceConnectionManager {
     return _rpcManager!.invoke(method, params, toDeviceId: toDeviceId);
   }
 
+  /// 发起流式 RPC 调用（通过 WebSocket 传输多个 chunk）
+  Stream<RpcStreamEvent> invokeRemoteStream(
+    String toDeviceId,
+    String method,
+    Map<String, dynamic> params, {
+    int timeout = 120000,
+  }) {
+    _requireRpcConnected();
+    return _rpcManager!.invokeStream(
+      method,
+      params,
+      toDeviceId: toDeviceId,
+      timeout: timeout,
+    );
+  }
+
+  /// 发起流式 RPC 调用，同时返回 requestId 和 stream
+  ///
+  /// 与 [invokeRemoteStream] 不同，此方法在发送请求前就生成 requestId，
+  /// 允许调用方在二进制帧到达前就开始按 requestId 过滤。
+  ({String requestId, Stream<RpcStreamEvent> stream}) invokeRemoteStreamWithId(
+    String toDeviceId,
+    String method,
+    Map<String, dynamic> params, {
+    int timeout = 120000,
+  }) {
+    _requireRpcConnected();
+    return _rpcManager!.invokeStreamWithId(
+      method,
+      params,
+      toDeviceId: toDeviceId,
+      timeout: timeout,
+    );
+  }
+
+  /// 二进制 chunk 事件流（来自 LanClient）
+  Stream<BinaryChunkEvent> get binaryChunkStream =>
+      _lanClient?.binaryChunkStream ?? const Stream.empty();
+
   /// 调用远程更新设备信息
   Future<void> remoteUpdateDeviceInfo({
     required String targetDeviceId,
@@ -278,11 +319,8 @@ class DeviceConnectionManager {
       } else if (lc.isConnected &&
           _connectionState != DeviceConnectionState.connected) {
         _updateState(DeviceConnectionState.connected);
-        _deviceRegistry.sendDeviceRegistration();
-        _refreshOnlineStateAfterDeviceList();
-      } else if (!lc.isConnected &&
-          !lc.isConnecting &&
-          _connectionState == DeviceConnectionState.connected) {
+      } else if (!lc.isConnected && !lc.isConnecting &&
+          _connectionState != DeviceConnectionState.disconnected) {
         _updateState(DeviceConnectionState.disconnected);
       }
     });
@@ -295,18 +333,15 @@ class DeviceConnectionManager {
 
   Future<String?> _getLocalIp() async {
     try {
-      for (final iface in await NetworkInterface.list(
-        type: InternetAddressType.IPv4,
-      )) {
+      final interfaces = await NetworkInterface.list();
+      for (final iface in interfaces) {
         for (final addr in iface.addresses) {
-          if (!addr.isLoopback && addr.type == InternetAddressType.IPv4) {
+          if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
             return addr.address;
           }
         }
       }
-    } catch (e) {
-      _log.debug('getLocalIp failed: $e');
-    }
+    } catch (_) {}
     return null;
   }
 }

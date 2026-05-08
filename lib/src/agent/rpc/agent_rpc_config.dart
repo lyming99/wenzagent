@@ -69,6 +69,9 @@ class AgentRpcConfig {
   static const String methodDownloadFile = 'agentDownloadFile';
   static const String methodUploadFile = 'agentUploadFile';
 
+  /// 流式读取文件（用于大文件下载，通过二进制 WebSocket 传输）
+  static const String methodReadFileStream = 'agentReadFileStream';
+
   // ===== Agent 技能管理 =====
 
   static const String methodSetSkills = 'agentSetSkills';

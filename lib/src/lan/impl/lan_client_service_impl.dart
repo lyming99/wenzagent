@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -66,6 +67,7 @@ class LanClientServiceImpl implements LanClientService {
   String? _localIp;
 
   final _messageController = StreamController<LanMessage>.broadcast();
+  final _binaryChunkController = StreamController<BinaryChunkEvent>.broadcast();
   double _uploadProgress = 0;
   double _downloadProgress = 0;
 
@@ -136,23 +138,29 @@ class LanClientServiceImpl implements LanClientService {
 
     _channel!.stream.listen(
       (data) {
-        try {
-          final msg = LanMessage.fromJson(_parseJson(data));
-          
-          // 检查是否被踢下线（重复登录）
-          if (msg.type == LanMessageType.system &&
-              msg.content == 'kicked:duplicate_login') {
-            _kickedOffline = true;
-            _addSystemMessage('已被踢下线：相同 deviceId 在其他位置登录');
-          }
-          
-          _messageController.add(msg);
+        if (data is String) {
+          // 文本消息（现有逻辑）
+          try {
+            final msg = LanMessage.fromJson(_parseJson(data));
 
-          if (msg.type == LanMessageType.file && msg.fileId != null) {
-            _autoDownloadFile(msg);
+            // 检查是否被踢下线（重复登录）
+            if (msg.type == LanMessageType.system &&
+                msg.content == 'kicked:duplicate_login') {
+              _kickedOffline = true;
+              _addSystemMessage('已被踢下线：相同 deviceId 在其他位置登录');
+            }
+
+            _messageController.add(msg);
+
+            if (msg.type == LanMessageType.file && msg.fileId != null) {
+              _autoDownloadFile(msg);
+            }
+          } catch (e) {
+            _log.warn('parse server message failed: $e');
           }
-        } catch (e) {
-          _log.warn('parse server message failed: $e');
+        } else {
+          // 二进制消息
+          _handleBinaryData(data);
         }
       },
       onDone: () {
@@ -254,6 +262,18 @@ class LanClientServiceImpl implements LanClientService {
     if (!_isConnected) return;
     _channel?.sink.add(json);
   }
+
+  @override
+  void sendBinaryMessage(Uint8List data) {
+    if (!_isConnected) return;
+    // ignore: avoid_print
+    print('[CLIENT-SEND-BIN] sending ${data.length} bytes');
+    _channel?.sink.add(data);
+  }
+
+  @override
+  Stream<BinaryChunkEvent> get binaryChunkStream =>
+      _binaryChunkController.stream;
 
   @override
   Future<String> uploadFile(String filePath) async {
@@ -435,5 +455,69 @@ class LanClientServiceImpl implements LanClientService {
   Map<String, dynamic> _parseJson(dynamic data) {
     final str = data is String ? data : String.fromCharCodes(data);
     return jsonDecode(str) as Map<String, dynamic>;
+  }
+
+  /// 处理 WebSocket 二进制消息
+  ///
+  /// 帧格式：
+  /// [0]    0x01 版本
+  /// [1]    0x02 binaryChunk
+  /// [2..5] toDeviceId 长度 (uint32 BE)
+  /// [6..M] toDeviceId (UTF-8)
+  /// [M+1..M+4] requestId 长度 (uint32 BE)
+  /// [M+5..N] requestId (UTF-8)
+  /// [N+1]  flags (bit0=lastChunk)
+  /// [N+2..] 原始二进制数据
+  void _handleBinaryData(dynamic data) {
+    try {
+      final bytes = data is Uint8List
+          ? data
+          : Uint8List.fromList(data as List<int>);
+
+      // ignore: avoid_print
+      print('[CLIENT-RECV-BIN] received ${bytes.length} bytes, hasListener=${_binaryChunkController.hasListener}');
+
+      // 最小帧头长度：version(1) + type(1) + toDeviceIdLen(4) + toDeviceId(0)
+      // + requestIdLen(4) + requestId(0) + flags(1) = 11
+      if (bytes.length < 11) return;
+      if (bytes[0] != 0x01) return; // 版本检查
+      if (bytes[1] != 0x02) return; // 类型检查
+
+      int offset = 2;
+
+      // 解析 toDeviceId
+      final toDeviceIdLen = ByteData.sublistView(bytes, offset, offset + 4)
+          .getUint32(0);
+      offset += 4;
+      // toDeviceId 在 Client 端不需要，跳过
+      offset += toDeviceIdLen;
+
+      // 解析 requestId
+      final requestIdLen = ByteData.sublistView(bytes, offset, offset + 4)
+          .getUint32(0);
+      offset += 4;
+      final requestId = utf8.decode(
+          bytes.sublist(offset, offset + requestIdLen));
+      offset += requestIdLen;
+
+      // 解析 flags
+      final flags = bytes[offset];
+      offset += 1;
+      final isLast = (flags & 0x01) != 0;
+
+      // 提取 payload
+      final payload = Uint8List.sublistView(bytes, offset);
+
+      // ignore: avoid_print
+      print('[CLIENT-RECV-BIN] parsed: reqId=$requestId, payloadLen=${payload.length}, isLast=$isLast');
+
+      _binaryChunkController.add(BinaryChunkEvent(
+        requestId: requestId,
+        data: payload,
+        isLast: isLast,
+      ));
+    } catch (e) {
+      _log.warn('handle binary data failed: $e');
+    }
   }
 }

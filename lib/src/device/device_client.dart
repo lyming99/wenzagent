@@ -679,11 +679,7 @@ class DeviceClient {
     final result = await invokeFileRpc(
       toDeviceId: toDeviceId,
       method: AgentRpcConfig.methodWriteFile,
-      params: {
-        'path': path,
-        'contentBase64': contentBase64,
-        'append': append,
-      },
+      params: {'path': path, 'contentBase64': contentBase64, 'append': append},
     );
     return FileWriteResult.fromMap(result);
   }
@@ -717,10 +713,7 @@ class DeviceClient {
     final result = await invokeFileRpc(
       toDeviceId: toDeviceId,
       method: AgentRpcConfig.methodUploadFile,
-      params: {
-        'path': path,
-        'overwrite': overwrite,
-      },
+      params: {'path': path, 'overwrite': overwrite},
     );
     // 从 RPC 响应中提取远程设备的 HTTP 地址，拼接完整上传 URL
     final hostIp = result['hostIp'] as String? ?? '';
@@ -858,9 +851,10 @@ class DeviceClient {
     }
   }
 
-  /// 根据文件元信息从远端设备下载文件
+  /// 根据文件元信息从远端设备下载文件（通过 WebSocket 二进制流式传输）
   ///
-  /// 复用已有的 [requestRemoteDownloadToken] → HTTP 直传链路。
+  /// 通过 RPC 流式通道向远程设备发起文件读取请求，远程设备分块读取文件
+  /// 并通过 WebSocket 原生二进制帧发送，本端接收后写入本地文件。
   ///
   /// 返回本地保存路径。下载完成后会校验 SHA256 哈希。
   Future<String> downloadFileByMeta(
@@ -868,53 +862,62 @@ class DeviceClient {
     required String saveDir,
     void Function(double progress)? onProgress,
   }) async {
-    // 1. 通过 RPC 向发送方设备请求下载 Token
-    final result = await requestRemoteDownloadToken(
-      toDeviceId: meta.fromDeviceId,
-      path: meta.filePath,
-    );
-
-    if (result.error != null || result.url.isEmpty) {
-      throw Exception('获取下载 Token 失败: ${result.error}');
+    if (!_connectionManager.isConnected) {
+      throw StateError('未连接到服务器');
     }
 
-    // 2. 拼接保存路径
+    // 1. 拼接保存路径
     final savePath = p.join(saveDir, meta.fileName);
+    final file = File(savePath);
+    final sink = file.openWrite();
+    int received = 0;
 
-    // 3. HTTP 直传下载
-    final uri = Uri.parse(result.url);
-    final client = HttpClient();
     try {
-      final request = await client.getUrl(uri);
-      final response = await request.close();
+      // 2. 发起 RPC 流式请求（使用 invokeRemoteStreamWithId 提前获取 requestId）
+      //
+      // 关键修复：使用 invokeRemoteStreamWithId 在发送 RPC 请求前就生成 requestId，
+      // 确保二进制帧到达时 binarySub 已经能按 requestId 过滤。
+      //
+      // 之前的 bug：使用 invokeRemoteStream 时，requestId 是从第一个 RPC 文本事件中
+      // 提取的，但二进制帧可能比 RPC 文本事件更早到达，导致第一个 chunk 被丢弃。
+      final result = _connectionManager.invokeRemoteStreamWithId(
+        meta.fromDeviceId,
+        AgentRpcConfig.methodReadFileStream,
+        {'path': meta.filePath},
+        timeout: 0, // 大文件不超时
+      );
+      final reqId = result.requestId;
+      final stream = result.stream;
 
-      if (response.statusCode != 200 && response.statusCode != 206) {
-        throw Exception('下载失败: HTTP ${response.statusCode}');
-      }
-
-      final contentLength = response.contentLength;
-      int received = 0;
-      final file = File(savePath);
-      final sink = file.openWrite();
-
-      try {
-        await for (final chunk in response) {
-          sink.add(chunk);
-          received += chunk.length;
-          if (contentLength > 0) {
-            onProgress?.call(received / contentLength);
+      // 3. 订阅二进制 chunk 流（reqId 已知，可以立即过滤）
+      final binarySub = _connectionManager.binaryChunkStream.listen((chunk) {
+        if (chunk.requestId == reqId) {
+          sink.add(chunk.data);
+          received += chunk.data.length;
+          if (meta.fileSize > 0) {
+            onProgress?.call(received / meta.fileSize);
           }
         }
-        await sink.close();
-      } catch (e) {
-        await sink.close();
-        try {
-          await file.delete();
-        } catch (_) {}
-        rethrow;
+      });
+
+      try {
+        await for (final event in stream) {
+          if (event.isDone) {
+            // 流结束
+            break;
+          }
+        }
+      } finally {
+        await binarySub.cancel();
       }
-    } finally {
-      client.close();
+
+      await sink.close();
+    } catch (e) {
+      await sink.close();
+      try {
+        await file.delete();
+      } catch (_) {}
+      rethrow;
     }
 
     // 4. 校验 SHA256

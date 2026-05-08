@@ -1,0 +1,34 @@
+00:00 +0: loading test/device/download_file_by_meta_e2e_test.dart
+00:00 +0: downloadFileByMeta E2E small file download via binary frames
+[TEST1] event: isDone=false, reqId=6393cb29
+[TEST1] subscribing binary with reqId=6393cb29
+[TEST1] event: isDone=true, reqId=6393cb29
+[TEST1] stream loop done, received=0, waiting binary...
+00:05 +0 -1: downloadFileByMeta E2E small file download via binary frames [E]
+  TimeoutException after 0:00:05.000000: Future not completed
+  test\device\download_file_by_meta_e2e_test.dart 437:9  main.<fn>.<fn>
+  
+00:05 +0 -1: downloadFileByMeta E2E large file multi-chunk download
+00:05 +0 -2: downloadFileByMeta E2E large file multi-chunk download [E]
+  Expected: <262144>
+    Actual: <229376>
+  
+  package:matcher                                        expect
+  test\device\download_file_by_meta_e2e_test.dart 586:7  main.<fn>.<fn>
+  
+00:05 +0 -2: downloadFileByMeta E2E empty file download
+00:05 +1 -2: downloadFileByMeta E2E file not found RPC error
+00:05 +2 -2: downloadFileByMeta E2E progress callback per chunk
+00:05 +2 -3: downloadFileByMeta E2E progress callback per chunk [E]
+  Expected: <4>
+    Actual: <3>
+  
+  package:matcher                                        expect
+  test\device\download_file_by_meta_e2e_test.dart 876:7  main.<fn>.<fn>
+  
+00:05 +2 -3: downloadFileByMeta E2E requestId propagation through RPC stream
+00:11 +2 -4: downloadFileByMeta E2E requestId propagation through RPC stream [E]
+  TimeoutException after 0:00:05.000000: Future not completed
+  test\device\download_file_by_meta_e2e_test.dart 975:9  main.<fn>.<fn>
+  
+00:11 +2 -4: downloadFileByMeta E2E SHA256 mismatch detection and file deletion

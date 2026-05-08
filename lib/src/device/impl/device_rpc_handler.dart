@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import '../../agent/agent_state.dart';
 import '../../agent/entity/entity.dart';
@@ -16,6 +17,8 @@ import 'device_agent_manager.dart';
 import 'device_config_manager.dart';
 import 'file_transfer_token_manager.dart';
 import '../../lan/impl/lan_host_service_impl.dart';
+import '../../rpc/rpc_protocol.dart';
+import 'device_connection_manager.dart';
 
 /// RPC 方法注册器
 ///
@@ -967,6 +970,72 @@ class DeviceRpcHandler {
       await agent.clearFileOperations();
       return {'success': true};
     });
+
+    // ===== 流式文件读取（二进制 WebSocket 传输） =====
+
+    rpcServer.registerStream(
+      AgentRpcConfig.methodReadFileStream,
+      (params) async* {
+        final path = params['path'] as String;
+        final chunkSize = params['chunkSize'] as int? ?? 64 * 1024;
+        final requestId = params['_requestId'] as String? ?? '';
+        final toDeviceId = params['_fromDeviceId'] as String? ?? '';
+        // ignore: avoid_print
+        print('[RPC-HANDLER] methodReadFileStream: path=$path, requestId=$requestId, toDeviceId=$toDeviceId, _deviceId=$_deviceId');
+
+        final file = File(path);
+        if (!await file.exists()) {
+          throw Exception('文件不存在: $path');
+        }
+
+        final fileSize = await file.length();
+
+        // 获取已连接的 LanClient（通过 DeviceConnectionManager 单例）
+        final connMgr = DeviceConnectionManager.getInstance(_deviceId);
+        final lanClient = connMgr.lanClient;
+        // ignore: avoid_print
+        print('[RPC-HANDLER] lanClient=${lanClient != null ? "exists" : "null"}, isConnected=${lanClient?.isConnected}');
+        if (lanClient == null || !lanClient.isConnected) {
+          throw Exception('LanClient 未连接，无法发送二进制数据');
+        }
+
+        final raf = await file.open();
+
+        try {
+          int offset = 0;
+          while (offset < fileSize) {
+            await raf.setPosition(offset);
+            final remaining = fileSize - offset;
+            final readLen = remaining < chunkSize ? remaining : chunkSize;
+            final bytes = await raf.read(readLen);
+            final isLast = (offset + bytes.length) >= fileSize;
+
+            // 构造二进制帧并发送
+            final frame = _buildBinaryFrame(
+              toDeviceId: toDeviceId,
+              requestId: requestId,
+              payload: bytes,
+              isLast: isLast,
+            );
+            // ignore: avoid_print
+            print('[RPC-HANDLER] sending binary frame: to=$toDeviceId, req=$requestId, len=${bytes.length}, last=$isLast');
+            lanClient.sendBinaryMessage(frame);
+
+            offset += bytes.length;
+
+            // yield 空事件表示已通过二进制通道发送了一个 chunk
+            yield RpcStreamEvent.chunk('');
+          }
+        } finally {
+          await raf.close();
+        }
+
+        yield RpcStreamEvent.done({
+          'fileSize': fileSize,
+          'fileName': path.split(Platform.pathSeparator).last,
+        });
+      },
+    );
   }
 
   /// 格式化文件大小
@@ -1141,4 +1210,51 @@ class DeviceRpcHandler {
     });
   }
 
+  /// 构造二进制帧
+  ///
+  /// 帧格式：
+  /// [0]    0x01 版本
+  /// [1]    0x02 binaryChunk
+  /// [2..5] toDeviceId 长度 (uint32 BE)
+  /// [6..M] toDeviceId (UTF-8)
+  /// [M+1..M+4] requestId 长度 (uint32 BE)
+  /// [M+5..N] requestId (UTF-8)
+  /// [N+1]  flags (bit0=lastChunk)
+  /// [N+2..] 原始二进制数据
+  static Uint8List _buildBinaryFrame({
+    required String toDeviceId,
+    required String requestId,
+    required Uint8List payload,
+    required bool isLast,
+  }) {
+    final toDeviceIdBytes = utf8.encode(toDeviceId);
+    final requestIdBytes = utf8.encode(requestId);
+
+    final builder = BytesBuilder();
+
+    // version
+    builder.addByte(0x01);
+    // type
+    builder.addByte(0x02);
+
+    // toDeviceId
+    final toDeviceIdLenData = ByteData(4)
+      ..setUint32(0, toDeviceIdBytes.length);
+    builder.add(toDeviceIdLenData.buffer.asUint8List());
+    builder.add(toDeviceIdBytes);
+
+    // requestId
+    final requestIdLenData = ByteData(4)
+      ..setUint32(0, requestIdBytes.length);
+    builder.add(requestIdLenData.buffer.asUint8List());
+    builder.add(requestIdBytes);
+
+    // flags
+    builder.addByte(isLast ? 0x01 : 0x00);
+
+    // payload
+    builder.add(payload);
+
+    return builder.takeBytes();
+  }
 }

@@ -1,0 +1,125 @@
+00:00 +0: loading test/device/download_file_by_meta_e2e_test.dart
+00:00 +0: downloadFileByMeta E2E small file download via binary frames
+[HANDLER1] path=C:\Users\98000\AppData\Local\Temp\wenzagent_dl_e2e_1\source_test.txt, requestId=ff6b78cc-910b-4b55-bfe2-01b84afce1e9, toDeviceId=dev-A-60ce371c
+[CLIENT-BIN] sendBinaryMessage: 94 bytes, deviceId=dev-B-60ce371c
+[HOST-BIN] from=9a81b864-6f54-4334-a010-eb6a454f0685, to=dev-A-60ce371c, totalBytes=94, clientCount=2
+[HOST-BIN] FORWARDED 94 bytes to dev-A-60ce371c
+[CLIENT-BIN] _handleBinaryData: 94 bytes, deviceId=dev-A-60ce371c
+[CLIENT-BIN] parsed: reqId=ff6b78cc, payloadLen=33, isLast=true, hasListener=true
+[TEST1-BIN] chunk: reqId=ff6b78cc, myReqId=null, len=33, isLast=true
+[TEST1-EVENT] isDone=false, reqId=ff6b78cc
+[TEST1-EVENT] SET reqId=ff6b78cc
+[TEST1-EVENT] isDone=true, reqId=ff6b78cc
+00:05 +0 -1: downloadFileByMeta E2E small file download via binary frames [E]
+  TimeoutException after 0:00:05.000000: Future not completed
+  test\device\download_file_by_meta_e2e_test.dart 440:9  main.<fn>.<fn>
+  
+00:05 +0 -1: downloadFileByMeta E2E large file multi-chunk download
+[CLIENT-BIN] sendBinaryMessage: 32829 bytes, deviceId=dev-B-f16a37c6
+[HOST-BIN] from=93272ccb-2139-44d2-af72-48674c00affc, to=dev-A-f16a37c6, totalBytes=32829, clientCount=2
+[HOST-BIN] FORWARDED 32829 bytes to dev-A-f16a37c6
+[CLIENT-BIN] sendBinaryMessage: 32829 bytes, deviceId=dev-B-f16a37c6
+[CLIENT-BIN] _handleBinaryData: 32829 bytes, deviceId=dev-A-f16a37c6
+[CLIENT-BIN] parsed: reqId=8f413797, payloadLen=32768, isLast=false, hasListener=true
+[HOST-BIN] from=93272ccb-2139-44d2-af72-48674c00affc, to=dev-A-f16a37c6, totalBytes=32829, clientCount=2
+[HOST-BIN] FORWARDED 32829 bytes to dev-A-f16a37c6
+[CLIENT-BIN] sendBinaryMessage: 32829 bytes, deviceId=dev-B-f16a37c6
+[HOST-BIN] from=93272ccb-2139-44d2-af72-48674c00affc, to=dev-A-f16a37c6, totalBytes=32829, clientCount=2
+[HOST-BIN] FORWARDED 32829 bytes to dev-A-f16a37c6
+[CLIENT-BIN] _handleBinaryData: 32829 bytes, deviceId=dev-A-f16a37c6
+[CLIENT-BIN] parsed: reqId=8f413797, payloadLen=32768, isLast=false, hasListener=true
+[CLIENT-BIN] sendBinaryMessage: 32829 bytes, deviceId=dev-B-f16a37c6
+[CLIENT-BIN] _handleBinaryData: 32829 bytes, deviceId=dev-A-f16a37c6
+[CLIENT-BIN] parsed: reqId=8f413797, payloadLen=32768, isLast=false, hasListener=true
+[HOST-BIN] from=93272ccb-2139-44d2-af72-48674c00affc, to=dev-A-f16a37c6, totalBytes=32829, clientCount=2
+[HOST-BIN] FORWARDED 32829 bytes to dev-A-f16a37c6
+[CLIENT-BIN] sendBinaryMessage: 32829 bytes, deviceId=dev-B-f16a37c6
+[CLIENT-BIN] _handleBinaryData: 32829 bytes, deviceId=dev-A-f16a37c6
+[CLIENT-BIN] parsed: reqId=8f413797, payloadLen=32768, isLast=false, hasListener=true
+[HOST-BIN] from=93272ccb-2139-44d2-af72-48674c00affc, to=dev-A-f16a37c6, totalBytes=32829, clientCount=2
+[HOST-BIN] FORWARDED 32829 bytes to dev-A-f16a37c6
+[CLIENT-BIN] sendBinaryMessage: 32829 bytes, deviceId=dev-B-f16a37c6
+[HOST-BIN] from=93272ccb-2139-44d2-af72-48674c00affc, to=dev-A-f16a37c6, totalBytes=32829, clientCount=2
+[HOST-BIN] FORWARDED 32829 bytes to dev-A-f16a37c6
+[CLIENT-BIN] _handleBinaryData: 32829 bytes, deviceId=dev-A-f16a37c6
+[CLIENT-BIN] parsed: reqId=8f413797, payloadLen=32768, isLast=false, hasListener=true
+[CLIENT-BIN] sendBinaryMessage: 32829 bytes, deviceId=dev-B-f16a37c6
+[HOST-BIN] from=93272ccb-2139-44d2-af72-48674c00affc, to=dev-A-f16a37c6, totalBytes=32829, clientCount=2
+[HOST-BIN] FORWARDED 32829 bytes to dev-A-f16a37c6
+[CLIENT-BIN] _handleBinaryData: 32829 bytes, deviceId=dev-A-f16a37c6
+[CLIENT-BIN] parsed: reqId=8f413797, payloadLen=32768, isLast=false, hasListener=true
+[CLIENT-BIN] sendBinaryMessage: 32829 bytes, deviceId=dev-B-f16a37c6
+[HOST-BIN] from=93272ccb-2139-44d2-af72-48674c00affc, to=dev-A-f16a37c6, totalBytes=32829, clientCount=2
+[HOST-BIN] FORWARDED 32829 bytes to dev-A-f16a37c6
+[CLIENT-BIN] _handleBinaryData: 32829 bytes, deviceId=dev-A-f16a37c6
+[CLIENT-BIN] parsed: reqId=8f413797, payloadLen=32768, isLast=false, hasListener=true
+[CLIENT-BIN] _handleBinaryData: 32829 bytes, deviceId=dev-A-f16a37c6
+[CLIENT-BIN] parsed: reqId=8f413797, payloadLen=32768, isLast=true, hasListener=true
+00:05 +0 -2: downloadFileByMeta E2E large file multi-chunk download [E]
+  Expected: <262144>
+    Actual: <229376>
+  
+  package:matcher                                        expect
+  test\device\download_file_by_meta_e2e_test.dart 592:7  main.<fn>.<fn>
+  
+00:05 +0 -2: downloadFileByMeta E2E empty file download
+00:05 +1 -2: downloadFileByMeta E2E file not found RPC error
+00:05 +2 -2: downloadFileByMeta E2E progress callback per chunk
+[CLIENT-BIN] sendBinaryMessage: 1085 bytes, deviceId=dev-B-e96b415c
+[HOST-BIN] from=fa641618-1e69-4411-b93b-df8cf3901fd6, to=dev-A-e96b415c, totalBytes=1085, clientCount=2
+[HOST-BIN] FORWARDED 1085 bytes to dev-A-e96b415c
+[CLIENT-BIN] sendBinaryMessage: 1085 bytes, deviceId=dev-B-e96b415c
+[CLIENT-BIN] _handleBinaryData: 1085 bytes, deviceId=dev-A-e96b415c
+[CLIENT-BIN] parsed: reqId=cd2ebb53, payloadLen=1024, isLast=false, hasListener=true
+[HOST-BIN] from=fa641618-1e69-4411-b93b-df8cf3901fd6, to=dev-A-e96b415c, totalBytes=1085, clientCount=2
+[HOST-BIN] FORWARDED 1085 bytes to dev-A-e96b415c
+[CLIENT-BIN] sendBinaryMessage: 1085 bytes, deviceId=dev-B-e96b415c
+[CLIENT-BIN] _handleBinaryData: 1085 bytes, deviceId=dev-A-e96b415c
+[CLIENT-BIN] parsed: reqId=cd2ebb53, payloadLen=1024, isLast=false, hasListener=true
+[CLIENT-BIN] sendBinaryMessage: 1085 bytes, deviceId=dev-B-e96b415c
+[HOST-BIN] from=fa641618-1e69-4411-b93b-df8cf3901fd6, to=dev-A-e96b415c, totalBytes=1085, clientCount=2
+[HOST-BIN] FORWARDED 1085 bytes to dev-A-e96b415c
+[CLIENT-BIN] _handleBinaryData: 1085 bytes, deviceId=dev-A-e96b415c
+[CLIENT-BIN] parsed: reqId=cd2ebb53, payloadLen=1024, isLast=false, hasListener=true
+[HOST-BIN] from=fa641618-1e69-4411-b93b-df8cf3901fd6, to=dev-A-e96b415c, totalBytes=1085, clientCount=2
+[HOST-BIN] FORWARDED 1085 bytes to dev-A-e96b415c
+[CLIENT-BIN] _handleBinaryData: 1085 bytes, deviceId=dev-A-e96b415c
+[CLIENT-BIN] parsed: reqId=cd2ebb53, payloadLen=1024, isLast=true, hasListener=true
+00:05 +2 -3: downloadFileByMeta E2E progress callback per chunk [E]
+  Expected: <4>
+    Actual: <3>
+  
+  package:matcher                                        expect
+  test\device\download_file_by_meta_e2e_test.dart 888:7  main.<fn>.<fn>
+  
+00:05 +2 -3: downloadFileByMeta E2E requestId propagation through RPC stream
+[CLIENT-BIN] sendBinaryMessage: 76 bytes, deviceId=dev-B-e5472b08
+[HOST-BIN] from=0bf47843-6563-404c-b556-e65d1e041a79, to=dev-A-e5472b08, totalBytes=76, clientCount=2
+[HOST-BIN] FORWARDED 76 bytes to dev-A-e5472b08
+[CLIENT-BIN] _handleBinaryData: 76 bytes, deviceId=dev-A-e5472b08
+[CLIENT-BIN] parsed: reqId=1c4a2fb7, payloadLen=15, isLast=true, hasListener=true
+00:11 +2 -4: downloadFileByMeta E2E requestId propagation through RPC stream [E]
+  TimeoutException after 0:00:05.000000: Future not completed
+  test\device\download_file_by_meta_e2e_test.dart 990:9  main.<fn>.<fn>
+  
+00:11 +2 -4: downloadFileByMeta E2E SHA256 mismatch detection and file deletion
+[CLIENT-BIN] sendBinaryMessage: 78 bytes, deviceId=dev-B-4edfab13
+[HOST-BIN] from=1356447d-e462-4cad-870d-e4bacc5af8a4, to=dev-A-4edfab13, totalBytes=78, clientCount=2
+[HOST-BIN] FORWARDED 78 bytes to dev-A-4edfab13
+[CLIENT-BIN] _handleBinaryData: 78 bytes, deviceId=dev-A-4edfab13
+[CLIENT-BIN] parsed: reqId=c296e5e6, payloadLen=17, isLast=true, hasListener=true
+00:16 +2 -5: downloadFileByMeta E2E SHA256 mismatch detection and file deletion [E]
+  TimeoutException after 0:00:05.000000: Future not completed
+  test\device\download_file_by_meta_e2e_test.dart 1113:9  main.<fn>.<fn>
+  
+00:16 +2 -5: Some tests failed.
+
+Failing tests:
+  test/device/download_file_by_meta_e2e_test.dart: downloadFileByMeta E2E SHA256 mismatch detection and file deletion
+  test/device/download_file_by_meta_e2e_test.dart: downloadFileByMeta E2E large file multi-chunk download
+  test/device/download_file_by_meta_e2e_test.dart: downloadFileByMeta E2E progress callback per chunk
+  test/device/download_file_by_meta_e2e_test.dart: downloadFileByMeta E2E requestId propagation through RPC stream
+  test/device/download_file_by_meta_e2e_test.dart: downloadFileByMeta E2E small file download via binary frames
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.

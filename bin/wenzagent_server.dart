@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:uuid/uuid.dart';
 import 'package:yaml/yaml.dart';
@@ -246,6 +247,14 @@ class _HostLanClientServiceAdapter implements LanClientService {
       deviceId: '__host__',
     );
   }
+
+  @override
+  void sendBinaryMessage(Uint8List data) {
+    // Host 端不支持直接发送二进制消息，二进制帧由 LanHostServiceImpl 转发
+  }
+
+  @override
+  Stream<BinaryChunkEvent> get binaryChunkStream => const Stream.empty();
 }
 
 // ---------------------------------------------------------------------------

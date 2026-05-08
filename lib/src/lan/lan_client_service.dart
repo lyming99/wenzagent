@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../entity/lan_message.dart';
 import 'entity/client_info.dart';
 
@@ -56,4 +58,36 @@ abstract class LanClientService {
 
   /// 手动触发重连
   Future<void> reconnect();
+
+  /// 发送二进制消息（通过 WebSocket 原生二进制帧）
+  void sendBinaryMessage(Uint8List data);
+
+  /// 二进制 chunk 事件流
+  ///
+  /// 接收解析后的二进制帧，按 requestId 分发。
+  Stream<BinaryChunkEvent> get binaryChunkStream;
+}
+
+/// 二进制 chunk 事件
+///
+/// 解析 WebSocket 二进制帧后的结构化事件。
+class BinaryChunkEvent {
+  /// 关联的 RPC 请求 ID
+  final String requestId;
+
+  /// 原始二进制数据（不含帧头）
+  final Uint8List data;
+
+  /// 是否为最后一个 chunk
+  final bool isLast;
+
+  const BinaryChunkEvent({
+    required this.requestId,
+    required this.data,
+    required this.isLast,
+  });
+
+  @override
+  String toString() =>
+      'BinaryChunkEvent(requestId: $requestId, dataLen: ${data.length}, isLast: $isLast)';
 }

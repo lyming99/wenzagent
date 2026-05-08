@@ -149,22 +149,35 @@ class RpcStreamEnd {
 
 /// RPC 流式事件
 class RpcStreamEvent {
+  /// 流的 requestId（首次事件时设置，用于关联二进制通道）
+  final String? requestId;
   final String? chunk;
   final Map<String, dynamic>? result;
   final bool isDone;
 
   RpcStreamEvent({
+    this.requestId,
     this.chunk,
     this.result,
     this.isDone = false,
   });
 
-  factory RpcStreamEvent.chunk(String chunk) {
-    return RpcStreamEvent(chunk: chunk, isDone: false);
+  factory RpcStreamEvent.chunk(String chunk, {String? requestId}) {
+    return RpcStreamEvent(chunk: chunk, isDone: false, requestId: requestId);
   }
 
-  factory RpcStreamEvent.done(Map<String, dynamic> result) {
-    return RpcStreamEvent(result: result, isDone: true);
+  factory RpcStreamEvent.done(Map<String, dynamic> result, {String? requestId}) {
+    return RpcStreamEvent(result: result, isDone: true, requestId: requestId);
+  }
+
+  /// 标记 requestId（用于首次事件注入 requestId）
+  RpcStreamEvent withRequestId(String id) {
+    return RpcStreamEvent(
+      requestId: id,
+      chunk: chunk,
+      result: result,
+      isDone: isDone,
+    );
   }
 }
 

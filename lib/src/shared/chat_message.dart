@@ -463,7 +463,7 @@ class ChatMessage {
         'fileSize': fileSize,
         'fileHash': fileHash,
         'filePath': filePath,
-        if (fromDeviceId != null) 'fromDeviceId': fromDeviceId,
+        if (fromDeviceId != null && fromDeviceId.isNotEmpty) 'fromDeviceId': fromDeviceId,
         if (mimeType != null) 'mimeType': mimeType,
       },
     );

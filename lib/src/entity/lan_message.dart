@@ -154,6 +154,12 @@ enum LanMessageType {
 
   /// Client -> Host: pong 响应
   pong,
+
+  /// 二进制数据块（用于文件传输等场景）
+  ///
+  /// 通过 WebSocket 原生二进制帧传输，不走 JSON 序列化。
+  /// 帧格式：[version=0x01][type=0x02][toDeviceIdLen(4B)][toDeviceId][requestIdLen(4B)][requestId][flags(1B)][payload]
+  binaryChunk,
 }
 
 /// LAN 消息实体

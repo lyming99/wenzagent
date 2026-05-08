@@ -181,7 +181,12 @@ class RemoteCallServer {
     if (handler == null) return;
 
     try {
-      final stream = handler(request.params);
+      // 将 requestId 和 fromDeviceId 注入到 params 中，供 handler 使用
+      final enrichedParams = Map<String, dynamic>.from(request.params);
+      enrichedParams['_requestId'] = request.requestId;
+      enrichedParams['_fromDeviceId'] = request.fromDeviceId;
+
+      final stream = handler(enrichedParams);
 
       final subscription = stream.listen(
         (event) {

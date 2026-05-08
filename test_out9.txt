@@ -1,0 +1,11 @@
+00:00 +0: loading test/device/download_file_by_meta_e2e_test.dart
+00:00 +0 -1: loading test/device/download_file_by_meta_e2e_test.dart [E]
+  Failed to load "test/device/download_file_by_meta_e2e_test.dart":
+  lib/src/lan/impl/lan_host_service_impl.dart:949:127: Error: Method 'substring' cannot be called on 'String?' because it is potentially null.
+  Try calling using ?. instead.
+        print('[HOST-BIN] from=$fromClientId, to=$toDeviceId, totalBytes=${bytes.length}, clients=${_clients.map((c) => "${c.id.substring(0, 8)}(deviceId=${c.deviceId ?? "null"})")}');
+                                                                                                                                ^^^^^^^^^
+00:00 +0 -1: Some tests failed.
+
+Failing tests:
+  test/device/download_file_by_meta_e2e_test.dart: loading test/device/download_file_by_meta_e2e_test.dart
