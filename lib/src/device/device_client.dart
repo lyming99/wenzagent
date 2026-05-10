@@ -632,7 +632,7 @@ class DeviceClient {
       method: AgentRpcConfig.methodListDirectory,
       params: {'path': path},
     );
-    return DirectoryListingResult.fromMap(result);
+    return DirectoryListingResult.fromMap(result['result']);
   }
 
   /// 获取远程设备文件/目录信息
@@ -645,7 +645,7 @@ class DeviceClient {
       method: AgentRpcConfig.methodGetFileInfo,
       params: {'path': path},
     );
-    return FileInfoResult.fromMap(result);
+    return FileInfoResult.fromMap(result['result']);
   }
 
   /// 读取远程设备文件内容（小文件，Base64 编码返回）
@@ -666,7 +666,7 @@ class DeviceClient {
       method: AgentRpcConfig.methodReadFile,
       params: params,
     );
-    return FileReadResult.fromMap(result);
+    return FileReadResult.fromMap(result['result']);
   }
 
   /// 写入远程设备文件
@@ -681,7 +681,7 @@ class DeviceClient {
       method: AgentRpcConfig.methodWriteFile,
       params: {'path': path, 'contentBase64': contentBase64, 'append': append},
     );
-    return FileWriteResult.fromMap(result);
+    return FileWriteResult.fromMap(result['result']);
   }
 
   /// 请求远程设备文件下载 Token
@@ -695,13 +695,14 @@ class DeviceClient {
       params: {'path': path},
     );
     // 从 RPC 响应中提取远程设备的 HTTP 地址，拼接完整下载 URL
-    final hostIp = result['hostIp'] as String? ?? '';
-    final hostPort = result['hostPort'] as int? ?? 0;
-    final token = result['token'] as String? ?? '';
+    final data = Map<String, dynamic>.from(result['result']);
+    final hostIp = data['hostIp'] as String? ?? '';
+    final hostPort = data['hostPort'] as int? ?? 0;
+    final token = data['token'] as String? ?? '';
     if (hostIp.isNotEmpty && hostPort > 0 && token.isNotEmpty) {
-      result['url'] = 'http://$hostIp:$hostPort/file-download?token=$token';
+      data['url'] = 'http://$hostIp:$hostPort/file-download?token=$token';
     }
-    return FileDownloadUrlResult.fromMap(result);
+    return FileDownloadUrlResult.fromMap(data);
   }
 
   /// 请求远程设备文件上传 Token
@@ -716,13 +717,14 @@ class DeviceClient {
       params: {'path': path, 'overwrite': overwrite},
     );
     // 从 RPC 响应中提取远程设备的 HTTP 地址，拼接完整上传 URL
-    final hostIp = result['hostIp'] as String? ?? '';
-    final hostPort = result['hostPort'] as int? ?? 0;
-    final token = result['token'] as String? ?? '';
+    final data = Map<String, dynamic>.from(result['result']);
+    final hostIp = data['hostIp'] as String? ?? '';
+    final hostPort = data['hostPort'] as int? ?? 0;
+    final token = data['token'] as String? ?? '';
     if (hostIp.isNotEmpty && hostPort > 0 && token.isNotEmpty) {
-      result['url'] = 'http://$hostIp:$hostPort/file-upload?token=$token';
+      data['url'] = 'http://$hostIp:$hostPort/file-upload?token=$token';
     }
-    return FileUploadUrlResult.fromMap(result);
+    return FileUploadUrlResult.fromMap(data);
   }
 
   // ===== LAN消息扩展 =====

@@ -138,7 +138,7 @@ class DataSyncManager {
             HostRpcConfig.methodGetEmployee,
             {'uuid': employeeId},
           );
-          final data = result['employee'] as Map<String, dynamic>?;
+          final data = result['result']['employee'] as Map<String, dynamic>?;
           if (data == null) continue;
           final remote = AiEmployeeEntity.fromMap(data);
           final existing = await _employeeManager.getEmployeeIncludingDeleted(remote.uuid);
@@ -291,7 +291,7 @@ class DataSyncManager {
           'employees': [employee.toMap()],
         },
       );
-      return (result['count'] as int? ?? 0) > 0;
+      return (result['result']['count'] as int? ?? 0) > 0;
     } catch (e) {
       _log.error('同步员工到设备 $targetDeviceId 失败', e);
       return false;
@@ -413,7 +413,7 @@ class DataSyncManager {
           HostRpcConfig.methodGetEmployees,
           {'includeDeleted': true},
         );
-        for (final data in (result['employees'] as List? ?? [])) {
+        for (final data in (result['result']['employees'] as List? ?? [])) {
           final employee = AiEmployeeEntity.fromMap(
             data as Map<String, dynamic>,
           );
@@ -452,7 +452,7 @@ class DataSyncManager {
           HostRpcConfig.methodGetSessions,
           {'includeDeleted': true},
         );
-        for (final data in (result['sessions'] as List? ?? [])) {
+        for (final data in (result['result']['sessions'] as List? ?? [])) {
           final session = AiEmployeeSessionEntity.fromMap(
             data as Map<String, dynamic>,
           );
@@ -496,7 +496,7 @@ class DataSyncManager {
           HostRpcConfig.methodGetSessionSummaries,
           {},
         );
-        final summaries = (result['summaries'] as List? ?? [])
+        final summaries = (result['result']['summaries'] as List? ?? [])
             .map((s) => SessionSummaryEntity.fromMap(s as Map<String, dynamic>))
             .toList();
         for (final summary in summaries) {
@@ -525,7 +525,7 @@ class DataSyncManager {
               HostRpcConfig.methodGetSpecs,
               {'employeeId': employee.uuid},
             );
-            final specs = (result['specs'] as List? ?? [])
+            final specs = (result['result']['specs'] as List? ?? [])
                 .map((s) => SpecItemEntity.fromMap(s as Map<String, dynamic>))
                 .toList();
             if (specs.isNotEmpty) {
@@ -557,10 +557,10 @@ class DataSyncManager {
               HostRpcConfig.methodGetTodos,
               {'employeeId': employee.uuid},
             );
-            final topics = (result['topics'] as List? ?? [])
+            final topics = (result['result']['topics'] as List? ?? [])
                 .map((t) => TodoTopicEntity.fromMap(t as Map<String, dynamic>))
                 .toList();
-            final taskItems = (result['taskItems'] as List? ?? [])
+            final taskItems = (result['result']['taskItems'] as List? ?? [])
                 .map((i) => TodoTaskItemEntity.fromMap(i as Map<String, dynamic>))
                 .toList();
             if (topics.isNotEmpty || taskItems.isNotEmpty) {
@@ -668,7 +668,7 @@ class DataSyncManager {
           HostRpcConfig.methodGetAllSkills,
           {'includeDeleted': true},
         );
-        for (final data in (result['skills'] as List? ?? [])) {
+        for (final data in (result['result']['skills'] as List? ?? [])) {
           final remote = AiEmployeeSkillEntity.fromMap(data as Map<String, dynamic>);
           final existing = await _skillManager.getSkillIncludingDeleted(remote.uuid);
           if (existing == null) {
@@ -696,7 +696,7 @@ class DataSyncManager {
           HostRpcConfig.methodGetGlobalSkills,
           {'includeDeleted': true},
         );
-        for (final data in (result['skills'] as List? ?? [])) {
+        for (final data in (result['result']['skills'] as List? ?? [])) {
           final remote = GlobalSkillEntity.fromMap(data as Map<String, dynamic>);
           final existing = await _globalSkillManager.getSkillIncludingDeleted(remote.uuid);
           if (existing == null) {

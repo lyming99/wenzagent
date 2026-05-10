@@ -428,7 +428,7 @@ class DeviceAgentManager {
           HostRpcConfig.methodGetEmployee,
           {'uuid': employeeId},
         );
-        final data = result['employee'] as Map<String, dynamic>?;
+        final data = result['result']['employee'] as Map<String, dynamic>?;
         if (data != null) {
           final employee = AiEmployeeEntity.fromMap(data);
           // 保存到本地（保留原始 deviceId）
