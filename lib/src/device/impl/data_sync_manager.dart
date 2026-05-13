@@ -1,5 +1,6 @@
-import 'dart:convert';
 import 'dart:io';
+
+import 'package:path/path.dart' as p;
 
 import '../../host/host_rpc_methods.dart';
 import '../../persistence/persistence.dart';
@@ -384,9 +385,18 @@ class DataSyncManager {
 
   /// 删除技能并同步到其他设备
   Future<void> deleteSkillWithSync(String skillId) async {
+    _log.info('deleteSkillWithSync: skillId=$skillId');
     final skill = await _skillManager.getSkillIncludingDeleted(skillId);
-    await _skillManager.deleteSkill(skillId);
+    _log.debug('deleteSkillWithSync: skill=${skill?.name}, skillType=${skill?.skillType}');
+    try {
+      await _skillManager.deleteSkill(skillId);
+      _log.info('deleteSkillWithSync: 本地删除成功, skillId=$skillId');
+    } catch (e, st) {
+      _log.error('deleteSkillWithSync: 本地删除失败, skillId=$skillId', e, st);
+      rethrow;
+    }
     if (skill != null) {
+      _log.debug('deleteSkillWithSync: 同步删除到其他设备, skill=${skill.name}');
       await _syncSkillDeleteToDevices(skill.copyWith(
         deleted: 1,
         deleteTime: DateTime.now(),
@@ -1009,11 +1019,12 @@ class DataSyncManager {
   ///
   /// 检测本地缺失的 folder skill 文件夹，从远端设备下载并解压。
   /// 在元数据同步完成后调用。
+  ///
+  /// 使用动态路径: skillsDir + skill.name（而非 config 中的 folder_path）。
   Future<void> syncFolderSkillFiles() async {
     if (!_connectionManager.isConnected) return;
 
     final deviceClient = DeviceClient.getInstance(_deviceId);
-    // DeviceClient.getInstance 在 AppContext 已注册时不会返回 null
 
     final devices = await _deviceRegistry.getOnlineDevices();
     final otherDevices = devices.where((d) => d.id != _deviceId).toList();
@@ -1025,15 +1036,19 @@ class DataSyncManager {
     // 收集需要文件同步的 folder skill
     final folderSkills = <Map<String, dynamic>>[];
 
+    // 动态路径: skillsDir + skill.name
+    final skillsDir = deviceClient.skillsDir;
+
     // 员工级
     final skills = await _skillManager.getAllSkills();
     for (final s in skills) {
-      if (s.skillType == 'folder' && s.deleted != 1 && s.config != null) {
-        final folderPath = _extractFolderPath(s.config);
-        if (folderPath != null && !await Directory(folderPath).exists()) {
+      if (s.skillType == 'folder' && s.deleted != 1) {
+        final folderPath = _resolveDynamicFolderPath(skillsDir, s.name);
+        if (!await Directory(folderPath).exists()) {
           folderSkills.add({
             'skillId': s.uuid,
             'folderPath': folderPath,
+            'skillName': s.name,
             'type': 'employee',
             'employeeId': s.employeeId,
           });
@@ -1044,12 +1059,13 @@ class DataSyncManager {
     // 全局级
     final globalSkills = await _globalSkillManager.getAllSkills();
     for (final s in globalSkills) {
-      if (s.skillType == 'folder' && s.deleted != 1 && s.config != null) {
-        final folderPath = _extractFolderPath(s.config);
-        if (folderPath != null && !await Directory(folderPath).exists()) {
+      if (s.skillType == 'folder' && s.deleted != 1) {
+        final folderPath = _resolveDynamicFolderPath(skillsDir, s.name);
+        if (!await Directory(folderPath).exists()) {
           folderSkills.add({
             'skillId': s.uuid,
             'folderPath': folderPath,
+            'skillName': s.name,
             'type': 'global',
           });
         }
@@ -1066,38 +1082,20 @@ class DataSyncManager {
     // 逐个同步（串行，避免带宽争抢）
     for (final item in folderSkills) {
       final skillId = item['skillId'] as String;
-      final folderPath = item['folderPath'] as String;
+      final skillName = item['skillName'] as String;
+      final skillFolderPath = item['folderPath'] as String;
 
       for (final device in otherDevices) {
         try {
-          _log.info('syncFolderSkillFiles: 开始同步 skill=$skillId, folderPath=$folderPath, fromDevice=${device.id}');
+          _log.info('syncFolderSkillFiles: 开始同步 skill=$skillId, name=$skillName, fromDevice=${device.id}');
 
           final localPath = await deviceClient.syncFolderSkillFiles(
             fromDeviceId: device.id,
-            folderPath: folderPath,
+            folderPath: skillFolderPath,
             skillId: skillId,
-            localSkillsDir: deviceClient.skillsDir,
+            localSkillsDir: skillsDir,
+            targetFolderName: skillName,
           );
-
-          // 更新 skill config 为本地路径
-          final newConfig =
-              '{"folder_path": "${localPath.replaceAll('\\', '\\\\')}"}';
-          if (item['type'] == 'employee') {
-            final skill = await _skillManager.getSkill(skillId);
-            if (skill != null) {
-              await _skillManager.updateSkill(
-                skill.copyWith(config: newConfig),
-              );
-            }
-          } else {
-            final skill =
-                await _globalSkillManager.getSkill(skillId);
-            if (skill != null) {
-              await _globalSkillManager.updateSkill(
-                skill.copyWith(config: newConfig),
-              );
-            }
-          }
 
           _log.info('syncFolderSkillFiles: 同步成功 skill=$skillId, localPath=$localPath');
           break; // 同步成功，跳出设备循环
@@ -1108,15 +1106,59 @@ class DataSyncManager {
     }
   }
 
-  /// 从 skill.config JSON 中提取 folder_path
-  String? _extractFolderPath(String? configJson) {
-    if (configJson == null || configJson.isEmpty) return null;
-    try {
-      final map = jsonDecode(configJson) as Map<String, dynamic>;
-      return map['folder_path'] as String?;
-    } catch (_) {
-      return configJson;
+  /// 根据动态路径规则计算 folder skill 本地路径: skillsDir + skillName
+  static String _resolveDynamicFolderPath(String skillsDir, String skillName) {
+    return p.normalize(p.absolute(p.join(skillsDir, skillName)));
+  }
+
+  /// 定向同步单个 Folder Skill 文件
+  ///
+  /// 与 [syncFolderSkillFiles] 扫描全部缺失 skill 不同，此方法仅同步指定的单个 skill。
+  /// 返回本地解压后的文件夹路径，失败返回 null。
+  Future<String?> syncSingleFolderSkill(String skillId, String skillName, {String? originName}) async {
+    if (!_connectionManager.isConnected) return null;
+
+    final deviceClient = DeviceClient.getInstance(_deviceId);
+    final skillsDir = deviceClient.skillsDir;
+    final localPath = _resolveDynamicFolderPath(skillsDir, skillName);
+
+    // 本地已存在则直接返回
+    if (await Directory(localPath).exists()) {
+      _log.debug('syncSingleFolderSkill: 本地已存在, path=$localPath');
+      return localPath;
     }
+
+    final devices = await _deviceRegistry.getOnlineDevices();
+    final otherDevices = devices.where((d) => d.id != _deviceId).toList();
+    if (otherDevices.isEmpty) {
+      _log.debug('syncSingleFolderSkill: 无其他在线设备, skillName=$skillName');
+      return null;
+    }
+
+    // 远端查找文件夹时优先使用 originName（原始文件夹名）
+    final remoteFolderName = originName ?? skillName;
+
+    for (final device in otherDevices) {
+      try {
+        _log.info('syncSingleFolderSkill: 开始同步 skillId=$skillId, name=$skillName, originName=$originName, fromDevice=${device.id}');
+
+        final result = await deviceClient.syncFolderSkillFiles(
+          fromDeviceId: device.id,
+          folderPath: remoteFolderName,
+          skillId: skillId,
+          localSkillsDir: skillsDir,
+          targetFolderName: skillName,
+        );
+
+        _log.info('syncSingleFolderSkill: 同步成功 skillId=$skillId, localPath=$result');
+        return result;
+      } catch (e) {
+        _log.warn('syncSingleFolderSkill: 同步失败 skillId=$skillId from ${device.id}: $e');
+      }
+    }
+
+    _log.warn('syncSingleFolderSkill: 所有设备均同步失败, skillId=$skillId');
+    return null;
   }
 
 }

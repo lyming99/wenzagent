@@ -208,7 +208,7 @@ void main() {
                   .substring(dir.path.length + 1)
                   .replaceAll('\\', '/');
               final bytes = await entity.readAsBytes();
-              archive.addFile(ArchiveFile('$folderName/$rel', bytes.length, bytes));
+              archive.addFile(ArchiveFile(rel, bytes.length, bytes));
             }
           }
           final zipData = ZipEncoder().encode(archive);
@@ -363,19 +363,11 @@ void main() {
       final archive = ZipDecoder().decodeBytes(savedBytes);
       for (final file in archive) {
         final name = file.name;
-        // Skip entries that are just the root folder name (e.g. "translator/")
-        if (name == '$folderName/' || name == '$folderName\\') continue;
-        // Strip the root folder prefix
-        final relativePath = name.startsWith('$folderName/')
-            ? name.substring('$folderName/'.length)
-            : name.startsWith('$folderName\\')
-                ? name.substring('$folderName\\'.length)
-                : name;
-        // Skip empty relative paths
-        if (relativePath.isEmpty) continue;
+        // Skip empty or directory-only entries
+        if (name.isEmpty) continue;
 
         final fp = '$targetDir${Platform.pathSeparator}'
-            '${relativePath.replaceAll('/', Platform.pathSeparator)}';
+            '${name.replaceAll('/', Platform.pathSeparator)}';
         if (file.isFile) {
           final f = File(fp);
           await f.parent.create(recursive: true);

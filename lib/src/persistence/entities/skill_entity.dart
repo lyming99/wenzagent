@@ -22,6 +22,13 @@ class AiEmployeeSkillEntity {
   /// 技能配置 (JSON)
   String? config;
 
+  /// 关联的全局技能 UUID（用于从 global skill 库引用的技能）
+  String? globalSkillId;
+
+  /// 原始技能文件夹名称（用于从 LAN 同步时定位远端文件夹）
+  /// 当员工 skill 的 name 与源 skill 的文件夹名不一致时，通过此字段定位正确的文件夹
+  String? originName;
+
   /// 是否启用
   int enabled;
 
@@ -48,6 +55,8 @@ class AiEmployeeSkillEntity {
     this.description,
     this.skillType = 'mcp',
     this.config,
+    this.globalSkillId,
+    this.originName,
     this.enabled = 1,
     this.sortOrder = 0,
     this.deleted = 0,
@@ -66,6 +75,8 @@ class AiEmployeeSkillEntity {
       description: map['description'] as String?,
       skillType: map['skillType'] as String? ?? 'mcp',
       config: map['config'] as String?,
+      globalSkillId: map['globalSkillId'] as String?,
+      originName: map['originName'] as String?,
       enabled: map['enabled'] as int? ?? 1,
       sortOrder: map['sortOrder'] as int? ?? 0,
       deleted: map['deleted'] as int? ?? 0,
@@ -93,6 +104,8 @@ class AiEmployeeSkillEntity {
       'description': description,
       'skillType': skillType,
       'config': config,
+      'globalSkillId': globalSkillId,
+      'originName': originName,
       'enabled': enabled,
       'sortOrder': sortOrder,
       'deleted': deleted,
@@ -114,6 +127,8 @@ class AiEmployeeSkillEntity {
     String? description,
     String? skillType,
     String? config,
+    String? globalSkillId,
+    String? originName,
     int? enabled,
     int? sortOrder,
     int? deleted,
@@ -129,6 +144,8 @@ class AiEmployeeSkillEntity {
       description: description ?? this.description,
       skillType: skillType ?? this.skillType,
       config: config ?? this.config,
+      globalSkillId: globalSkillId ?? this.globalSkillId,
+      originName: originName ?? this.originName,
       enabled: enabled ?? this.enabled,
       sortOrder: sortOrder ?? this.sortOrder,
       deleted: deleted ?? this.deleted,

@@ -1,6 +1,7 @@
 import '../persistence/persistence.dart';
 import '../rpc/remote_call_server.dart';
 import '../service/service.dart';
+import '../utils/logger.dart';
 import 'client_session_manager.dart';
 
 /// Host端RPC方法名常量
@@ -84,6 +85,8 @@ void registerHostRpcMethods({
   required String deviceId,
   ScheduledTaskManager? scheduledTaskManager,
 }) {
+  final log = Logger('HostRpcMethods');
+
   // ===== 员工管理方法 =====
 
   // 获取员工列表
@@ -208,8 +211,15 @@ void registerHostRpcMethods({
   // 删除技能
   rpcServer.register(HostRpcConfig.methodDeleteSkill, (params) async {
     final uuid = params['uuid'] as String;
-    await skillManager.deleteSkill(uuid);
-    return {'success': true};
+    log.info('methodDeleteSkill: uuid=$uuid');
+    try {
+      await skillManager.deleteSkill(uuid);
+      log.info('methodDeleteSkill: 删除成功, uuid=$uuid');
+      return {'success': true};
+    } catch (e, st) {
+      log.error('methodDeleteSkill: 删除失败, uuid=$uuid', e, st);
+      rethrow;
+    }
   });
 
   // ===== 数据同步方法 =====

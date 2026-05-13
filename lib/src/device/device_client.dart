@@ -245,9 +245,9 @@ class DeviceClient {
       // 1. 基于 storagePath 推导默认路径
       final storagePath = config.storagePath;
       final effectiveDbPath = config.dbPath ??
-          '$storagePath${Platform.pathSeparator}db';
+          p.join(storagePath, 'db');
       final effectiveSkillsDir = config.skillsDir ??
-          '$storagePath${Platform.pathSeparator}skills${Platform.pathSeparator}folder';
+          p.join(storagePath, 'skills', 'folder');
 
       // 2. 确保目录存在
       await _ensureDirExists(effectiveDbPath, 'dbPath');
@@ -1039,6 +1039,7 @@ class DeviceClient {
     required String folderPath,
     required String skillId,
     String? localSkillsDir,
+    String? targetFolderName,
     void Function(double progress)? onProgress,
   }) async {
     if (!_connectionManager.isConnected) {
@@ -1090,10 +1091,10 @@ class DeviceClient {
 
       _log.info('syncFolderSkillFiles: ZIP 下载完成, downloadedPath=$downloadedPath');
 
-      // 4. 解压到 skillsDir/{folderName}/
+      // 4. 解压到 skillsDir/{targetFolderName}/
       final skillsDir = localSkillsDir ?? _skillsDir;
-      final targetDir =
-          '$skillsDir${Platform.pathSeparator}$folderName';
+      final effectiveFolderName = targetFolderName ?? folderName;
+      final targetDir = p.join(skillsDir, effectiveFolderName);
       await _unpackZip(downloadedPath, targetDir);
 
       _log.info('syncFolderSkillFiles: 解压完成, targetDir=$targetDir');
@@ -1119,7 +1120,7 @@ class DeviceClient {
 
     for (final file in archive) {
       final filePath =
-          '$targetDir${Platform.pathSeparator}${file.name.replaceAll('/', Platform.pathSeparator)}';
+          p.join(targetDir, file.name.replaceAll('/', Platform.pathSeparator));
       if (file.isFile) {
         final outFile = File(filePath);
         await outFile.parent.create(recursive: true);

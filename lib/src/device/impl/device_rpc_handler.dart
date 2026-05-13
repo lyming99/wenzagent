@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:path/path.dart' as p;
 
 import '../../agent/agent_state.dart';
 import '../../agent/entity/entity.dart';
@@ -21,6 +22,7 @@ import 'device_config_manager.dart';
 import 'file_transfer_token_manager.dart';
 import '../../lan/impl/lan_host_service_impl.dart';
 import '../../rpc/rpc_protocol.dart';
+import '../device_client.dart';
 import 'device_connection_manager.dart';
 
 /// RPC 方法注册器
@@ -423,10 +425,18 @@ class DeviceRpcHandler {
 
     // 技能管理
     rpcServer.register(AgentRpcConfig.methodSetSkills, (params) async {
-      final request = SetSkillsRequest.fromMap(params);
-      final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
-      await agent.setSkills(request.skills);
-      return {};
+      _log.info('methodSetSkills RPC: 收到请求');
+      try {
+        final request = SetSkillsRequest.fromMap(params);
+        _log.info('methodSetSkills RPC: employeeId=${request.employeeId}, skillsCount=${request.skills.length}');
+        final agent = await _agentManager.ensureLocalAgentForRpc(request.employeeId);
+        await agent.setSkills(request.skills);
+        _log.info('methodSetSkills RPC: 完成');
+        return {};
+      } catch (e, st) {
+        _log.error('methodSetSkills RPC: 失败', e, st);
+        rethrow;
+      }
     });
 
     rpcServer.register(AgentRpcConfig.methodGetSkills, (params) async {
@@ -980,21 +990,92 @@ class DeviceRpcHandler {
     rpcServer.register(AgentRpcConfig.methodPackSkillFolder, (params) async {
       final folderPath = params['folderPath'] as String;
       final skillId = params['skillId'] as String? ?? '';
+      final deviceClient = DeviceClient.getInstance(_deviceId);
 
-      final dir = Directory(folderPath);
+      // 按优先级解析文件夹路径:
+      // 1. folderPath 作为绝对路径
+      // 2. skillsDir + folderPath (folderPath 视为 skill 名称)
+      // 3. 通过 skillId 查询数据库获取 skill name → skillsDir + name
+      // 4. 通过 skillId 查询数据库获取 config → 解析 folder_path 字段
+      Directory dir = Directory(folderPath);
       if (!await dir.exists()) {
+        final localPath = p.join(deviceClient.skillsDir, folderPath);
+        dir = Directory(localPath);
+        _log.info('Skill 文件夹绝对路径不存在, 尝试拼接 skillsDir: $localPath');
+      }
+
+      if (!await dir.exists() && skillId.isNotEmpty) {
+        // 通过 skillId 查询数据库获取 skill 名称
+        String? skillName;
+        // 优先查 GlobalSkill
+        final globalSkill = await _globalSkillManager.getSkill(skillId);
+        if (globalSkill != null && globalSkill.deleted == 0) {
+          skillName = globalSkill.name;
+          _log.info('通过 skillId 从 GlobalSkill 找到: name=$skillName');
+        } else {
+          // 再查员工 Skill
+          final store = SkillStore(deviceId: _deviceId);
+          final skill = await store.find(skillId);
+          if (skill != null && skill.deleted == 0) {
+            skillName = skill.name;
+            _log.info('通过 skillId 从员工 Skill 找到: name=$skillName');
+          }
+        }
+        if (skillName != null) {
+          final localPath = p.join(deviceClient.skillsDir, skillName);
+          dir = Directory(localPath);
+          _log.info('通过 skillId 解析路径: skillsDir/$skillName → $localPath');
+        }
+      }
+
+      // 4. 通过 config 字段解析源路径
+      if (!await dir.exists() && skillId.isNotEmpty) {
+        String? configStr;
+        // 优先查 GlobalSkill
+        final globalSkill = await _globalSkillManager.getSkill(skillId);
+        if (globalSkill != null && globalSkill.deleted == 0) {
+          configStr = globalSkill.config;
+        } else {
+          // 再查员工 Skill
+          final store = SkillStore(deviceId: _deviceId);
+          final skill = await store.find(skillId);
+          if (skill != null && skill.deleted == 0) {
+            configStr = skill.config;
+          }
+        }
+        if (configStr != null && configStr.isNotEmpty) {
+          try {
+            final configMap = jsonDecode(configStr) as Map<String, dynamic>;
+            final sourcePath = configMap['folder_path'] as String?;
+            if (sourcePath != null && sourcePath.isNotEmpty) {
+              final configDir = Directory(sourcePath);
+              if (await configDir.exists()) {
+                dir = configDir;
+                _log.info('通过 config.folder_path 找到源路径: $sourcePath');
+              } else {
+                _log.info('config.folder_path 路径不存在: $sourcePath');
+              }
+            }
+          } catch (e) {
+            _log.warn('解析 skill config 失败: $e');
+          }
+        }
+      }
+
+      if (!await dir.exists()) {
+        _log.warn('Skill 文件夹不存在: folderPath=$folderPath, skillId=$skillId');
         return {'success': false, 'error': '文件夹不存在: $folderPath'};
       }
 
       try {
         // 1. 在系统临时目录创建 ZIP
         final tempDir = await Directory.systemTemp.createTemp('skill_pack_');
-        final folderName = dir.path.split(Platform.pathSeparator).last;
+        final folderName = p.basename(dir.path);
         final zipFileName = '${skillId.isNotEmpty ? skillId : folderName}.zip';
-        final zipPath = '${tempDir.path}${Platform.pathSeparator}$zipFileName';
+        final zipPath = p.join(tempDir.path, zipFileName);
 
         // 2. 打包文件夹为 ZIP
-        await _packDirectoryToZip(folderPath, zipPath);
+        await _packDirectoryToZip(dir.path, zipPath);
 
         // 3. 计算元信息
         final zipFile = File(zipPath);
@@ -1492,7 +1573,6 @@ class DeviceRpcHandler {
   ) async {
     final archive = Archive();
     final dir = Directory(dirPath);
-    final dirName = dir.path.split(Platform.pathSeparator).last;
 
     await for (final entity in dir.list(recursive: true)) {
       if (entity is File) {
@@ -1500,7 +1580,7 @@ class DeviceRpcHandler {
             .substring(dir.path.length + 1)
             .replaceAll('\\', '/');
         final bytes = await entity.readAsBytes();
-        final file = ArchiveFile('$dirName/$relative', bytes.length, bytes);
+        final file = ArchiveFile(relative, bytes.length, bytes);
         archive.addFile(file);
       }
     }

@@ -24,6 +24,8 @@ import 'migrations/v16_migration.dart';
 import 'migrations/v17_migration.dart';
 import 'migrations/v18_migration.dart';
 import 'migrations/v19_migration.dart';
+import 'migrations/v20_migration.dart';
+import 'migrations/v21_migration.dart';
 
 /// 数据库管理器
 ///
@@ -79,7 +81,7 @@ class DatabaseManager {
   String? _dbPath;
 
   /// 当前 schema 版本号
-  static const int currentVersion = 19;
+  static const int currentVersion = 21;
 
   /// 版本迁移注册表
   ///
@@ -104,6 +106,8 @@ class DatabaseManager {
     V17Migration(),
     V18Migration(),
     V19Migration(),
+    V20Migration(),
+    V21Migration(),
   ];
 
   /// 获取数据库连接
@@ -154,6 +158,7 @@ class DatabaseManager {
   /// 每个迁移版本在独立事务中执行，确保原子性。
   void _runMigrations() {
     final oldVersion = databaseVersion;
+    _log.info('当前数据库版本: $oldVersion, 目标版本: $currentVersion');
 
     if (oldVersion >= currentVersion) return;
 

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:uuid/uuid.dart';
 
 import '../persistence/persistence.dart';
+import '../utils/logger.dart';
 
 /// 技能变更类型
 enum SkillChangeType {
@@ -78,6 +79,7 @@ class SkillManagerImpl implements SkillManager {
   final SkillStore _store;
   final String? _deviceId;
   final _changeController = StreamController<SkillChangeEvent>.broadcast();
+  final _log = Logger('SkillManager');
 
   SkillManagerImpl({
     SkillStore? store,
@@ -118,14 +120,25 @@ class SkillManagerImpl implements SkillManager {
 
   @override
   Future<void> deleteSkill(String uuid) async {
+    _log.debug('deleteSkill: uuid=$uuid');
     final skill = await getSkillIncludingDeleted(uuid);
-    if (skill == null) return;
+    if (skill == null) {
+      _log.warn('deleteSkill: 技能不存在, uuid=$uuid');
+      return;
+    }
+    _log.debug('deleteSkill: 找到技能, name=${skill.name}, skillType=${skill.skillType}, employeeId=${skill.employeeId}');
     final updated = skill.copyWith(
       deleted: 1,
       deleteTime: DateTime.now(),
       updateTime: DateTime.now(),
     );
-    await _store.save(updated);
+    try {
+      await _store.save(updated);
+      _log.info('deleteSkill: 删除成功, uuid=$uuid, name=${skill.name}');
+    } catch (e, st) {
+      _log.error('deleteSkill: 保存失败, uuid=$uuid, name=${skill.name}', e, st);
+      rethrow;
+    }
     _notifyChange(SkillChangeType.deleted, updated);
   }
 

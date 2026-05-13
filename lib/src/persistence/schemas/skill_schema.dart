@@ -15,6 +15,8 @@ class SkillSchema {
         description  TEXT,
         skill_type   TEXT DEFAULT 'mcp',
         config       TEXT,
+        global_skill_id TEXT,
+        origin_name   TEXT,
         enabled      INTEGER DEFAULT 1,
         sort_order   INTEGER DEFAULT 0,
         deleted      INTEGER DEFAULT 0,
