@@ -104,7 +104,12 @@ class DataSyncManager {
 
   /// 从其他设备同步项目数据
   Future<void> syncProjectsFromDevices() async {
-    await _doSyncProjectsFromDevices();
+    final changedIds = await _doSyncProjectsFromDevices();
+    if (changedIds.isNotEmpty) {
+      _stateHolder.notifyDataSynced(DataSyncEvent(
+        changedProjectIds: changedIds,
+      ));
+    }
   }
 
   /// 同步全部数据（员工+会话+会话摘要+spec+技能，并行执行）
@@ -122,7 +127,13 @@ class DataSyncManager {
     _doSyncSkillsFromDevices();
     _doSyncGlobalSkillsFromDevices();
     // 项目同步不需要等待其他同步完成
-    _doSyncProjectsFromDevices();
+    _doSyncProjectsFromDevices().then((changedProjectIds) {
+      if (changedProjectIds.isNotEmpty) {
+        _stateHolder.notifyDataSynced(DataSyncEvent(
+          changedProjectIds: changedProjectIds,
+        ));
+      }
+    });
     // Folder Skill 文件同步（元数据同步后）
     syncFolderSkillFiles();
     if (changedEmployeeIds.isNotEmpty || changedSessionIds.isNotEmpty) {
@@ -879,10 +890,11 @@ class DataSyncManager {
 
   // ===== 项目同步内部实现 =====
 
-  Future<void> _doSyncProjectsFromDevices() async {
-    if (!_connectionManager.isConnected) return;
+  Future<Set<String>> _doSyncProjectsFromDevices() async {
+    if (!_connectionManager.isConnected) return {};
     final devices = await _deviceRegistry.getOnlineDevices();
     final projectStore = ProjectStore(deviceId: _deviceId);
+    final changedIds = <String>{};
     for (final device in devices) {
       if (device.id == _deviceId) continue;
       try {
@@ -899,7 +911,10 @@ class DataSyncManager {
             final remote = ProjectEntity.fromMap(
               itemMap['project'] as Map<String, dynamic>,
             );
-            projectStore.upsertFromRemote(remote);
+            final changed = projectStore.upsertFromRemote(remote);
+            if (changed) {
+              changedIds.add(remote.uuid);
+            }
           }
 
           // 合并模块
@@ -925,6 +940,7 @@ class DataSyncManager {
         _log.debug('syncProjects from device ${device.id} failed: $e');
       }
     }
+    return changedIds;
   }
 
   // ===== 合并逻辑 =====

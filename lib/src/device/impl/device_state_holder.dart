@@ -21,18 +21,23 @@ class DataSyncEvent {
   /// 变更的全局技能ID集合
   final Set<String> changedGlobalSkillIds;
 
+  /// 变更的项目ID集合
+  final Set<String> changedProjectIds;
+
   DataSyncEvent({
     this.changedEmployeeIds = const {},
     this.changedSessionIds = const {},
     this.changedSkillIds = const {},
     this.changedGlobalSkillIds = const {},
+    this.changedProjectIds = const {},
   });
 
   bool get hasChanges =>
       changedEmployeeIds.isNotEmpty ||
       changedSessionIds.isNotEmpty ||
       changedSkillIds.isNotEmpty ||
-      changedGlobalSkillIds.isNotEmpty;
+      changedGlobalSkillIds.isNotEmpty ||
+      changedProjectIds.isNotEmpty;
 }
 
 /// 设备共享状态持有者
@@ -58,6 +63,8 @@ class DeviceStateHolder {
       StreamController<SkillChangeEvent>.broadcast();
   final _globalSkillChangeController =
       StreamController<GlobalSkillChangeEvent>.broadcast();
+  final _projectChangeController =
+      StreamController<ProjectChangeEvent>.broadcast();
 
   final AgentNotificationHub notificationHub = AgentNotificationHub();
 
@@ -68,6 +75,7 @@ class DeviceStateHolder {
   StreamSubscription? _sessionChangeSub;
   StreamSubscription? _skillChangeSub;
   StreamSubscription? _globalSkillChangeSub;
+  StreamSubscription? _projectChangeSub;
 
   DeviceStateHolder._({required this.deviceId}) {
     _initSubscriptions();
@@ -94,6 +102,11 @@ class DeviceStateHolder {
     _globalSkillChangeSub = globalSkillManager.onSkillChanged.listen((event) {
       _globalSkillChangeController.add(event);
     });
+
+    final projectManager = ProjectManager.getInstance(deviceId);
+    _projectChangeSub = projectManager.onProjectChanged.listen((event) {
+      _projectChangeController.add(event);
+    });
   }
 
   // ===== 流访问 =====
@@ -111,6 +124,7 @@ class DeviceStateHolder {
   Stream<DataSyncEvent> get onSyncEvent => _syncEventController.stream;
   Stream<SkillChangeEvent> get onSkillEvent => _skillChangeController.stream;
   Stream<GlobalSkillChangeEvent> get onGlobalSkillEvent => _globalSkillChangeController.stream;
+  Stream<ProjectChangeEvent> get onProjectEvent => _projectChangeController.stream;
 
   // ===== 流控制 =====
 
@@ -154,6 +168,7 @@ class DeviceStateHolder {
     await _sessionChangeSub?.cancel();
     await _skillChangeSub?.cancel();
     await _globalSkillChangeSub?.cancel();
+    await _projectChangeSub?.cancel();
     await _stateController.close();
     await _eventController.close();
     await _lanMessageController.close();
@@ -164,5 +179,6 @@ class DeviceStateHolder {
     await _syncEventController.close();
     await _skillChangeController.close();
     await _globalSkillChangeController.close();
+    await _projectChangeController.close();
   }
 }

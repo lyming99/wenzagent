@@ -446,6 +446,10 @@ class DeviceClient {
   Stream<GlobalSkillChangeEvent> get onGlobalSkillEvent =>
       _stateHolder.onGlobalSkillEvent;
 
+  /// 项目变更通知（新增/更新/删除），由底层 ProjectManager 触发
+  Stream<ProjectChangeEvent> get onProjectEvent =>
+      _stateHolder.onProjectEvent;
+
   List<LanDeviceInfo> get cachedDevices => _deviceRegistry.cachedDevices;
 
   Stream<LanMessage> get onLanMessage => _stateHolder.onLanMessage;
