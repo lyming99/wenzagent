@@ -28,7 +28,9 @@ dependencies:
   sqlite3: ^2.4.6
   # LLM unified interface
   llm_dart:
-    path: D:/project/GitHub/llm_dart
+#    path: D:/project/GitHub/llm_dart
+    git:
+      url: https://github.com/Latias94/llm_dart.git
   dio: ^5.9.0
   # MCP SDK
   mcp_dart: ^2.1.0
