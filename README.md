@@ -12,16 +12,6 @@
   <img src="https://img.shields.io/badge/Dart-%5E3.11.0-0175C2.svg" alt="Dart SDK">
   <img src="https://img.shields.io/badge/Platform-All%20Platforms-green.svg" alt="Platform">
 </p>
-<p align="center">
-  <strong>纯 Dart 实现的 AI Agent 管理框架 — 局域网通信 · RPC · 技能系统</strong>
-</p>
-<p align="center">
-  <a href="https://github.com/lyming99/wenzagent/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache-2.0">
-  </a>
-  <img src="https://img.shields.io/badge/Dart-%5E3.11.0-0175C2.svg" alt="Dart SDK">
-  <img src="https://img.shields.io/badge/Platform-All%20Platforms-green.svg" alt="Platform">
-</p>
 
 ---
 
