@@ -71,25 +71,11 @@ jobs:
           retention-days: 1
 
   # ──────────────────────────────────────────────────────────────────────
-  # ARM64 架构：使用 Dart 交叉编译（--target-os + --target-arch）
+  # Linux ARM64：使用 Dart 交叉编译（仅支持 Linux 目标平台）
   # ──────────────────────────────────────────────────────────────────────
-  build-arm64:
-    name: Build ${{ matrix.platform }}
+  build-linux-arm64:
+    name: Build linux-arm64
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # ── Linux ARM64 ──
-          - platform: linux-arm64
-            target-os: linux
-            target-arch: arm64
-            exe-suffix: ""
-          # ── Windows ARM64 ──
-          - platform: windows-arm64
-            target-os: windows
-            target-arch: arm64
-            exe-suffix: .exe
 
     steps:
       - name: Checkout
@@ -104,38 +90,27 @@ jobs:
         run: dart pub get
 
       - name: Compile server
-        shell: bash
-        run: |
-          dart compile exe bin/wenzagent_server.dart \
-            --target-os=${{ matrix.target-os }} \
-            --target-arch=${{ matrix.target-arch }} \
-            -o build/wenzagent_server${{ matrix.exe-suffix }}
+        run: dart compile exe bin/wenzagent_server.dart --target-os=linux --target-arch=arm64 -o build/wenzagent_server
 
       - name: Compile client
-        shell: bash
-        run: |
-          dart compile exe bin/wenzagent_client.dart \
-            --target-os=${{ matrix.target-os }} \
-            --target-arch=${{ matrix.target-arch }} \
-            -o build/wenzagent_client${{ matrix.exe-suffix }}
+        run: dart compile exe bin/wenzagent_client.dart --target-os=linux --target-arch=arm64 -o build/wenzagent_client
 
       - name: Package artifacts
-        shell: bash
         run: |
           mkdir -p dist
-          tar czf dist/wenzagent_server-${{ matrix.platform }}.tar.gz -C build wenzagent_server${{ matrix.exe-suffix }}
-          tar czf dist/wenzagent_client-${{ matrix.platform }}.tar.gz -C build wenzagent_client${{ matrix.exe-suffix }}
+          tar czf dist/wenzagent_server-linux-arm64.tar.gz -C build wenzagent_server
+          tar czf dist/wenzagent_client-linux-arm64.tar.gz -C build wenzagent_client
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: wenzagent-${{ matrix.platform }}
+          name: wenzagent-linux-arm64
           path: dist/*
           retention-days: 1
 
   release:
     name: Create GitHub Release
-    needs: [build, build-arm64]
+    needs: [build, build-linux-arm64]
     runs-on: ubuntu-latest
 
     steps:
