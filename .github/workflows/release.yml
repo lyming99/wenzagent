@@ -1,0 +1,121 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── Windows x64 ──
+          - platform: windows-x64
+            os: ubuntu-latest
+            target-os: windows
+            target-arch: x64
+            exe-suffix: .exe
+          # ── Windows ARM64 ──
+          - platform: windows-arm64
+            os: ubuntu-latest
+            target-os: windows
+            target-arch: arm64
+            exe-suffix: .exe
+          # ── Linux x64 ──
+          - platform: linux-x64
+            os: ubuntu-latest
+            target-os: linux
+            target-arch: x64
+            exe-suffix: ""
+          # ── Linux ARM64 ──
+          - platform: linux-arm64
+            os: ubuntu-latest
+            target-os: linux
+            target-arch: arm64
+            exe-suffix: ""
+          # ── macOS x64 ──
+          - platform: macos-x64
+            os: macos-latest
+            target-os: macos
+            target-arch: x64
+            exe-suffix: ""
+          # ── macOS ARM64 (Apple Silicon) ──
+          - platform: macos-arm64
+            os: macos-latest
+            target-os: macos
+            target-arch: arm64
+            exe-suffix: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Dart SDK
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install dependencies
+        run: dart pub get
+
+      - name: Compile server
+        run: |
+          dart compile exe bin/wenzagent_server.dart \
+            --target-os=${{ matrix.target-os }} \
+            --target-arch=${{ matrix.target-arch }} \
+            -o build/wenzagent_server${{ matrix.exe-suffix }}
+
+      - name: Compile client
+        run: |
+          dart compile exe bin/wenzagent_client.dart \
+            --target-os=${{ matrix.target-os }} \
+            --target-arch=${{ matrix.target-arch }} \
+            -o build/wenzagent_client${{ matrix.exe-suffix }}
+
+      - name: Package artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          cd build
+          tar czf ../dist/wenzagent_server-${{ matrix.platform }}.tar.gz \
+            wenzagent_server${{ matrix.exe-suffix }}
+          tar czf ../dist/wenzagent_client-${{ matrix.platform }}.tar.gz \
+            wenzagent_client${{ matrix.exe-suffix }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wenzagent-${{ matrix.platform }}
+          path: dist/*.tar.gz
+          retention-days: 1
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lh dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*.tar.gz
