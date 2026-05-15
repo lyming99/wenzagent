@@ -47,21 +47,30 @@ jobs:
       - name: Compile client
         run: dart compile exe bin/wenzagent_client.dart -o build/wenzagent_client${{ matrix.exe-suffix }}
 
+      - name: Prepare package files
+        shell: bash
+        run: |
+          cp README.md build/
+          mkdir -p build/config
+          cp config/wenzagent_server.yaml.example build/config/
+          cp config/wenzagent_client.yaml.example build/config/
+
       - name: Package artifacts (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          Compress-Archive -Path build/wenzagent_server.exe -DestinationPath dist/wenzagent_server-${{ matrix.platform }}.zip
-          Compress-Archive -Path build/wenzagent_client.exe -DestinationPath dist/wenzagent_client-${{ matrix.platform }}.zip
+          Compress-Archive -Path build/* -DestinationPath dist/wenzagent_server-${{ matrix.platform }}.zip
+          # client 单独打包（共享 README + config）
+          Compress-Archive -Path build/wenzagent_client.exe, build/README.md, build/config -DestinationPath dist/wenzagent_client-${{ matrix.platform }}.zip
 
       - name: Package artifacts (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
         run: |
           mkdir -p dist
-          tar czf dist/wenzagent_server-${{ matrix.platform }}.tar.gz -C build wenzagent_server
-          tar czf dist/wenzagent_client-${{ matrix.platform }}.tar.gz -C build wenzagent_client
+          tar czf dist/wenzagent_server-${{ matrix.platform }}.tar.gz -C build wenzagent_server README.md config
+          tar czf dist/wenzagent_client-${{ matrix.platform }}.tar.gz -C build wenzagent_client README.md config
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -71,7 +80,7 @@ jobs:
           retention-days: 1
 
   # ──────────────────────────────────────────────────────────────────────
-  # Linux ARM64：使用 Dart 交叉编译（仅支持 Linux 目标平台）
+  # Linux ARM64：使用 Dart 交叉编译
   # ──────────────────────────────────────────────────────────────────────
   build-linux-arm64:
     name: Build linux-arm64
@@ -95,11 +104,18 @@ jobs:
       - name: Compile client
         run: dart compile exe bin/wenzagent_client.dart --target-os=linux --target-arch=arm64 -o build/wenzagent_client
 
+      - name: Prepare package files
+        run: |
+          cp README.md build/
+          mkdir -p build/config
+          cp config/wenzagent_server.yaml.example build/config/
+          cp config/wenzagent_client.yaml.example build/config/
+
       - name: Package artifacts
         run: |
           mkdir -p dist
-          tar czf dist/wenzagent_server-linux-arm64.tar.gz -C build wenzagent_server
-          tar czf dist/wenzagent_client-linux-arm64.tar.gz -C build wenzagent_client
+          tar czf dist/wenzagent_server-linux-arm64.tar.gz -C build wenzagent_server README.md config
+          tar czf dist/wenzagent_client-linux-arm64.tar.gz -C build wenzagent_client README.md config
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
