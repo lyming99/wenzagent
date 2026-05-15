@@ -21,9 +21,7 @@
 
 ### 🎬 演示视频
 
-<iframe src="//player.bilibili.com/player.html?isOutside=true&aid=116577391411605&bvid=BV1PN5i62Ebm&cid=38349049119&p=1" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true" width="100%" height="500" style="max-width:800px;"></iframe>
-
-> 📺 Bilibili: [BV1PN5i62Ebm](https://www.bilibili.com/video/BV1PN5i62Ebm)
+[![Bilibili](https://img.shields.io/badge/📺_观看演示视频-Bilibili-FB7299?style=for-the-badge&logo=bilibili&logoColor=white)](https://www.bilibili.com/video/BV1PN5i62Ebm)
 
 ### 核心特性
 
