@@ -77,7 +77,7 @@ wenzagent/
 
 Agent 是框架的核心抽象，每个 Agent（员工）绑定一个 LLM 后端，拥有独立的系统提示词、工具集和状态管理。支持：
 
-- **多 ****LLM 后端****：OpenAI、Anthropic、Google、Ollama
+- **多 LLM 后端**：OpenAI、Anthropic、Google、Ollama
 
 - **工具调用**：内置文件操作、命令执行、Git 操作等工具，支持自定义扩展
 
