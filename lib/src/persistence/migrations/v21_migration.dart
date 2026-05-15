@@ -12,6 +12,13 @@ class V21Migration implements Migration {
 
   @override
   void onUpgrade(Database db) {
-    db.execute('ALTER TABLE skills ADD COLUMN origin_name TEXT');
+    // 先检查列是否已存在，防止因历史部分迁移导致 duplicate column 错误
+    final result = db.select(
+      "SELECT count(*) AS cnt FROM pragma_table_info('skills') WHERE name = 'origin_name'",
+    );
+    final exists = (result.first['cnt'] as int) > 0;
+    if (!exists) {
+      db.execute('ALTER TABLE skills ADD COLUMN origin_name TEXT');
+    }
   }
 }
