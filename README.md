@@ -217,10 +217,6 @@ dart run bin/wenzagent_client.dart --host <服务端IP>
 
 - wenzflow: 一款集成笔记、文档、AI的智能效率工工具， [https://wenzflow.com](https://wenzflow.com)
 
-## 📄 文档
-
-编写中...
-
 ## 📬 联系方式
 
 - **交流群**：1102616387
