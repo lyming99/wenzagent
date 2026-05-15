@@ -12,6 +12,7 @@ pubspec.lock
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # Build output
 dist/
