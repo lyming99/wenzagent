@@ -60,17 +60,14 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          Compress-Archive -Path build/* -DestinationPath dist/wenzagent_server-${{ matrix.platform }}.zip
-          Remove-Item build/wenzagent_server.exe
-          Compress-Archive -Path build/* -DestinationPath dist/wenzagent_client-${{ matrix.platform }}.zip
+          Compress-Archive -Path build/* -DestinationPath dist/wenzagent-${{ matrix.platform }}.zip
 
       - name: Package artifacts (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
         run: |
           mkdir -p dist
-          tar czf dist/wenzagent_server-${{ matrix.platform }}.tar.gz -C build wenzagent_server README.md config
-          tar czf dist/wenzagent_client-${{ matrix.platform }}.tar.gz -C build wenzagent_client README.md config
+          tar czf dist/wenzagent-${{ matrix.platform }}.tar.gz -C build .
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -114,8 +111,7 @@ jobs:
       - name: Package artifacts
         run: |
           mkdir -p dist
-          tar czf dist/wenzagent_server-linux-arm64.tar.gz -C build wenzagent_server README.md config
-          tar czf dist/wenzagent_client-linux-arm64.tar.gz -C build wenzagent_client README.md config
+          tar czf dist/wenzagent-linux-arm64.tar.gz -C build .
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
