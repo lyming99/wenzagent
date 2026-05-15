@@ -18,39 +18,19 @@ jobs:
         include:
           # ── Windows x64 ──
           - platform: windows-x64
-            os: ubuntu-latest
-            target-os: windows
-            target-arch: x64
-            exe-suffix: .exe
-          # ── Windows ARM64 ──
-          - platform: windows-arm64
-            os: ubuntu-latest
-            target-os: windows
-            target-arch: arm64
+            os: windows-latest
             exe-suffix: .exe
           # ── Linux x64 ──
           - platform: linux-x64
             os: ubuntu-latest
-            target-os: linux
-            target-arch: x64
-            exe-suffix: ""
-          # ── Linux ARM64 ──
-          - platform: linux-arm64
-            os: ubuntu-latest
-            target-os: linux
-            target-arch: arm64
             exe-suffix: ""
           # ── macOS x64 ──
           - platform: macos-x64
-            os: macos-latest
-            target-os: macos
-            target-arch: x64
+            os: macos-13          # macOS 13 提供 Intel (x64) runner
             exe-suffix: ""
           # ── macOS ARM64 (Apple Silicon) ──
           - platform: macos-arm64
-            os: macos-latest
-            target-os: macos
-            target-arch: arm64
+            os: macos-latest      # macOS 14+ runner 原生 ARM64
             exe-suffix: ""
 
     steps:
@@ -66,34 +46,32 @@ jobs:
         run: dart pub get
 
       - name: Compile server
-        run: |
-          dart compile exe bin/wenzagent_server.dart \
-            --target-os=${{ matrix.target-os }} \
-            --target-arch=${{ matrix.target-arch }} \
-            -o build/wenzagent_server${{ matrix.exe-suffix }}
+        run: dart compile exe bin/wenzagent_server.dart -o build/wenzagent_server${{ matrix.exe-suffix }}
 
       - name: Compile client
-        run: |
-          dart compile exe bin/wenzagent_client.dart \
-            --target-os=${{ matrix.target-os }} \
-            --target-arch=${{ matrix.target-arch }} \
-            -o build/wenzagent_client${{ matrix.exe-suffix }}
+        run: dart compile exe bin/wenzagent_client.dart -o build/wenzagent_client${{ matrix.exe-suffix }}
 
-      - name: Package artifacts
+      - name: Package artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          Compress-Archive -Path build/wenzagent_server.exe -DestinationPath dist/wenzagent_server-${{ matrix.platform }}.zip
+          Compress-Archive -Path build/wenzagent_client.exe -DestinationPath dist/wenzagent_client-${{ matrix.platform }}.zip
+
+      - name: Package artifacts (Linux/macOS)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           mkdir -p dist
-          cd build
-          tar czf ../dist/wenzagent_server-${{ matrix.platform }}.tar.gz \
-            wenzagent_server${{ matrix.exe-suffix }}
-          tar czf ../dist/wenzagent_client-${{ matrix.platform }}.tar.gz \
-            wenzagent_client${{ matrix.exe-suffix }}
+          tar czf dist/wenzagent_server-${{ matrix.platform }}.tar.gz -C build wenzagent_server
+          tar czf dist/wenzagent_client-${{ matrix.platform }}.tar.gz -C build wenzagent_client
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: wenzagent-${{ matrix.platform }}
-          path: dist/*.tar.gz
+          path: dist/*
           retention-days: 1
 
   release:
@@ -118,4 +96,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: dist/*.tar.gz
+          files: dist/*
