@@ -37,7 +37,10 @@ class _ClientConfig {
 // ---------------------------------------------------------------------------
 
 _ClientConfig _parseArgs(List<String> args) {
-  String configPath = 'wenzagent_client.yaml';
+  // Default config file: same name as the executable, next to the binary
+  final exePath = Platform.resolvedExecutable;
+  final exeDir = File(exePath).parent.path;
+  String configPath = '$exeDir${Platform.pathSeparator}wenzagent_client.yaml';
   String? cliHost;
   int? cliPort;
   String? cliDeviceId;
@@ -117,7 +120,13 @@ _ClientConfig _parseArgs(List<String> args) {
 // ---------------------------------------------------------------------------
 
 Map<String, dynamic> _loadYamlConfig(String path) {
-  final file = File(path);
+  var file = File(path);
+  // If the explicit path doesn't exist, try looking next to the executable
+  if (!file.existsSync()) {
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    final fallback = '$exeDir${Platform.pathSeparator}${path.split(Platform.pathSeparator).last}';
+    file = File(fallback);
+  }
   if (!file.existsSync()) return {};
   try {
     final content = file.readAsStringSync();
@@ -155,7 +164,7 @@ WenzAgent LAN Client
 Usage: dart run bin/wenzagent_client.dart --host <ip> [options]
 
 Options:
-  --config <path>       YAML config file path (default: wenzagent_client.yaml)
+  --config <path>       YAML config file path (default: <exe_dir>/wenzagent_client.yaml)
   --host <ip>           Server IP address (required, or set in config)
   --port <int>          Server port (default: 9090)
   --device-id <id>      Device ID (default: auto-generated UUID)
@@ -168,7 +177,7 @@ Options:
 
 Priority: CLI args > YAML config > defaults
 
-YAML config example (wenzagent_client.yaml):
+YAML config example (wenzagent_client.yaml, place next to the executable):
   host: "192.168.1.100"
   port: 9090
   deviceId: "my-laptop"
