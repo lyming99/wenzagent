@@ -52,12 +52,12 @@ extension _StreamHandler on LlmChatAdapter {
   }
 
   /// 准备上下文压缩
-  Future<void> prepareCompression(String? systemPrompt) async {
+  void prepareCompression(String? systemPrompt) {
     if (_compressor == null) return;
     final session = memoryManager.getSession(currentEmployeeUuid!);
     if (session == null) return;
     final allMsgs = session.allMessages;
-    await _compressor!.prepareCompression(
+    _compressor!.prepareCompression(
       employeeId: currentEmployeeUuid!,
       allMessages: allMsgs,
       session: session,
@@ -82,6 +82,7 @@ extension _StreamHandler on LlmChatAdapter {
       chatMsgs = _compressor!.buildCompressedMessages(
         employeeId: currentEmployeeUuid!,
         allMessages: allMsgs,
+        session: session!,
         systemPrompt: systemPrompt,
       );
     } else {

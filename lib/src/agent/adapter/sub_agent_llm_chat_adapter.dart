@@ -554,6 +554,13 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
     }
     builder.reasoning(false);
 
+    if (config.options.reasoningEffort != null) {
+      final effort = llm.ReasoningEffort.fromString(config.options.reasoningEffort!);
+      if (effort != null) {
+        builder.reasoningEffort(effort);
+      }
+    }
+
     if (config.options.topP != null) {
       builder.topP(config.options.topP!);
     }

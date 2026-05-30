@@ -15,3 +15,4 @@ export 'project_entity.dart';
 export 'project_module_entity.dart';
 export 'project_skill_entity.dart';
 export 'project_issue_entity.dart';
+export 'compression_meta_entity.dart';

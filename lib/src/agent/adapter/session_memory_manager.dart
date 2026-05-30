@@ -1,5 +1,6 @@
-﻿import 'package:uuid/uuid.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../service/compression_meta_store.dart';
 import '../../service/message_store_service.dart';
 import '../../shared/shared.dart';
 import '../../utils/logger.dart';
@@ -20,18 +21,37 @@ class SessionHistory {
   final Map<String, List<ChatMessage>> messagesMap;
 
   /// 缓存的 LLM 生成的对话摘要
+  @Deprecated('不再使用 LLM 摘要')
   String? conversationSummary;
 
   /// 摘要覆盖的消息范围: messages[0..summarizedUpToIndex-1]
+  @Deprecated('使用 pruneStartId 替代')
   int summarizedUpToIndex;
+
+  // ── 压缩状态字段 ──
+
+  /// 压缩边界消息 ID（UUID）
+  ///
+  /// 从此消息开始保留原文，之前的消息在 LLM 视图中被省略。
+  /// 空字符串表示未压缩。
+  String pruneStartId;
+
+  /// 压缩后新增的消息数（冷却期计数）
+  int messagesSinceCompression;
+
+  /// 上次压缩时间戳（epoch ms）
+  int lastCompressionTime;
 
   SessionHistory({
     required this.employeeId,
     this.title,
     DateTime? createdAt,
     Map<String, List<ChatMessage>>? messagesMap,
-    this.conversationSummary,
-    this.summarizedUpToIndex = 0,
+    @Deprecated('不再使用 LLM 摘要') this.conversationSummary,
+    @Deprecated('使用 pruneStartId 替代') this.summarizedUpToIndex = 0,
+    this.pruneStartId = '',
+    this.messagesSinceCompression = 0,
+    this.lastCompressionTime = 0,
   }) : createdAt = createdAt ?? DateTime.now(),
        messagesMap = messagesMap ?? {};
 
@@ -73,6 +93,9 @@ class SessionHistory {
     messagesMap.clear();
     conversationSummary = null;
     summarizedUpToIndex = 0;
+    pruneStartId = '';
+    messagesSinceCompression = 0;
+    lastCompressionTime = 0;
   }
 
   /// 清空指定设备的消息
@@ -117,6 +140,9 @@ class SessionHistory {
     ),
     if (conversationSummary != null) 'conversationSummary': conversationSummary,
     if (summarizedUpToIndex > 0) 'summarizedUpToIndex': summarizedUpToIndex,
+    if (pruneStartId.isNotEmpty) 'pruneStartId': pruneStartId,
+    if (messagesSinceCompression > 0) 'messagesSinceCompression': messagesSinceCompression,
+    if (lastCompressionTime > 0) 'lastCompressionTime': lastCompressionTime,
   };
 
   /// 从 Map 创建
@@ -141,6 +167,9 @@ class SessionHistory {
       messagesMap: messagesMap,
       conversationSummary: map['conversationSummary'] as String?,
       summarizedUpToIndex: map['summarizedUpToIndex'] as int? ?? 0,
+      pruneStartId: map['pruneStartId'] as String? ?? '',
+      messagesSinceCompression: map['messagesSinceCompression'] as int? ?? 0,
+      lastCompressionTime: map['lastCompressionTime'] as int? ?? 0,
     );
   }
 }
@@ -151,6 +180,7 @@ class SessionMemoryManager {
   final Map<String, SessionHistory> _sessions = {};
 
   MessageStoreService? _messageStore;
+  CompressionMetaStore? _compressionMetaStore;
   String? _deviceId;
 
   /// 判断是否已配置持久化
@@ -160,9 +190,11 @@ class SessionMemoryManager {
   void configurePersistence({
     required MessageStoreService messageStore,
     required String deviceId,
+    CompressionMetaStore? compressionMetaStore,
   }) {
     _messageStore = messageStore;
     _deviceId = deviceId;
+    _compressionMetaStore = compressionMetaStore;
   }
 
   /// 获取或创建会话历史
@@ -221,6 +253,7 @@ class SessionMemoryManager {
     final session = _sessions[employeeId];
     if (session != null) {
       session.addMessage(deviceId, message);
+      session.messagesSinceCompression++;
     }
     // 同步写入 DB（消息始终以未读写入，由打开聊天窗口时 markMessagesAsRead 统一标记已读）
     if (_messageStore != null && _deviceId != null) {
@@ -305,6 +338,16 @@ class SessionMemoryManager {
 
     // 按时间排序，确保消息顺序正确
     session.sortMessages(_deviceId!);
+
+    // 从 DB 恢复压缩状态
+    if (_compressionMetaStore != null) {
+      final meta = _compressionMetaStore!.getMeta(employeeId, _deviceId!);
+      if (meta != null) {
+        session.pruneStartId = meta.pruneStartId;
+        session.messagesSinceCompression = meta.messagesSinceCompression;
+        session.lastCompressionTime = meta.lastCompressionTime;
+      }
+    }
   }
 
   /// 清空会话（内存 + DB）
@@ -313,6 +356,7 @@ class SessionMemoryManager {
     if (_messageStore != null) {
       await _messageStore!.deleteMessages(_deviceId!, employeeId);
     }
+    _compressionMetaStore?.deleteMeta(employeeId, _deviceId!);
   }
 
   /// 获取指定 employee 的最大 seq（含已软删除的消息）

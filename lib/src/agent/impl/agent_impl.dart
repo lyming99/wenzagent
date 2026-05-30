@@ -15,6 +15,7 @@ import '../tool/builtin/command_session_pool.dart';
 import '../tool/builtin/project_list_tool.dart';
 import '../tool/builtin/send_file_message_tool.dart';
 import '../tool/builtin/spec_manage_tool.dart';
+import '../tool/builtin/query_conversation_history_tool.dart';
 import '../tool/builtin_tool_provider.dart';
 
 part 'agent_impl_messaging.dart';
@@ -288,6 +289,9 @@ class AgentImpl extends _AgentImplBase
 
     // 注入 ProjectListTool 回调
     _injectProjectListCallbacks();
+
+    // 注入 QueryConversationHistoryTool 回调
+    _injectQueryConversationHistoryCallbacks();
 
     // 技能系统由 warmup 后台加载，不在 initialize 中阻塞
 
@@ -1350,6 +1354,81 @@ class AgentImpl extends _AgentImplBase
 
     _AgentImplBase._log.info(
       'ProjectListTool injected (ProjectManager callbacks) for $employeeId',
+    );
+  }
+
+  /// 注入 QueryConversationHistoryTool 回调
+  void _injectQueryConversationHistoryCallbacks() {
+    final tool = _toolRegistry.getTool('query_conversation_history');
+    if (tool is! QueryConversationHistoryTool) {
+      _AgentImplBase._log.warn(
+        'QueryConversationHistoryTool not found in registry for injection.',
+      );
+      return;
+    }
+
+    tool.employeeId = employeeId;
+
+    tool.queryMessages = ({
+      required String employeeId,
+      String? keyword,
+      String? role,
+      int limit = 20,
+      int offset = 0,
+      int? beforeSeq,
+      int? afterSeq,
+    }) async {
+      // 从 LlmChatAdapter 的 memoryManager 获取消息
+      if (_chatAdapter is! LlmChatAdapter) {
+        return {'messages': [], 'total': 0, 'hasMore': false};
+      }
+      final adapter = _chatAdapter as LlmChatAdapter;
+      final session = adapter.memoryManager.getSession(employeeId);
+      if (session == null) {
+        return {'messages': [], 'total': 0, 'hasMore': false};
+      }
+
+      var allMsgs = session.allMessages;
+
+      // 过滤
+      if (role != null && role.isNotEmpty) {
+        allMsgs = allMsgs.where((m) => m.role.name == role).toList();
+      }
+      if (beforeSeq != null) {
+        allMsgs = allMsgs.where((m) => m.seq < beforeSeq).toList();
+      }
+      if (afterSeq != null) {
+        allMsgs = allMsgs.where((m) => m.seq > afterSeq).toList();
+      }
+      if (keyword != null && keyword.isNotEmpty) {
+        allMsgs = allMsgs.where((m) {
+          final content = m.content ?? '';
+          return content.contains(keyword);
+        }).toList();
+      }
+
+      final total = allMsgs.length;
+
+      // 分页
+      final paged = allMsgs.skip(offset).take(limit).toList();
+
+      // 转为 Map 列表
+      final messages = paged.map((m) => {
+        'seq': m.seq,
+        'role': m.role.name,
+        'content': m.content,
+        'createdAt': m.createdAt.toIso8601String(),
+      }).toList();
+
+      return {
+        'messages': messages,
+        'total': total,
+        'hasMore': offset + limit < total,
+      };
+    };
+
+    _AgentImplBase._log.info(
+      'QueryConversationHistoryTool injected for $employeeId',
     );
   }
 

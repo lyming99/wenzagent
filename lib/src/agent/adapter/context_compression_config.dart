@@ -39,6 +39,17 @@ class ContextCompressionConfig {
   /// 为 null 时使用默认的 [CharBasedTokenEstimator]。
   final TokenEstimator? tokenEstimator;
 
+  /// 压缩后冷却期消息数
+  ///
+  /// 压缩后至少经过 N 条新消息才允许再次压缩，防止频繁压缩。
+  final int cooldownMessageCount;
+
+  /// 压缩目标比率
+  ///
+  /// 压缩后 token 数约为 maxContextTokens * compressionTargetRatio。
+  /// 默认 0.7（压缩到 70%），可配置为 0.5（严格减半）。
+  final double compressionTargetRatio;
+
   const ContextCompressionConfig({
     required this.maxContextTokens,
     this.reservedOutputTokens = 4096,
@@ -46,6 +57,8 @@ class ContextCompressionConfig {
     this.toolResultMaxChars = 200,
     this.summaryMaxTokens = 500,
     this.tokenEstimator,
+    this.cooldownMessageCount = 10,
+    this.compressionTargetRatio = 0.7,
   });
 
   /// 是否启用压缩
@@ -54,8 +67,13 @@ class ContextCompressionConfig {
   /// 实际可用的 token 预算
   int get effectiveBudget => maxContextTokens - reservedOutputTokens;
 
-  /// 获取 token 估算器（未指定时使用默认）
-  TokenEstimator get estimator => tokenEstimator ?? CharBasedTokenEstimator();
+  /// 压缩目标 token 数
+  ///
+  /// 压缩后 token 数应接近此值：maxContextTokens * compressionTargetRatio
+  int get targetThreshold => (maxContextTokens * compressionTargetRatio).round();
+
+  /// 获取 token 估算器（未指定时使用自适应估算器）
+  TokenEstimator get estimator => tokenEstimator ?? AdaptiveTokenEstimator();
 
   /// 从 Map 创建配置
   factory ContextCompressionConfig.fromMap(Map<String, dynamic> map) {
@@ -65,6 +83,8 @@ class ContextCompressionConfig {
       recentTurnsKeep: map['recentTurnsKeep'] as int? ?? 3,
       toolResultMaxChars: map['toolResultMaxChars'] as int? ?? 200,
       summaryMaxTokens: map['summaryMaxTokens'] as int? ?? 500,
+      cooldownMessageCount: map['cooldownMessageCount'] as int? ?? 10,
+      compressionTargetRatio: (map['compressionTargetRatio'] as num?)?.toDouble() ?? 0.7,
     );
   }
 
@@ -76,6 +96,8 @@ class ContextCompressionConfig {
       'recentTurnsKeep': recentTurnsKeep,
       'toolResultMaxChars': toolResultMaxChars,
       'summaryMaxTokens': summaryMaxTokens,
+      'cooldownMessageCount': cooldownMessageCount,
+      'compressionTargetRatio': compressionTargetRatio,
     };
   }
 

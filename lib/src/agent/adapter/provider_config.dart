@@ -142,6 +142,9 @@ class LLMOptions {
   /// Top-p 采样
   final double? topP;
 
+  /// 推理努力程度 (minimal/low/medium/high/xhigh)
+  final String? reasoningEffort;
+
   /// 停止序列
   final List<String>? stop;
 
@@ -149,6 +152,7 @@ class LLMOptions {
     this.temperature = 0.7,
     this.maxTokens,
     this.topP,
+    this.reasoningEffort,
     this.stop,
   });
 
@@ -158,6 +162,7 @@ class LLMOptions {
       temperature: (map['temperature'] as num?)?.toDouble() ?? 0.7,
       maxTokens: map['maxTokens'] as int?,
       topP: (map['topP'] as num?)?.toDouble(),
+      reasoningEffort: map['reasoningEffort'] as String?,
       stop: (map['stop'] as List?)?.cast<String>(),
     );
   }
@@ -166,6 +171,7 @@ class LLMOptions {
   Map<String, dynamic> toMap() => {
     'temperature': temperature,
     if (maxTokens != null) 'maxTokens': maxTokens,
+    if (reasoningEffort != null) 'reasoningEffort': reasoningEffort,
     if (topP != null) 'topP': topP,
     if (stop != null) 'stop': stop,
   };

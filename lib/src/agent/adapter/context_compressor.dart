@@ -1,13 +1,10 @@
+import '../../persistence/entities/compression_meta_entity.dart';
+import '../../service/compression_meta_store.dart';
 import '../../shared/shared.dart';
 import '../../utils/logger.dart';
 import 'context_compression_config.dart';
 import 'session_memory_manager.dart';
 import 'token_estimator.dart';
-
-/// LLM 摘要回调类型
-///
-/// 由 [LlmChatAdapter] 注入，用于调用 LLM 生成对话摘要。
-typedef SummarizeCallback = Future<String> Function(String prompt);
 
 /// 消息轮次
 ///
@@ -33,149 +30,319 @@ class MessageTurn {
   int get length => messages.length;
 }
 
-/// 压缩缓存
-class _CompressionCache {
-  /// 缓存的摘要文本
-  String? summary;
+/// 非阻塞异步锁，防止并发压缩
+class _AsyncLock {
+  bool _locked = false;
 
-  /// 摘要覆盖到的原始消息索引
-  int summarizedUpToIndex;
+  /// 尝试获取锁，立即返回成功/失败
+  bool tryLock() {
+    if (_locked) return false;
+    _locked = true;
+    return true;
+  }
 
-  /// 生成缓存时的消息总数（用于检测过期）
-  int messagesCountWhenCached;
+  /// 释放锁
+  void unlock() {
+    _locked = false;
+  }
+}
 
-  _CompressionCache({this.summary, this.summarizedUpToIndex = 0})
-    : messagesCountWhenCached = 0;
+/// 简单 LRU 缓存
+class _LruCache<K, V> {
+  final int maxSize;
+  final Map<K, V> _map = {};
+
+  _LruCache({required this.maxSize});
+
+  V? get(K key) => _map[key];
+
+  V putIfAbsent(K key, V Function() ifAbsent) {
+    final existing = _map[key];
+    if (existing != null) return existing;
+    final value = ifAbsent();
+    _map[key] = value;
+    // 超出容量时移除最早的条目
+    while (_map.length > maxSize) {
+      _map.remove(_map.keys.first);
+    }
+    return value;
+  }
+
+  void remove(K key) {
+    _map.remove(key);
+  }
+
+  void clear() {
+    _map.clear();
+  }
 }
 
 /// 上下文压缩器
 ///
-/// 负责将超出 token 预算的对话历史进行智能压缩。
-/// 采用两阶段策略:
-/// 1. Phase 1: 截断旧工具结果内容（便宜、同步）
-/// 2. Phase 2: 用 LLM 对最早的轮次生成摘要（按需、异步、缓存）
+/// 负责将超出 token 预算的对话历史进行本地压缩（裁剪内容）。
+/// 不调用 LLM，纯本地处理：截断旧消息内容、剥离 tool calls。
+/// AI 需要查看完整历史时，可通过 query_conversation_history 工具查询 DB。
 ///
 /// 使用方法:
-/// 1. 每轮用户消息后调用 [prepareCompression]（异步，可能触发 LLM 摘要）
-/// 2. Tool calling loop 中每次迭代调用 [buildCompressedMessages]（同步，使用缓存）
+/// 1. 每轮用户消息后调用 [prepareCompression]（同步，计算压缩边界）
+/// 2. Tool calling loop 中每次迭代调用 [buildCompressedMessages]（同步，应用裁剪）
 class ContextCompressor {
   static final _log = Logger('ContextCompressor');
 
   final ContextCompressionConfig config;
-  final SummarizeCallback onSummarize;
+
+  /// 压缩元数据持久化（可选）
+  final CompressionMetaStore? compressionMetaStore;
+
+  /// 当前设备 ID（用于 CompressionMetaStore 读写）
+  final String? deviceId;
 
   /// token 估算器
   late final TokenEstimator _estimator = config.estimator;
 
-  /// 每个会话的压缩缓存
-  final Map<String, _CompressionCache> _sessionCaches = {};
+  /// 每个会话的压缩锁，防止并发压缩
+  final Map<String, _AsyncLock> _sessionLocks = {};
 
-  ContextCompressor({required this.config, required this.onSummarize});
+  /// Token 估算缓存：消息 ID → token 数
+  final _tokenCache = _LruCache<String, int>(maxSize: 500);
+
+  /// buildCompressedMessages 结果缓存
+  List<ChatMessage>? _cachedCompressed;
+  int _cacheGeneration = -1;
+
+  /// 保留区内超长工具结果的截断阈值（字符数）
+  static const int _maxToolResultCharsInContext = 2000;
+
+  /// 时间冷却阈值：30 分钟（毫秒）
+  static const int _timeCooldownThresholdMs = 30 * 60 * 1000;
+
+  ContextCompressor({
+    required this.config,
+    this.compressionMetaStore,
+    this.deviceId,
+  });
+
+  /// 判断是否需要触发压缩
+  ///
+  /// 同时检查 token 超限、消息数冷却期和时间冷却期。
+  bool shouldCompress({
+    required int totalTokens,
+    required SessionHistory session,
+  }) {
+    if (!config.enabled) return false;
+    if (totalTokens <= config.maxContextTokens) return false;
+
+    // 消息数冷却期
+    if (session.messagesSinceCompression < config.cooldownMessageCount) {
+      // 补充：如果距离上次压缩超过 30 分钟，忽略消息数冷却
+      if (session.lastCompressionTime > 0) {
+        final elapsed = DateTime.now().millisecondsSinceEpoch -
+            session.lastCompressionTime;
+        if (elapsed < _timeCooldownThresholdMs) {
+          return false;
+        }
+      } else {
+        return false;
+      }
+    }
+    return true;
+  }
 
   /// 准备压缩（每轮用户消息调用一次）
   ///
-  /// 分析当前消息历史，决定压缩策略，必要时生成 LLM 摘要。
-  /// 结果缓存供后续 [buildCompressedMessages] 使用。
-  Future<void> prepareCompression({
+  /// 分析当前消息历史，计算压缩边界（pruneStartId）。
+  /// 纯本地操作，不调用 LLM。
+  void prepareCompression({
     required String employeeId,
     required List<ChatMessage> allMessages,
     required SessionHistory session,
     String? systemPrompt,
-  }) async {
+  }) {
     if (!config.enabled || allMessages.isEmpty) return;
 
+    // 估算总 token
+    final totalTokens = _estimateMessagesTotalCached(allMessages);
+
+    // 检查是否需要压缩（token 超限 + 冷却期已过）
+    if (!shouldCompress(totalTokens: totalTokens, session: session)) return;
+
+    // 非阻塞获取锁，失败则跳过（另一个压缩正在进行）
+    final lock = _sessionLocks.putIfAbsent(employeeId, () => _AsyncLock());
+    if (!lock.tryLock()) {
+      _log.debug('prepareCompression: 会话 $employeeId 正在压缩中，跳过');
+      return;
+    }
+
+    try {
+      _doCompression(
+        employeeId: employeeId,
+        allMessages: allMessages,
+        session: session,
+        systemPrompt: systemPrompt,
+      );
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  /// 执行实际压缩逻辑（纯本地，不调用 LLM）
+  void _doCompression({
+    required String employeeId,
+    required List<ChatMessage> allMessages,
+    required SessionHistory session,
+    String? systemPrompt,
+  }) {
     final budget = config.effectiveBudget;
     if (budget <= 0) return;
 
     // 估算系统提示 token
     final systemTokens = systemPrompt != null
-        ? _estimator.estimateTokens(systemPrompt) +
-              4 // message overhead
+        ? _estimator.estimateTokens(systemPrompt) + 4 // message overhead
         : 0;
 
     // 分组为轮次
     final turns = groupIntoTurns(allMessages);
-    if (turns.isEmpty) return;
+    if (turns.length <= 1) return; // 只有 0 或 1 个轮次，无法压缩
 
-    // 确定最近保留窗口
-    final recentCount = config.recentTurnsKeep.clamp(1, turns.length);
-    final recentStart = turns.length - recentCount;
-
-    // 获取或创建缓存
-    final cache = _sessionCaches.putIfAbsent(
-      employeeId,
-      () => _CompressionCache(
-        summary: session.conversationSummary,
-        summarizedUpToIndex: session.summarizedUpToIndex,
-      ),
+    // 最近 N 个轮次始终保留完整（由 recentTurnsKeep 配置）
+    final recentTurnsCount = config.recentTurnsKeep.clamp(1, turns.length);
+    final recentTurns = turns.sublist(turns.length - recentTurnsCount);
+    final recentTokens = _estimateMessagesTotalCached(
+      recentTurns.expand((t) => t.messages).toList(),
     );
 
-    // 估算最近轮次的 token（始终保留完整）
-    final recentMessages = <ChatMessage>[];
-    for (var i = recentStart; i < turns.length; i++) {
-      recentMessages.addAll(turns[i].messages);
-    }
-    final recentTokens = _estimator.estimateMessagesTotal(recentMessages);
-
-    // 剩余预算给旧消息和摘要
+    // 剩余预算给旧消息
     var remainingBudget = budget - systemTokens - recentTokens;
-
     if (remainingBudget <= 0) {
-      // 连最近轮次都超了预算，只能全部保留最近轮次（无法再压缩）
-      return;
-    }
-
-    // 收集旧轮次（最近窗口之前的）
-    if (recentStart <= 0) {
-      // 没有旧轮次需要压缩
-      return;
-    }
-
-    // Phase 1: 对旧轮次的工具结果进行截断，估算 token
-    final oldTurns = turns.sublist(0, recentStart);
-    final truncatedOldMessages = _truncateToolResults(oldTurns);
-    final oldTokens = _estimator.estimateMessagesTotal(truncatedOldMessages);
-
-    if (oldTokens <= remainingBudget) {
-      // Phase 1 截断后就在预算内了，不需要摘要
-      // 清除过期的摘要缓存（如果有的话，旧轮次已经可以全部保留）
-      return;
-    }
-
-    // Phase 2: 需要摘要压缩
-    // 检查已有摘要是否足够新
-    final needsResummarize = _needsResummarize(
-      cache: cache,
-      totalMessages: allMessages.length,
-      oldTurnsEndIndex: oldTurns.last.endIndex,
-    );
-
-    if (needsResummarize) {
-      await _generateSummary(
-        cache: cache,
-        session: session,
-        oldTurns: oldTurns,
-        remainingBudget: remainingBudget,
+      // 连最近轮次都超了预算，无法压缩
+      _log.warn(
+        '最近 $recentTurnsCount 轮 ($recentTokens tokens) + 系统 ($systemTokens tokens) '
+        '已超出预算 ($budget tokens)，无法压缩',
       );
+      return;
     }
+
+    // 旧轮次（可压缩区域）
+    final oldTurns = turns.sublist(0, turns.length - recentTurnsCount);
+    if (oldTurns.isEmpty) return;
+
+    // 计算目标 token：压缩到 targetThreshold 附近
+    final targetTokens = config.targetThreshold - systemTokens - recentTokens;
+    if (targetTokens <= 0) return;
+
+    // 从尾部往前扫描旧轮次，找到压缩边界
+    // 保留策略：保留原文的旧消息 + 最近轮次 必须在 budget 内
+    var cumulativeTokens = 0;
+    var cutIndex = 0; // [0, cutIndex) 的轮次将被丢弃
+
+    for (var i = oldTurns.length - 1; i >= 0; i--) {
+      // 估算该轮次的原始 token（不做裁剪）
+      final turnTokens =
+          _estimateMessagesTotalCached(oldTurns[i].messages);
+
+      if (cumulativeTokens + turnTokens > targetTokens) {
+        // 超出目标，从此轮次开始裁剪
+        cutIndex = i + 1;
+        break;
+      }
+      cumulativeTokens += turnTokens;
+
+      // 如果已经遍历到第一个轮次，说明全部保留截断后就够了
+      if (i == 0) {
+        cutIndex = 0;
+      }
+    }
+
+    // 确定保留区第一条消息的 ID（UUID）
+    String newPruneStartId;
+    if (cutIndex < oldTurns.length) {
+      final cutTurn = oldTurns[cutIndex];
+      newPruneStartId = cutTurn.messages.isNotEmpty
+          ? cutTurn.messages.first.id
+          : '';
+    } else {
+      // 所有旧轮次都在保留区内
+      return;
+    }
+
+    if (newPruneStartId.isEmpty) {
+      _log.warn('压缩计算结果 pruneStartId 为空，跳过');
+      return;
+    }
+
+    // 如果新的 pruneStartId 和已有值相同，无需更新
+    if (newPruneStartId == session.pruneStartId) return;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    // 可观测性：记录压缩指标
+    final beforeTokens = _estimateMessagesTotalCached(allMessages);
+    final pruneStartIdx = allMessages.indexWhere((m) => m.id == newPruneStartId);
+    final prunedCount = pruneStartIdx >= 0 ? pruneStartIdx : 0;
+    final turnsRetained = oldTurns.length - cutIndex + recentTurnsCount;
+
+    // 更新 SessionHistory 压缩状态
+    session.pruneStartId = newPruneStartId;
+    session.messagesSinceCompression = 0;
+    session.lastCompressionTime = now;
+
+    // 持久化到 DB
+    if (compressionMetaStore != null && deviceId != null) {
+      compressionMetaStore!.saveMeta(CompressionMetaEntity(
+        employeeId: employeeId,
+        deviceId: deviceId!,
+        pruneStartId: newPruneStartId,
+        lastCompressionTime: now,
+        messagesSinceCompression: 0,
+        updateTime: now,
+      ));
+    }
+
+    // 清除 buildCompressedMessages 缓存
+    _invalidateBuildCache();
+
+    _log.info(
+      '压缩完成: employeeId=$employeeId, '
+      'pruneStartId=$newPruneStartId, '
+      'cutIndex=$cutIndex/${oldTurns.length}, '
+      'beforeTokens=$beforeTokens, '
+      'recentTurns=$recentTurnsCount, '
+      'turnsRetained=$turnsRetained, '
+      'prunedMessages=$prunedCount',
+    );
   }
 
-  /// 构建压缩后的消息列表（同步，使用缓存）
+  /// 构建压缩后的消息列表（同步）
   ///
   /// 在 tool calling loop 的每次迭代中调用。
+  /// 基于 [SessionHistory.pruneStartId] 决定哪些消息保留。
+  ///
+  /// - pruneStartId 之前的消息：完全丢弃，注入本地摘要
+  /// - pruneStartId 及之后的消息：保留，但旧工具结果可能被截断
   List<ChatMessage> buildCompressedMessages({
     required String employeeId,
     required List<ChatMessage> allMessages,
+    required SessionHistory session,
     String? systemPrompt,
   }) {
     if (!config.enabled || allMessages.isEmpty) {
-      // 未启用压缩，回退到全量
       return _buildFullMessages(allMessages, systemPrompt);
     }
 
     final budget = config.effectiveBudget;
     if (budget <= 0) {
       return _buildFullMessages(allMessages, systemPrompt);
+    }
+
+    // 检查缓存是否有效
+    final pruneId = session.pruneStartId;
+    final pruneStartIdx = pruneId.isNotEmpty
+        ? allMessages.indexWhere((m) => m.id == pruneId)
+        : -1;
+    final currentGeneration =
+        allMessages.length * 10000 + pruneStartIdx;
+    if (_cachedCompressed != null && _cacheGeneration == currentGeneration) {
+      return _cachedCompressed!;
     }
 
     final result = <ChatMessage>[];
@@ -189,84 +356,224 @@ class ContextCompressor {
       ));
     }
 
-    // 分组为轮次
-    final turns = groupIntoTurns(allMessages);
-    if (turns.isEmpty) return result;
-
-    final recentCount = config.recentTurnsKeep.clamp(1, turns.length);
-    final recentStart = turns.length - recentCount;
-
-    // 2. 获取缓存
-    final cache = _sessionCaches[employeeId];
-
-    // 3. 注入摘要（如果有）
-    if (cache?.summary != null && cache!.summary!.isNotEmpty) {
-      result.add(
-        ChatMessage.system(
-          id: '',
-          employeeId: employeeId,
-          content: '[Prior Conversation Summary]\n${cache.summary}',
-        ),
-      );
+    // 2. 收集被省略的消息，生成本地摘要
+    List<ChatMessage> omittedMessages = const [];
+    if (pruneStartIdx > 0) {
+      omittedMessages = allMessages.sublist(0, pruneStartIdx);
     }
 
-    // 4. 处理旧轮次（摘要覆盖之后、最近窗口之前）
-    if (recentStart > 0) {
-      final summarizedEndIndex = cache?.summarizedUpToIndex ?? 0;
+    if (omittedMessages.isNotEmpty) {
+      final summary = _buildLocalSummary(omittedMessages);
+      result.add(ChatMessage.system(
+        id: '',
+        employeeId: employeeId,
+        content: summary,
+      ));
+    }
 
-      // 收集摘要未覆盖的旧轮次
-      for (var i = 0; i < recentStart; i++) {
-        final turn = turns[i];
-        if (turn.endIndex < summarizedEndIndex) {
-          // 这个轮次已被摘要覆盖，跳过
-          continue;
-        }
-        // 对工具消息进行截断后加入
-        for (final msg in turn.messages) {
-          result.add(_maybeTrancateToolMessage(msg));
-        }
+    // 3. 计算最近轮次的 seq 阈值（用于 toolResultMaxChars 截断）
+    final recentSeqThreshold = _computeRecentSeqThresholdById(allMessages, pruneStartIdx);
+
+    // 4. 遍历消息：保留 pruneStartId 及之后的消息
+    for (var i = 0; i < allMessages.length; i++) {
+      if (pruneStartIdx >= 0 && i < pruneStartIdx) {
+        continue; // 跳过被省略的消息
+      }
+
+      final msg = allMessages[i];
+      // 对保留区内但非最近轮次的 tool result 做截断
+      if (msg.role == MessageRole.tool && recentSeqThreshold > 0) {
+        final truncated = _truncateToolResult(msg, recentSeqThreshold);
+        result.add(truncated);
+      } else {
+        result.add(msg);
       }
     }
 
-    // 5. 最近轮次完整保留
-    for (var i = recentStart; i < turns.length; i++) {
-      result.addAll(turns[i].messages);
-    }
+    // 5. 对保留区内超长工具结果做截断（防止单轮工具调用过多导致溢出）
+    _truncateLargeToolResults(result, recentSeqThreshold);
 
     // 6. 合并连续的 tool result 消息（与非压缩路径 buildMessages 保持一致）
-    //
-    // 非压缩路径 SessionMemoryManager.buildMessages 会调用 mergeConsecutiveToolResults，
-    // 压缩路径也必须调用，否则连续的单条 tool result 不会被合并为分组消息，
-    // 导致 Anthropic 等严格提供商收到多个独立的 tool_result 消息，
-    // 可能触发 "unexpected tool_use_id" 错误。
     final merged = LlmMessageMapper.mergeConsecutiveToolResults(result);
 
     // 7. 修复压缩边界处的 tool_call/tool_result 配对问题
-    //
-    // 当摘要覆盖了旧轮次的部分消息时，可能导致 tool_call 和 tool_result
-    // 被拆分到摘要内外的不同区域，破坏 Anthropic 等严格提供商的消息序列要求。
-    // 例如：assistant(toolCalls) 被保留但对应的 tool_result 被摘要覆盖，
-    // 或者 tool_result 被保留但其对应的 assistant(toolCalls) 被摘要覆盖。
     _ensureToolCallResultPairs(merged);
 
+    // 更新缓存
+    _cachedCompressed = merged;
+    _cacheGeneration = currentGeneration;
+
     return merged;
+  }
+
+  /// 生成本地摘要（不调用 LLM）
+  ///
+  /// 从被压缩消息中提取 user 消息意图，格式化为结构化摘要。
+  String _buildLocalSummary(List<ChatMessage> omittedMessages) {
+    final buffer = StringBuffer();
+    buffer.writeln('## 早期对话摘要');
+    buffer.writeln('共省略 ${omittedMessages.length} 条消息。');
+
+    // 提取用户历史意图
+    final userIntents = omittedMessages
+        .where((m) => m.role == MessageRole.user)
+        .map((m) {
+      final content = m.content ?? '';
+      return content.length > 100
+          ? '${content.substring(0, 100)}...'
+          : content;
+    }).toList();
+
+    if (userIntents.isNotEmpty) {
+      buffer.writeln('### 用户历史意图：');
+      for (var i = 0; i < userIntents.length; i++) {
+        buffer.writeln('${i + 1}. ${userIntents[i]}');
+      }
+    }
+
+    // 提取关键 AI 结论（assistant 消息中有实质内容的）
+    final aiConclusions = omittedMessages
+        .where((m) =>
+            m.role == MessageRole.assistant &&
+            m.toolCalls == null &&
+            (m.content ?? '').trim().isNotEmpty)
+        .map((m) {
+      final content = m.content!.trim();
+      return content.length > 80
+          ? '${content.substring(0, 80)}...'
+          : content;
+    }).toList();
+
+    if (aiConclusions.isNotEmpty) {
+      buffer.writeln('### AI 历史回复要点：');
+      // 最多保留 5 条，避免摘要过长
+      final displayConclusions =
+          aiConclusions.length > 5 ? aiConclusions.sublist(0, 5) : aiConclusions;
+      for (var i = 0; i < displayConclusions.length; i++) {
+        buffer.writeln('${i + 1}. ${displayConclusions[i]}');
+      }
+      if (aiConclusions.length > 5) {
+        buffer.writeln('...（共 ${aiConclusions.length} 条，仅显示前 5 条）');
+      }
+    }
+
+    buffer.writeln('如需查看完整历史，可使用 query_conversation_history 工具。');
+    return buffer.toString();
+  }
+
+  /// 计算最近轮次的 seq 阈值（基于 index）
+  ///
+  /// 返回最近 N 个轮次（recentTurnsKeep）中最早消息的 seq。
+  /// seq < 此阈值的 tool result 会被 toolResultMaxChars 截断。
+  int _computeRecentSeqThresholdById(
+    List<ChatMessage> allMessages,
+    int pruneStartIdx,
+  ) {
+    if (pruneStartIdx < 0) return 0;
+
+    final retainedMessages = allMessages.sublist(pruneStartIdx);
+    if (retainedMessages.isEmpty) return 0;
+
+    final turns = groupIntoTurns(retainedMessages);
+    if (turns.length <= config.recentTurnsKeep) return 0;
+
+    final recentTurns = turns.sublist(turns.length - config.recentTurnsKeep);
+    return recentTurns.first.messages.first.seq;
+  }
+
+  /// 对保留区内但非最近轮次的 tool result 做 toolResultMaxChars 截断
+  ChatMessage _truncateToolResult(ChatMessage msg, int recentSeqThreshold) {
+    if (recentSeqThreshold <= 0 || msg.seq >= recentSeqThreshold) {
+      return msg;
+    }
+
+    // 对非最近轮次的 tool result 做 toolResultMaxChars 截断
+    if (msg.isToolResultGroup) {
+      // 分组格式：截断每个 result 的内容
+      final truncatedResults = msg.toolResults!.map((r) {
+        if (r.content.length > config.toolResultMaxChars) {
+          return ToolResult(
+            toolCallId: r.toolCallId,
+            content:
+                '${r.content.substring(0, config.toolResultMaxChars)}...(truncated, total ${r.content.length} chars)',
+            isError: r.isError,
+            name: r.name,
+          );
+        }
+        return r;
+      }).toList();
+      return msg.copyWith(toolResults: truncatedResults);
+    } else {
+      final content = msg.content ?? '';
+      if (content.length > config.toolResultMaxChars) {
+        return msg.copyWith(
+          content:
+              '${content.substring(0, config.toolResultMaxChars)}...(truncated, total ${content.length} chars)',
+        );
+      }
+    }
+    return msg;
+  }
+
+  /// 对保留区内的超长 tool_result 进行截断
+  ///
+  /// 防止单轮工具调用过多导致压缩失效。
+  /// 使用更宽松的阈值 _maxToolResultCharsInContext（2000 字符）。
+  void _truncateLargeToolResults(
+    List<ChatMessage> messages,
+    int recentSeqThreshold,
+  ) {
+    for (var i = 0; i < messages.length; i++) {
+      final msg = messages[i];
+      if (msg.role != MessageRole.tool) continue;
+
+      // 最近轮次内的消息不做截断
+      if (recentSeqThreshold > 0 && msg.seq >= recentSeqThreshold) continue;
+
+      if (msg.isToolResultGroup) {
+        bool modified = false;
+        final truncatedResults = msg.toolResults!.map((r) {
+          if (r.content.length > _maxToolResultCharsInContext) {
+            modified = true;
+            return ToolResult(
+              toolCallId: r.toolCallId,
+              content:
+                  '${r.content.substring(0, _maxToolResultCharsInContext)}\n'
+                  '...[截断: 共${r.content.length}字符，'
+                  '使用 query_conversation_history 查看完整内容]',
+              isError: r.isError,
+              name: r.name,
+            );
+          }
+          return r;
+        }).toList();
+        if (modified) {
+          messages[i] = msg.copyWith(toolResults: truncatedResults);
+        }
+      } else {
+        final content = msg.content ?? '';
+        if (content.length > _maxToolResultCharsInContext) {
+          messages[i] = msg.copyWith(
+            content:
+                '${content.substring(0, _maxToolResultCharsInContext)}\n'
+                '...[截断: 共${content.length}字符，'
+                '使用 query_conversation_history 查看完整内容]',
+          );
+        }
+      }
+    }
   }
 
   /// 确保 tool_call / tool_result 严格配对
   ///
   /// 压缩边界可能将 assistant(toolCalls) 和对应的 tool_result 拆到不同区域，
   /// 导致 Anthropic 等 API 报 "unexpected tool_use_id" 错误。
-  ///
-  /// 策略：单次前向遍历，收集需要删除/strip 的索引，最后统一处理。
   static void _ensureToolCallResultPairs(List<ChatMessage> result) {
     if (result.length < 2) return;
 
-    // 需要删除的消息索引
     final toRemove = <int>{};
-    // 需要移除 toolCalls 的 assistant 消息索引
     final toStrip = <int>{};
 
-    // 前一条 assistant(toolCalls) 的 tool_call_id 集合
     Set<String>? prevToolCallIds;
     int? prevAssistantIdx;
 
@@ -276,33 +583,19 @@ class ContextCompressor {
       if (msg.role == MessageRole.assistant &&
           msg.toolCalls != null &&
           msg.toolCalls!.isNotEmpty) {
-        // ── 遇到新的 assistant(toolCalls) ──
-        // 先处理前一条未配对的 assistant
         if (prevToolCallIds != null &&
             prevToolCallIds.isNotEmpty &&
             prevAssistantIdx != null &&
             !toStrip.contains(prevAssistantIdx)) {
-          _log.warn(
-            '_ensureToolCallResultPairs: assistant at [$prevAssistantIdx] 无匹配 tool_result, '
-            'strip toolCalls (ids=$prevToolCallIds)',
-          );
           toStrip.add(prevAssistantIdx);
         }
         prevToolCallIds = msg.toolCalls!.map((tc) => tc.id).toSet();
         prevAssistantIdx = i;
       } else if (msg.role == MessageRole.tool) {
-        // ── 遇到 tool_result ──
         if (prevToolCallIds == null || prevToolCallIds.isEmpty) {
-          // 前面没有未配对的 assistant(toolCalls) → 孤立 tool_result
-          _log.warn(
-            '_ensureToolCallResultPairs: 丢弃孤立 tool_result at [$i] '
-            '(前面无未配对的 assistant)',
-          );
           toRemove.add(i);
         } else {
-          // 此分支已通过上面的 null/isEmpty 检查，prevToolCallIds 必定非空
           final ids = prevToolCallIds;
-          // 检查 tool_result 的 toolCallId 是否匹配
           final matchIds = msg.isToolResultGroup
               ? msg.toolResults!
                     .where((r) => ids.contains(r.toolCallId))
@@ -313,10 +606,6 @@ class ContextCompressor {
                   : <String>{});
 
           if (matchIds.isEmpty) {
-            _log.warn(
-              '_ensureToolCallResultPairs: 丢弃不匹配 tool_result at [$i] '
-              '(expected=$prevToolCallIds)',
-            );
             toRemove.add(i);
           } else {
             for (final id in matchIds) {
@@ -325,16 +614,10 @@ class ContextCompressor {
           }
         }
       } else {
-        // ── 遇到 user/system 等非 tool 消息 ──
-        // 如果前面有未配对的 assistant(toolCalls)，strip 之
         if (prevToolCallIds != null &&
             prevToolCallIds.isNotEmpty &&
             prevAssistantIdx != null &&
             !toStrip.contains(prevAssistantIdx)) {
-          _log.warn(
-            '_ensureToolCallResultPairs: ${msg.role.name} at [$i] 打断了 tool_call 配对, '
-            'strip assistant at [$prevAssistantIdx] (ids=$prevToolCallIds)',
-          );
           toStrip.add(prevAssistantIdx);
         }
         prevToolCallIds = null;
@@ -342,19 +625,13 @@ class ContextCompressor {
       }
     }
 
-    // 序列末尾：strip 未配对的 assistant(toolCalls)
     if (prevToolCallIds != null &&
         prevToolCallIds.isNotEmpty &&
         prevAssistantIdx != null &&
         !toStrip.contains(prevAssistantIdx)) {
-      _log.warn(
-        '_ensureToolCallResultPairs: 序列末尾 assistant at [$prevAssistantIdx] 无匹配 tool_result, '
-        'strip toolCalls (ids=$prevToolCallIds)',
-      );
       toStrip.add(prevAssistantIdx);
     }
 
-    // 统一处理：先 strip，再删除（倒序）
     for (final idx in toStrip) {
       _stripAssistantToolCallsInList(result, idx);
     }
@@ -368,8 +645,7 @@ class ContextCompressor {
     }
   }
 
-  /// 在消息列表中 strip 指定索引处 assistant 消息的 toolCalls，
-  /// 转为内联文本描述，确保 LLM 能感知历史工具调用。
+  /// 在消息列表中 strip 指定索引处 assistant 消息的 toolCalls
   static void _stripAssistantToolCallsInList(
     List<ChatMessage> result,
     int index,
@@ -391,7 +667,8 @@ class ContextCompressor {
                 .map((e) => '${e.key}=${e.value}')
                 .join(', ');
           } else {
-            argsPreview = args.entries.take(3)
+            argsPreview = args.entries
+                .take(3)
                 .map((e) => '${e.key}=${e.value}')
                 .join(', ');
             argsPreview += ', ...(共${args.length}个参数)';
@@ -413,25 +690,46 @@ class ContextCompressor {
     );
   }
 
-  /// 清除指定会话的压缩缓存
-  void clearCache(String employeeId) {
-    _sessionCaches.remove(employeeId);
+  /// 清除所有锁和缓存（会话销毁时调用）
+  void dispose() {
+    _sessionLocks.clear();
+    _tokenCache.clear();
+    _cachedCompressed = null;
+    _cacheGeneration = -1;
   }
 
-  /// 清除所有缓存
-  void dispose() {
-    _sessionCaches.clear();
+  // ===== Token 估算缓存 =====
+
+  /// 带缓存的消息 token 估算
+  int _estimateMessagesTotalCached(List<ChatMessage> messages) {
+    var total = 0;
+    for (final message in messages) {
+      total += _estimateMessageTokensCached(message);
+    }
+    total += 3; // 请求 overhead
+    return total;
+  }
+
+  /// 带缓存的单条消息 token 估算
+  int _estimateMessageTokensCached(ChatMessage message) {
+    if (message.id.isEmpty) {
+      return _estimator.estimateMessageTokens(message);
+    }
+    return _tokenCache.putIfAbsent(
+      message.id,
+      () => _estimator.estimateMessageTokens(message),
+    );
+  }
+
+  /// 使 buildCompressedMessages 缓存失效
+  void _invalidateBuildCache() {
+    _cachedCompressed = null;
+    _cacheGeneration = -1;
   }
 
   // ===== 消息轮次分组 =====
 
   /// 将消息列表分组为对话轮次
-  ///
-  /// 每遇到 user 消息开始一个新轮次。
-  /// 轮次包含该 user 消息及后续所有 assistant/tool 消息直到下一个 user。
-  /// assistant(toolCalls) + 对应 tool 消息永远在同一轮次内。
-  ///
-  /// 对于开头的非 user 消息（如果有），归入第一个虚拟轮次。
   static List<MessageTurn> groupIntoTurns(List<ChatMessage> messages) {
     if (messages.isEmpty) return [];
 
@@ -443,7 +741,6 @@ class ContextCompressor {
       final msg = messages[i];
 
       if (msg.role == MessageRole.user && currentMessages.isNotEmpty) {
-        // 遇到新的 user 消息，结束当前轮次
         turns.add(
           MessageTurn(
             startIndex: currentStart,
@@ -458,7 +755,6 @@ class ContextCompressor {
       currentMessages.add(msg);
     }
 
-    // 最后一个轮次
     if (currentMessages.isNotEmpty) {
       turns.add(
         MessageTurn(
@@ -470,196 +766,6 @@ class ContextCompressor {
     }
 
     return turns;
-  }
-
-  // ===== 工具结果截断 =====
-
-  /// 对旧轮次中的 tool 消息内容进行截断
-  List<ChatMessage> _truncateToolResults(List<MessageTurn> turns) {
-    final result = <ChatMessage>[];
-    for (final turn in turns) {
-      for (final msg in turn.messages) {
-        result.add(_maybeTrancateToolMessage(msg));
-      }
-    }
-    return result;
-  }
-
-  /// 如果是 tool 消息且内容过长，截断之
-  ChatMessage _maybeTrancateToolMessage(ChatMessage message) {
-    if (message.role != MessageRole.tool) return message;
-
-    final maxChars = config.toolResultMaxChars;
-
-    if (message.isToolResultGroup) {
-      // 分组格式：对每个 result 的 content 分别截断
-      var anyTruncated = false;
-      final truncatedResults = message.toolResults!.map((r) {
-        if (r.content.length > maxChars) {
-          anyTruncated = true;
-          return ToolResult(
-            toolCallId: r.toolCallId,
-            content: '${r.content.substring(0, maxChars)}'
-                '\n...[truncated, ${r.content.length} chars total]',
-            isError: r.isError,
-            name: r.name,
-          );
-        }
-        return r;
-      }).toList();
-      if (!anyTruncated) return message;
-      return message.copyWith(
-        content: truncatedResults.map((r) => r.content).join('\n'),
-        toolResults: truncatedResults,
-      );
-    }
-
-    // 单条格式
-    final content = message.content ?? '';
-    if (content.length <= maxChars) return message;
-
-    final truncated =
-        '${content.substring(0, maxChars)}'
-        '\n...[truncated, ${content.length} chars total]';
-
-    return message.copyWith(content: truncated);
-  }
-
-  // ===== 摘要生成 =====
-
-  /// 判断是否需要重新生成摘要
-  bool _needsResummarize({
-    required _CompressionCache cache,
-    required int totalMessages,
-    required int oldTurnsEndIndex,
-  }) {
-    // 没有摘要 → 需要生成
-    if (cache.summary == null || cache.summary!.isEmpty) return true;
-
-    // 摘要覆盖的范围相对于旧消息范围太少（新消息翻倍以上）
-    final uncoveredOld = oldTurnsEndIndex - cache.summarizedUpToIndex;
-    if (uncoveredOld > cache.summarizedUpToIndex && uncoveredOld > 10) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /// 使用 LLM 生成对话摘要
-  Future<void> _generateSummary({
-    required _CompressionCache cache,
-    required SessionHistory session,
-    required List<MessageTurn> oldTurns,
-    required int remainingBudget,
-  }) async {
-    // 确定需要摘要的轮次范围：从开头到能让剩余轮次在预算内的位置
-    // 贪心策略：从最旧的轮次开始摘要，直到剩余能放下
-    var turnsToSummarize = 0;
-    var turnsToKeepTokens = 0;
-
-    // 先算出所有旧轮次截断后的 token
-    final truncatedPerTurn = <int>[];
-    for (final turn in oldTurns) {
-      final truncated = <ChatMessage>[];
-      for (final msg in turn.messages) {
-        truncated.add(_maybeTrancateToolMessage(msg));
-      }
-      truncatedPerTurn.add(_estimator.estimateMessagesTotal(truncated));
-    }
-
-    // 预留摘要 token
-    final summaryBudget =
-        _estimator.estimateTokens('A' * (config.summaryMaxTokens * 3)) + 10;
-    final keepBudget = remainingBudget - summaryBudget;
-
-    // 从最后一个旧轮次往前，尽量多保留
-    turnsToKeepTokens = 0;
-    for (var i = oldTurns.length - 1; i >= 0; i--) {
-      final newTotal = turnsToKeepTokens + truncatedPerTurn[i];
-      if (newTotal > keepBudget) {
-        turnsToSummarize = i + 1;
-        break;
-      }
-      turnsToKeepTokens = newTotal;
-    }
-
-    // 至少摘要 1 个轮次
-    if (turnsToSummarize == 0) turnsToSummarize = 1;
-
-    // 构建摘要 prompt
-    final messagesToSummarize = <ChatMessage>[];
-    for (var i = 0; i < turnsToSummarize; i++) {
-      messagesToSummarize.addAll(oldTurns[i].messages);
-    }
-
-    final formattedMessages = _formatMessagesForSummary(messagesToSummarize);
-    final prompt =
-        'Please provide a concise summary of the following conversation '
-        'between a user and an AI assistant.\n'
-        'Preserve: key facts, user requests, important decisions, tool call results and outcomes.\n'
-        'Omit: verbatim tool outputs, redundant details.\n'
-        'Keep the summary concise (under ${config.summaryMaxTokens} tokens).\n\n'
-        'Conversation:\n---\n$formattedMessages\n---\n\nSummary:';
-
-    try {
-      final summary = await onSummarize(prompt);
-      final summarizedEndIndex = oldTurns[turnsToSummarize - 1].endIndex + 1;
-
-      cache.summary = summary;
-      cache.summarizedUpToIndex = summarizedEndIndex;
-      cache.messagesCountWhenCached = messagesToSummarize.length;
-
-      // 同步到 SessionHistory
-      session.conversationSummary = summary;
-      session.summarizedUpToIndex = summarizedEndIndex;
-    } catch (e) {
-      // 摘要生成失败，回退到仅截断模式（不报错，降级处理）
-      _log.warn('summary generation failed, falling back to truncation-only mode: $e');
-    }
-  }
-
-  /// 将消息格式化为适合摘要的文本
-  String _formatMessagesForSummary(List<ChatMessage> messages) {
-    final buffer = StringBuffer();
-
-    for (final msg in messages) {
-      final role = switch (msg.role) {
-        MessageRole.user => 'User',
-        MessageRole.assistant => 'Assistant',
-        MessageRole.tool => 'Tool Result',
-        MessageRole.system => 'System',
-      };
-
-      var content = msg.content ?? '';
-
-      // 截断过长的内容（摘要 prompt 本身也不能太长）
-      if (content.length > 500) {
-        content = '${content.substring(0, 500)}...[truncated]';
-      }
-
-      // 对 assistant 消息附加工具调用信息
-      if (msg.role == MessageRole.assistant && msg.toolCalls != null && msg.toolCalls!.isNotEmpty) {
-        final toolNames = msg.toolCalls!.map((tc) => tc.name).join(', ');
-        buffer.writeln('$role: $content');
-        buffer.writeln('  [Called tools: $toolNames]');
-      } else if (msg.role == MessageRole.tool) {
-        if (msg.isToolResultGroup) {
-          final parts = msg.toolResults!.map((r) {
-            var c = r.content;
-            if (c.length > 500) c = '${c.substring(0, 500)}...[truncated]';
-            final err = r.isError ? ' [ERROR]' : '';
-            return '  [${r.name ?? r.toolCallId}]$err: $c';
-          }).join('\n');
-          buffer.writeln('Tool Results:\n$parts');
-        } else {
-          buffer.writeln('$role (${msg.toolCallId}): $content');
-        }
-      } else {
-        buffer.writeln('$role: $content');
-      }
-    }
-
-    return buffer.toString();
   }
 
   // ===== 辅助方法 =====

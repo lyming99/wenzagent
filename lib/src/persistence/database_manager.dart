@@ -26,6 +26,7 @@ import 'migrations/v18_migration.dart';
 import 'migrations/v19_migration.dart';
 import 'migrations/v20_migration.dart';
 import 'migrations/v21_migration.dart';
+import 'migrations/v22_migration.dart';
 
 /// 数据库管理器
 ///
@@ -81,7 +82,7 @@ class DatabaseManager {
   String? _dbPath;
 
   /// 当前 schema 版本号
-  static const int currentVersion = 21;
+  static const int currentVersion = 22;
 
   /// 版本迁移注册表
   ///
@@ -108,6 +109,7 @@ class DatabaseManager {
     V19Migration(),
     V20Migration(),
     V21Migration(),
+    V22Migration(),
   ];
 
   /// 获取数据库连接

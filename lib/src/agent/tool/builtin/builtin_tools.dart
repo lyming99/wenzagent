@@ -23,6 +23,7 @@ import 'spec_manage_tool.dart';
 import 'web_fetch_tool.dart';
 import 'send_file_message_tool.dart';
 import 'web_search_tool.dart';
+import 'query_conversation_history_tool.dart';
 
 /// 内置工具集合
 ///
@@ -67,6 +68,7 @@ class BuiltinTools {
     'web_fetch',
     'web_search_prime',
     'send_file_message',
+    'query_conversation_history',
   };
 
   /// 获取所有内置工具
@@ -96,6 +98,7 @@ class BuiltinTools {
       SpecManageTool(),
       ProjectListTool(),
       SendFileMessageTool(),
+      QueryConversationHistoryTool(),
     ];
   }
 

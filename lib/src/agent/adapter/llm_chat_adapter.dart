@@ -18,6 +18,7 @@ import '../../service/message_store_service.dart';
 import '../../shared/shared.dart' as shared;
 import '../../utils/logger.dart';
 import 'context_compressor.dart';
+import '../../service/compression_meta_store.dart';
 import 'retry_config.dart';
 import 'retry_util.dart';
 import 'session_memory_manager.dart';
@@ -174,6 +175,9 @@ class LlmChatAdapter implements IChatAdapter {
   /// 上下文压缩器
   ContextCompressor? _compressor;
 
+  /// 压缩元数据 Store
+  CompressionMetaStore? _compressionMetaStore;
+
   /// dio CancelToken（用于取消 LLM 流式请求）
   llm.CancelToken? _dioCancelToken;
 
@@ -183,11 +187,14 @@ class LlmChatAdapter implements IChatAdapter {
   void configurePersistence({
     required MessageStoreService messageStore,
     required String deviceId,
+    CompressionMetaStore? compressionMetaStore,
   }) {
     this.deviceId = deviceId;
+    _compressionMetaStore = compressionMetaStore;
     memoryManager.configurePersistence(
       messageStore: messageStore,
       deviceId: deviceId,
+      compressionMetaStore: compressionMetaStore,
     );
   }
 
@@ -282,7 +289,7 @@ class LlmChatAdapter implements IChatAdapter {
 
         final hasTools = _toolRegistry != null && !_toolRegistry!.isEmpty;
         final systemPrompt = _buildSystemPrompt();
-        await prepareCompression(systemPrompt);
+        prepareCompression(systemPrompt);
 
         // Tool calling 循环
         bool streamCancelled = false;
@@ -562,7 +569,7 @@ class LlmChatAdapter implements IChatAdapter {
       // 在删除前获取 maxSeq，用于设置 clearSeq = lastSeq
       final maxSeq = memoryManager.getMaxSeq(empId);
       await memoryManager.clearSessionFromDb(empId);
-      _compressor?.clearCache(empId);
+      // 压缩状态已随 clearSessionFromDb 一并清除（CompressionMetaStore.deleteMeta）
       await onSessionCleared?.call(empId, maxSeq);
     }
   }
@@ -611,11 +618,8 @@ class LlmChatAdapter implements IChatAdapter {
     if (compression != null && compression.enabled) {
       _compressor = ContextCompressor(
         config: compression,
-        onSummarize: (prompt) async {
-          final messages = [llm.ChatMessage.user(prompt)];
-          final response = await _chatCapability!.chat(messages);
-          return response.text ?? '';
-        },
+        compressionMetaStore: _compressionMetaStore,
+        deviceId: deviceId,
       );
     } else {
       _compressor?.dispose();
@@ -726,6 +730,13 @@ class LlmChatAdapter implements IChatAdapter {
       builder.maxTokens(defaultMaxTokens);
     }
     builder.reasoning(false);
+
+    if (config.options.reasoningEffort != null) {
+      final effort = llm.ReasoningEffort.fromString(config.options.reasoningEffort!);
+      if (effort != null) {
+        builder.reasoningEffort(effort);
+      }
+    }
 
     if (config.options.topP != null) {
       builder.topP(config.options.topP!);

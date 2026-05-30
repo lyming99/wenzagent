@@ -299,16 +299,27 @@ class DeviceRpcHandler {
         final newModel = providerConfig.model;
         final newApiKey = providerConfig.apiKey;
         final newBaseUrl = providerConfig.baseUrl;
+        final newReasoningEffort = providerConfig.options.reasoningEffort;
+        // 构建 modelConfig：包含 reasoningEffort
+        final newModelConfigMap = <String, dynamic>{};
+        if (newReasoningEffort != null) {
+          newModelConfigMap['reasoningEffort'] = newReasoningEffort;
+        }
+        final newModelConfig = newModelConfigMap.isNotEmpty
+            ? jsonEncode(newModelConfigMap)
+            : null;
         if (employee.provider != newProvider ||
             employee.model != newModel ||
             employee.apiKey != newApiKey ||
-            employee.apiBaseUrl != newBaseUrl) {
+            employee.apiBaseUrl != newBaseUrl ||
+            employee.modelConfig != newModelConfig) {
           await _employeeManager.updateEmployee(
             employee.copyWith(
               provider: newProvider,
               model: newModel,
               apiKey: newApiKey,
               apiBaseUrl: newBaseUrl,
+              modelConfig: newModelConfig,
             ),
           );
           _log.info('methodSetProvider: Employee provider synced: provider=$newProvider, model=$newModel');
