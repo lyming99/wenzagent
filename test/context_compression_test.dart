@@ -53,33 +53,63 @@ void main() {
 
   ChatMessage _userMsg(String empId, String id, String content, {int seq = 0}) {
     return ChatMessage(
-      id: id, employeeId: empId, role: MessageRole.user,
-      type: 'text', content: content, createdAt: DateTime.now(), seq: seq,
+      id: id,
+      employeeId: empId,
+      role: MessageRole.user,
+      type: 'text',
+      content: content,
+      createdAt: DateTime.now(),
+      seq: seq,
     );
   }
 
   ChatMessage _asstMsg(String empId, String id, String content, {int seq = 0}) {
     return ChatMessage(
-      id: id, employeeId: empId, role: MessageRole.assistant,
-      type: 'text', content: content, createdAt: DateTime.now(), seq: seq,
+      id: id,
+      employeeId: empId,
+      role: MessageRole.assistant,
+      type: 'text',
+      content: content,
+      createdAt: DateTime.now(),
+      seq: seq,
     );
   }
 
-  ChatMessage _toolMsg(String empId, String id, String content,
-      {int seq = 0, String? toolCallId}) {
+  ChatMessage _toolMsg(
+    String empId,
+    String id,
+    String content, {
+    int seq = 0,
+    String? toolCallId,
+  }) {
     return ChatMessage(
-      id: id, employeeId: empId, role: MessageRole.tool,
-      type: 'functionResult', content: content, createdAt: DateTime.now(),
-      seq: seq, toolCallId: toolCallId ?? 'tc-$id',
+      id: id,
+      employeeId: empId,
+      role: MessageRole.tool,
+      type: 'functionResult',
+      content: content,
+      createdAt: DateTime.now(),
+      seq: seq,
+      toolCallId: toolCallId ?? 'tc-$id',
     );
   }
 
-  ChatMessage _asstToolCallMsg(String empId, String id, String content,
-      {int seq = 0, required List<ToolCall> toolCalls}) {
+  ChatMessage _asstToolCallMsg(
+    String empId,
+    String id,
+    String content, {
+    int seq = 0,
+    required List<ToolCall> toolCalls,
+  }) {
     return ChatMessage(
-      id: id, employeeId: empId, role: MessageRole.assistant,
-      type: 'functionCall', content: content, createdAt: DateTime.now(),
-      seq: seq, toolCalls: toolCalls,
+      id: id,
+      employeeId: empId,
+      role: MessageRole.assistant,
+      type: 'functionCall',
+      content: content,
+      createdAt: DateTime.now(),
+      seq: seq,
+      toolCalls: toolCalls,
     );
   }
 
@@ -106,9 +136,11 @@ void main() {
     test('saveMeta + getMeta 基本 CRUD', () {
       final now = DateTime.now().millisecondsSinceEpoch;
       final meta = CompressionMetaEntity(
-        employeeId: empId, deviceId: 'dev-1',
+        employeeId: empId,
+        deviceId: 'dev-1',
         pruneStartId: 'msg-uuid-001',
-        lastCompressionTime: now, messagesSinceCompression: 0,
+        lastCompressionTime: now,
+        messagesSinceCompression: 0,
         updateTime: now,
       );
       store.saveMeta(meta);
@@ -119,30 +151,42 @@ void main() {
 
     test('saveMeta 更新已有记录', () {
       final now = DateTime.now().millisecondsSinceEpoch;
-      store.saveMeta(CompressionMetaEntity(
-        employeeId: empId, deviceId: 'dev-1',
-        pruneStartId: 'msg-uuid-001',
-        lastCompressionTime: now, messagesSinceCompression: 0,
-        updateTime: now,
-      ));
-      store.saveMeta(CompressionMetaEntity(
-        employeeId: empId, deviceId: 'dev-1',
-        pruneStartId: 'msg-uuid-005',
-        lastCompressionTime: now, messagesSinceCompression: 0,
-        updateTime: now,
-      ));
+      store.saveMeta(
+        CompressionMetaEntity(
+          employeeId: empId,
+          deviceId: 'dev-1',
+          pruneStartId: 'msg-uuid-001',
+          lastCompressionTime: now,
+          messagesSinceCompression: 0,
+          updateTime: now,
+        ),
+      );
+      store.saveMeta(
+        CompressionMetaEntity(
+          employeeId: empId,
+          deviceId: 'dev-1',
+          pruneStartId: 'msg-uuid-005',
+          lastCompressionTime: now,
+          messagesSinceCompression: 0,
+          updateTime: now,
+        ),
+      );
       final loaded = store.getMeta(empId, 'dev-1')!;
       expect(loaded.pruneStartId, 'msg-uuid-005');
     });
 
     test('incrementCoolDown / resetCoolDown', () {
       final now = DateTime.now().millisecondsSinceEpoch;
-      store.saveMeta(CompressionMetaEntity(
-        employeeId: empId, deviceId: 'dev-1',
-        pruneStartId: 'msg-uuid-001',
-        lastCompressionTime: now, messagesSinceCompression: 0,
-        updateTime: now,
-      ));
+      store.saveMeta(
+        CompressionMetaEntity(
+          employeeId: empId,
+          deviceId: 'dev-1',
+          pruneStartId: 'msg-uuid-001',
+          lastCompressionTime: now,
+          messagesSinceCompression: 0,
+          updateTime: now,
+        ),
+      );
       store.incrementCoolDown(empId, 'dev-1');
       store.incrementCoolDown(empId, 'dev-1');
       expect(store.getMeta(empId, 'dev-1')!.messagesSinceCompression, 2);
@@ -153,39 +197,53 @@ void main() {
 
     test('deleteMeta', () {
       final now = DateTime.now().millisecondsSinceEpoch;
-      store.saveMeta(CompressionMetaEntity(
-        employeeId: empId, deviceId: 'dev-1',
-        pruneStartId: 'msg-uuid-001',
-        lastCompressionTime: now, messagesSinceCompression: 0,
-        updateTime: now,
-      ));
+      store.saveMeta(
+        CompressionMetaEntity(
+          employeeId: empId,
+          deviceId: 'dev-1',
+          pruneStartId: 'msg-uuid-001',
+          lastCompressionTime: now,
+          messagesSinceCompression: 0,
+          updateTime: now,
+        ),
+      );
       store.deleteMeta(empId, 'dev-1');
       expect(store.getMeta(empId, 'dev-1'), isNull);
     });
 
     test('不同 employee 隔离', () {
       final now = DateTime.now().millisecondsSinceEpoch;
-      store.saveMeta(CompressionMetaEntity(
-        employeeId: empId, deviceId: 'dev-1',
-        pruneStartId: 'msg-A',
-        lastCompressionTime: now, messagesSinceCompression: 0,
-        updateTime: now,
-      ));
-      store.saveMeta(CompressionMetaEntity(
-        employeeId: 'other-emp', deviceId: 'dev-1',
-        pruneStartId: 'msg-B',
-        lastCompressionTime: now, messagesSinceCompression: 0,
-        updateTime: now,
-      ));
+      store.saveMeta(
+        CompressionMetaEntity(
+          employeeId: empId,
+          deviceId: 'dev-1',
+          pruneStartId: 'msg-A',
+          lastCompressionTime: now,
+          messagesSinceCompression: 0,
+          updateTime: now,
+        ),
+      );
+      store.saveMeta(
+        CompressionMetaEntity(
+          employeeId: 'other-emp',
+          deviceId: 'dev-1',
+          pruneStartId: 'msg-B',
+          lastCompressionTime: now,
+          messagesSinceCompression: 0,
+          updateTime: now,
+        ),
+      );
       expect(store.getMeta(empId, 'dev-1')!.pruneStartId, 'msg-A');
       expect(store.getMeta('other-emp', 'dev-1')!.pruneStartId, 'msg-B');
     });
 
     test('pruneStartId 为空表示未压缩', () {
       final meta = CompressionMetaEntity(
-        employeeId: empId, deviceId: 'dev-1',
+        employeeId: empId,
+        deviceId: 'dev-1',
         pruneStartId: '',
-        lastCompressionTime: 0, messagesSinceCompression: 0,
+        lastCompressionTime: 0,
+        messagesSinceCompression: 0,
         updateTime: 0,
       );
       expect(meta.isCompressed, isFalse);
@@ -199,17 +257,64 @@ void main() {
   group('shouldCompress', () {
     test('token 未超阈值 → false', () {
       final session = _makeSession();
-      expect(compressor.shouldCompress(totalTokens: 10000, session: session), isFalse);
+      expect(
+        compressor.shouldCompress(totalTokens: 10000, session: session),
+        isFalse,
+      );
     });
 
     test('token 超阈值且冷却期已过 → true', () {
       final session = _makeSession(messagesSinceCompression: 15);
-      expect(compressor.shouldCompress(totalTokens: 40000, session: session), isTrue);
+      expect(
+        compressor.shouldCompress(totalTokens: 40000, session: session),
+        isTrue,
+      );
     });
 
     test('token 超阈值但冷却期未过 → false', () {
       final session = _makeSession(messagesSinceCompression: 3);
-      expect(compressor.shouldCompress(totalTokens: 40000, session: session), isFalse);
+      expect(
+        compressor.shouldCompress(totalTokens: 40000, session: session),
+        isFalse,
+      );
+    });
+
+    test('forceCompress 绕过冷却期并更新压缩边界', () {
+      final uuid = Uuid();
+      final msgs = <ChatMessage>[];
+      for (var i = 0; i < 40; i++) {
+        msgs.add(_userMsg(empId, uuid.v4(), '用户消息 $i ' * 300));
+        msgs.add(_asstMsg(empId, uuid.v4(), 'AI回复 $i ' * 400));
+      }
+      final session = _makeSession(messagesSinceCompression: 0);
+
+      expect(
+        compressor.shouldCompress(totalTokens: 40000, session: session),
+        isFalse,
+      );
+
+      final compressed = compressor.forceCompress(
+        employeeId: empId,
+        allMessages: msgs,
+        session: session,
+      );
+
+      expect(compressed, isTrue);
+      expect(session.pruneStartId, isNotEmpty);
+      expect(session.messagesSinceCompression, 0);
+
+      final firstPruneId = session.pruneStartId;
+      final compressedAgain = compressor.forceCompress(
+        employeeId: empId,
+        allMessages: msgs,
+        session: session,
+      );
+
+      expect(compressedAgain, isTrue);
+      expect(
+        msgs.indexWhere((m) => m.id == session.pruneStartId),
+        greaterThan(msgs.indexWhere((m) => m.id == firstPruneId)),
+      );
     });
 
     test('压缩未启用 → false', () {
@@ -217,7 +322,13 @@ void main() {
         config: const ContextCompressionConfig(maxContextTokens: 0),
       );
       final session = _makeSession(messagesSinceCompression: 100);
-      expect(disabledCompressor.shouldCompress(totalTokens: 100000, session: session), isFalse);
+      expect(
+        disabledCompressor.shouldCompress(
+          totalTokens: 100000,
+          session: session,
+        ),
+        isFalse,
+      );
     });
   });
 
@@ -227,13 +338,12 @@ void main() {
 
   group('buildCompressedMessages (UUID)', () {
     test('pruneStartId 为空 → 全量返回', () {
-      final msgs = [
-        _userMsg(empId, 'u1', '你好'),
-        _asstMsg(empId, 'a1', '你好！'),
-      ];
+      final msgs = [_userMsg(empId, 'u1', '你好'), _asstMsg(empId, 'a1', '你好！')];
       final session = _makeSession(pruneStartId: '');
       final result = compressor.buildCompressedMessages(
-        employeeId: empId, allMessages: msgs, session: session,
+        employeeId: empId,
+        allMessages: msgs,
+        session: session,
       );
       // 2 条原始消息（无 system prompt）
       expect(result.length, 2);
@@ -251,7 +361,9 @@ void main() {
       // 从 u2 开始保留
       final session = _makeSession(pruneStartId: 'u2');
       final result = compressor.buildCompressedMessages(
-        employeeId: empId, allMessages: msgs, session: session,
+        employeeId: empId,
+        allMessages: msgs,
+        session: session,
       );
 
       // 应包含：提示词 + u2 + a2 + u3 + a3 = 5 条
@@ -274,7 +386,9 @@ void main() {
       ];
       final session = _makeSession(pruneStartId: 'u2');
       final result = compressor.buildCompressedMessages(
-        employeeId: empId, allMessages: msgs, session: session,
+        employeeId: empId,
+        allMessages: msgs,
+        session: session,
         systemPrompt: '你是助手',
       );
 
@@ -284,13 +398,12 @@ void main() {
     });
 
     test('所有消息在保留区内 → 无提示词', () {
-      final msgs = [
-        _userMsg(empId, 'u1', '你好'),
-        _asstMsg(empId, 'a1', '你好！'),
-      ];
+      final msgs = [_userMsg(empId, 'u1', '你好'), _asstMsg(empId, 'a1', '你好！')];
       final session = _makeSession(pruneStartId: 'u1');
       final result = compressor.buildCompressedMessages(
-        employeeId: empId, allMessages: msgs, session: session,
+        employeeId: empId,
+        allMessages: msgs,
+        session: session,
       );
       // u1 + a1 = 2 条，无提示词
       expect(result.length, 2);
@@ -298,13 +411,12 @@ void main() {
     });
 
     test('pruneStartId 不在消息列表中 → 全量返回', () {
-      final msgs = [
-        _userMsg(empId, 'u1', '你好'),
-        _asstMsg(empId, 'a1', '你好！'),
-      ];
+      final msgs = [_userMsg(empId, 'u1', '你好'), _asstMsg(empId, 'a1', '你好！')];
       final session = _makeSession(pruneStartId: 'nonexistent-id');
       final result = compressor.buildCompressedMessages(
-        employeeId: empId, allMessages: msgs, session: session,
+        employeeId: empId,
+        allMessages: msgs,
+        session: session,
       );
       expect(result.length, 2);
     });
@@ -335,9 +447,13 @@ void main() {
     test('多轮对话含 tool calls 正确分组', () {
       final msgs = [
         _userMsg(empId, 'u1', '查文件'),
-        _asstToolCallMsg(empId, 'a1', '', seq: 0, toolCalls: [
-          ToolCall(id: 'tc1', name: 'file_read', arguments: {}),
-        ]),
+        _asstToolCallMsg(
+          empId,
+          'a1',
+          '',
+          seq: 0,
+          toolCalls: [ToolCall(id: 'tc1', name: 'file_read', arguments: {})],
+        ),
         _toolMsg(empId, 't1', '文件内容...', toolCallId: 'tc1'),
         _asstMsg(empId, 'a2', '这是文件内容'),
         _userMsg(empId, 'u2', '修改代码'),
@@ -395,12 +511,16 @@ void main() {
   group('集成 (UUID)', () {
     test('压缩状态持久化后可恢复', () {
       final now = DateTime.now().millisecondsSinceEpoch;
-      store.saveMeta(CompressionMetaEntity(
-        employeeId: empId, deviceId: 'test-device',
-        pruneStartId: 'msg-uuid-abc',
-        lastCompressionTime: now, messagesSinceCompression: 7,
-        updateTime: now,
-      ));
+      store.saveMeta(
+        CompressionMetaEntity(
+          employeeId: empId,
+          deviceId: 'test-device',
+          pruneStartId: 'msg-uuid-abc',
+          lastCompressionTime: now,
+          messagesSinceCompression: 7,
+          updateTime: now,
+        ),
+      );
 
       final meta = store.getMeta(empId, 'test-device')!;
       final session = SessionHistory(employeeId: empId);
@@ -413,12 +533,16 @@ void main() {
 
     test('清空会话时压缩元数据一并清除', () {
       final now = DateTime.now().millisecondsSinceEpoch;
-      store.saveMeta(CompressionMetaEntity(
-        employeeId: empId, deviceId: 'test-device',
-        pruneStartId: 'msg-uuid-xyz',
-        lastCompressionTime: now, messagesSinceCompression: 0,
-        updateTime: now,
-      ));
+      store.saveMeta(
+        CompressionMetaEntity(
+          employeeId: empId,
+          deviceId: 'test-device',
+          pruneStartId: 'msg-uuid-xyz',
+          lastCompressionTime: now,
+          messagesSinceCompression: 0,
+          updateTime: now,
+        ),
+      );
 
       store.deleteMeta(empId, 'test-device');
       expect(store.getMeta(empId, 'test-device'), isNull);
@@ -440,17 +564,24 @@ void main() {
 
       final session = _makeSession(messagesSinceCompression: 20);
       compressor.prepareCompression(
-        employeeId: empId, allMessages: msgs, session: session,
+        employeeId: empId,
+        allMessages: msgs,
+        session: session,
       );
 
       // 压缩后 pruneStartId 不为空
-      expect(session.pruneStartId.isNotEmpty, isTrue,
-          reason: '压缩后 pruneStartId 应非空');
+      expect(
+        session.pruneStartId.isNotEmpty,
+        isTrue,
+        reason: '压缩后 pruneStartId 应非空',
+      );
       expect(session.messagesSinceCompression, 0);
 
       // buildCompressedMessages 应正确过滤
       final result = compressor.buildCompressedMessages(
-        employeeId: empId, allMessages: msgs, session: session,
+        employeeId: empId,
+        allMessages: msgs,
+        session: session,
       );
 
       // 应包含提示词 + 保留的消息
@@ -473,7 +604,9 @@ void main() {
       // 第一次压缩
       var session = _makeSession(messagesSinceCompression: 20);
       compressor.prepareCompression(
-        employeeId: empId, allMessages: msgs, session: session,
+        employeeId: empId,
+        allMessages: msgs,
+        session: session,
       );
       final firstPruneId = session.pruneStartId;
       expect(firstPruneId.isNotEmpty, isTrue);
@@ -487,11 +620,16 @@ void main() {
 
       // 第二次压缩
       compressor.prepareCompression(
-        employeeId: empId, allMessages: msgs, session: session,
+        employeeId: empId,
+        allMessages: msgs,
+        session: session,
       );
       // pruneStartId 应该指向更后面的消息
-      expect(session.pruneStartId.isNotEmpty, isTrue,
-          reason: '第二次压缩后 pruneStartId 应非空');
+      expect(
+        session.pruneStartId.isNotEmpty,
+        isTrue,
+        reason: '第二次压缩后 pruneStartId 应非空',
+      );
       // 新的 pruneStartId 应该在消息列表中排在第一次之后
       final firstIdx = msgs.indexWhere((m) => m.id == firstPruneId);
       final secondIdx = msgs.indexWhere((m) => m.id == session.pruneStartId);
@@ -508,7 +646,9 @@ void main() {
 
       final session = _makeSession(messagesSinceCompression: 20);
       compressor.prepareCompression(
-        employeeId: empId, allMessages: msgs, session: session,
+        employeeId: empId,
+        allMessages: msgs,
+        session: session,
       );
 
       // 压缩后原始消息列表不变
@@ -563,7 +703,8 @@ class _DirectCompressionMetaStore {
   void saveMeta(CompressionMetaEntity meta) {
     final now = DateTime.now().millisecondsSinceEpoch;
     meta.updateTime = now;
-    _db.execute('''
+    _db.execute(
+      '''
       INSERT INTO context_compression_meta (
         employee_id, device_id, prune_start_id,
         last_compression_time,
@@ -574,31 +715,43 @@ class _DirectCompressionMetaStore {
         last_compression_time = excluded.last_compression_time,
         messages_since_compression = excluded.messages_since_compression,
         update_time = excluded.update_time
-    ''', [
-      meta.employeeId, meta.deviceId, meta.pruneStartId,
-      meta.lastCompressionTime, meta.messagesSinceCompression, meta.updateTime,
-    ]);
+    ''',
+      [
+        meta.employeeId,
+        meta.deviceId,
+        meta.pruneStartId,
+        meta.lastCompressionTime,
+        meta.messagesSinceCompression,
+        meta.updateTime,
+      ],
+    );
   }
 
   void incrementCoolDown(String employeeId, String deviceId) {
     final now = DateTime.now().millisecondsSinceEpoch;
-    _db.execute('''
+    _db.execute(
+      '''
       UPDATE context_compression_meta SET
         messages_since_compression = messages_since_compression + 1,
         update_time = ?
       WHERE employee_id = ? AND device_id = ?
-    ''', [now, employeeId, deviceId]);
+    ''',
+      [now, employeeId, deviceId],
+    );
   }
 
   void resetCoolDown(String employeeId, String deviceId) {
     final now = DateTime.now().millisecondsSinceEpoch;
-    _db.execute('''
+    _db.execute(
+      '''
       UPDATE context_compression_meta SET
         messages_since_compression = 0,
         last_compression_time = ?,
         update_time = ?
       WHERE employee_id = ? AND device_id = ?
-    ''', [now, now, employeeId, deviceId]);
+    ''',
+      [now, now, employeeId, deviceId],
+    );
   }
 
   void deleteMeta(String employeeId, String deviceId) {

@@ -136,8 +136,8 @@ class ContextCompressor {
     if (session.messagesSinceCompression < config.cooldownMessageCount) {
       // 补充：如果距离上次压缩超过 30 分钟，忽略消息数冷却
       if (session.lastCompressionTime > 0) {
-        final elapsed = DateTime.now().millisecondsSinceEpoch -
-            session.lastCompressionTime;
+        final elapsed =
+            DateTime.now().millisecondsSinceEpoch - session.lastCompressionTime;
         if (elapsed < _timeCooldownThresholdMs) {
           return false;
         }
@@ -185,24 +185,58 @@ class ContextCompressor {
     }
   }
 
-  /// 执行实际压缩逻辑（纯本地，不调用 LLM）
-  void _doCompression({
+  /// 强制触发一次上下文压缩。
+  ///
+  /// 用于真实 LLM 请求已经返回上下文长度溢出的场景。此时估算器可能偏低，
+  /// 或模型的实际上下文窗口小于配置值，所以绕过 token 阈值和冷却期检查。
+  /// 返回 true 表示压缩边界发生变化。
+  bool forceCompress({
     required String employeeId,
     required List<ChatMessage> allMessages,
     required SessionHistory session,
     String? systemPrompt,
   }) {
+    if (!config.enabled || allMessages.isEmpty) return false;
+
+    final lock = _sessionLocks.putIfAbsent(employeeId, () => _AsyncLock());
+    if (!lock.tryLock()) {
+      _log.debug('forceCompress: 会话 $employeeId 正在压缩中，跳过');
+      return false;
+    }
+
+    try {
+      return _doCompression(
+        employeeId: employeeId,
+        allMessages: allMessages,
+        session: session,
+        systemPrompt: systemPrompt,
+        forceAdvance: true,
+      );
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  /// 执行实际压缩逻辑（纯本地，不调用 LLM）
+  bool _doCompression({
+    required String employeeId,
+    required List<ChatMessage> allMessages,
+    required SessionHistory session,
+    String? systemPrompt,
+    bool forceAdvance = false,
+  }) {
     final budget = config.effectiveBudget;
-    if (budget <= 0) return;
+    if (budget <= 0) return false;
 
     // 估算系统提示 token
     final systemTokens = systemPrompt != null
-        ? _estimator.estimateTokens(systemPrompt) + 4 // message overhead
+        ? _estimator.estimateTokens(systemPrompt) +
+              4 // message overhead
         : 0;
 
     // 分组为轮次
     final turns = groupIntoTurns(allMessages);
-    if (turns.length <= 1) return; // 只有 0 或 1 个轮次，无法压缩
+    if (turns.length <= 1) return false; // 只有 0 或 1 个轮次，无法压缩
 
     // 最近 N 个轮次始终保留完整（由 recentTurnsKeep 配置）
     final recentTurnsCount = config.recentTurnsKeep.clamp(1, turns.length);
@@ -219,16 +253,16 @@ class ContextCompressor {
         '最近 $recentTurnsCount 轮 ($recentTokens tokens) + 系统 ($systemTokens tokens) '
         '已超出预算 ($budget tokens)，无法压缩',
       );
-      return;
+      return false;
     }
 
     // 旧轮次（可压缩区域）
     final oldTurns = turns.sublist(0, turns.length - recentTurnsCount);
-    if (oldTurns.isEmpty) return;
+    if (oldTurns.isEmpty) return false;
 
     // 计算目标 token：压缩到 targetThreshold 附近
     final targetTokens = config.targetThreshold - systemTokens - recentTokens;
-    if (targetTokens <= 0) return;
+    if (targetTokens <= 0) return false;
 
     // 从尾部往前扫描旧轮次，找到压缩边界
     // 保留策略：保留原文的旧消息 + 最近轮次 必须在 budget 内
@@ -237,8 +271,7 @@ class ContextCompressor {
 
     for (var i = oldTurns.length - 1; i >= 0; i--) {
       // 估算该轮次的原始 token（不做裁剪）
-      final turnTokens =
-          _estimateMessagesTotalCached(oldTurns[i].messages);
+      final turnTokens = _estimateMessagesTotalCached(oldTurns[i].messages);
 
       if (cumulativeTokens + turnTokens > targetTokens) {
         // 超出目标，从此轮次开始裁剪
@@ -254,7 +287,7 @@ class ContextCompressor {
     }
 
     // 确定保留区第一条消息的 ID（UUID）
-    String newPruneStartId;
+    var newPruneStartId = '';
     if (cutIndex < oldTurns.length) {
       final cutTurn = oldTurns[cutIndex];
       newPruneStartId = cutTurn.messages.isNotEmpty
@@ -262,22 +295,38 @@ class ContextCompressor {
           : '';
     } else {
       // 所有旧轮次都在保留区内
-      return;
+      return false;
     }
 
     if (newPruneStartId.isEmpty) {
       _log.warn('压缩计算结果 pruneStartId 为空，跳过');
-      return;
+      return false;
     }
 
-    // 如果新的 pruneStartId 和已有值相同，无需更新
-    if (newPruneStartId == session.pruneStartId) return;
+    // 如果新的 pruneStartId 和已有值相同，普通压缩无需更新；
+    // 强制压缩场景下说明 API 已确认上下文仍溢出，再向后推进一个旧轮次。
+    if (newPruneStartId == session.pruneStartId) {
+      if (!forceAdvance) return false;
+      final currentTurnIndex = turns.indexWhere(
+        (turn) => turn.messages.any((m) => m.id == session.pruneStartId),
+      );
+      final lastCompressibleTurnIndex = turns.length - recentTurnsCount - 1;
+      if (currentTurnIndex < 0 ||
+          currentTurnIndex >= lastCompressibleTurnIndex) {
+        return false;
+      }
+      final nextTurn = turns[currentTurnIndex + 1];
+      if (nextTurn.messages.isEmpty) return false;
+      newPruneStartId = nextTurn.messages.first.id;
+    }
 
     final now = DateTime.now().millisecondsSinceEpoch;
 
     // 可观测性：记录压缩指标
     final beforeTokens = _estimateMessagesTotalCached(allMessages);
-    final pruneStartIdx = allMessages.indexWhere((m) => m.id == newPruneStartId);
+    final pruneStartIdx = allMessages.indexWhere(
+      (m) => m.id == newPruneStartId,
+    );
     final prunedCount = pruneStartIdx >= 0 ? pruneStartIdx : 0;
     final turnsRetained = oldTurns.length - cutIndex + recentTurnsCount;
 
@@ -288,14 +337,16 @@ class ContextCompressor {
 
     // 持久化到 DB
     if (compressionMetaStore != null && deviceId != null) {
-      compressionMetaStore!.saveMeta(CompressionMetaEntity(
-        employeeId: employeeId,
-        deviceId: deviceId!,
-        pruneStartId: newPruneStartId,
-        lastCompressionTime: now,
-        messagesSinceCompression: 0,
-        updateTime: now,
-      ));
+      compressionMetaStore!.saveMeta(
+        CompressionMetaEntity(
+          employeeId: employeeId,
+          deviceId: deviceId!,
+          pruneStartId: newPruneStartId,
+          lastCompressionTime: now,
+          messagesSinceCompression: 0,
+          updateTime: now,
+        ),
+      );
     }
 
     // 清除 buildCompressedMessages 缓存
@@ -310,6 +361,8 @@ class ContextCompressor {
       'turnsRetained=$turnsRetained, '
       'prunedMessages=$prunedCount',
     );
+
+    return true;
   }
 
   /// 构建压缩后的消息列表（同步）
@@ -339,8 +392,7 @@ class ContextCompressor {
     final pruneStartIdx = pruneId.isNotEmpty
         ? allMessages.indexWhere((m) => m.id == pruneId)
         : -1;
-    final currentGeneration =
-        allMessages.length * 10000 + pruneStartIdx;
+    final currentGeneration = allMessages.length * 10000 + pruneStartIdx;
     if (_cachedCompressed != null && _cacheGeneration == currentGeneration) {
       return _cachedCompressed!;
     }
@@ -349,11 +401,13 @@ class ContextCompressor {
 
     // 1. 系统提示
     if (systemPrompt != null && systemPrompt.isNotEmpty) {
-      result.add(ChatMessage.system(
-        id: '',
-        employeeId: employeeId,
-        content: systemPrompt,
-      ));
+      result.add(
+        ChatMessage.system(
+          id: '',
+          employeeId: employeeId,
+          content: systemPrompt,
+        ),
+      );
     }
 
     // 2. 收集被省略的消息，生成本地摘要
@@ -364,15 +418,16 @@ class ContextCompressor {
 
     if (omittedMessages.isNotEmpty) {
       final summary = _buildLocalSummary(omittedMessages);
-      result.add(ChatMessage.system(
-        id: '',
-        employeeId: employeeId,
-        content: summary,
-      ));
+      result.add(
+        ChatMessage.system(id: '', employeeId: employeeId, content: summary),
+      );
     }
 
     // 3. 计算最近轮次的 seq 阈值（用于 toolResultMaxChars 截断）
-    final recentSeqThreshold = _computeRecentSeqThresholdById(allMessages, pruneStartIdx);
+    final recentSeqThreshold = _computeRecentSeqThresholdById(
+      allMessages,
+      pruneStartIdx,
+    );
 
     // 4. 遍历消息：保留 pruneStartId 及之后的消息
     for (var i = 0; i < allMessages.length; i++) {
@@ -418,11 +473,12 @@ class ContextCompressor {
     final userIntents = omittedMessages
         .where((m) => m.role == MessageRole.user)
         .map((m) {
-      final content = m.content ?? '';
-      return content.length > 100
-          ? '${content.substring(0, 100)}...'
-          : content;
-    }).toList();
+          final content = m.content ?? '';
+          return content.length > 100
+              ? '${content.substring(0, 100)}...'
+              : content;
+        })
+        .toList();
 
     if (userIntents.isNotEmpty) {
       buffer.writeln('### 用户历史意图：');
@@ -433,22 +489,26 @@ class ContextCompressor {
 
     // 提取关键 AI 结论（assistant 消息中有实质内容的）
     final aiConclusions = omittedMessages
-        .where((m) =>
-            m.role == MessageRole.assistant &&
-            m.toolCalls == null &&
-            (m.content ?? '').trim().isNotEmpty)
+        .where(
+          (m) =>
+              m.role == MessageRole.assistant &&
+              m.toolCalls == null &&
+              (m.content ?? '').trim().isNotEmpty,
+        )
         .map((m) {
-      final content = m.content!.trim();
-      return content.length > 80
-          ? '${content.substring(0, 80)}...'
-          : content;
-    }).toList();
+          final content = m.content!.trim();
+          return content.length > 80
+              ? '${content.substring(0, 80)}...'
+              : content;
+        })
+        .toList();
 
     if (aiConclusions.isNotEmpty) {
       buffer.writeln('### AI 历史回复要点：');
       // 最多保留 5 条，避免摘要过长
-      final displayConclusions =
-          aiConclusions.length > 5 ? aiConclusions.sublist(0, 5) : aiConclusions;
+      final displayConclusions = aiConclusions.length > 5
+          ? aiConclusions.sublist(0, 5)
+          : aiConclusions;
       for (var i = 0; i < displayConclusions.length; i++) {
         buffer.writeln('${i + 1}. ${displayConclusions[i]}');
       }
@@ -602,8 +662,8 @@ class ContextCompressor {
                     .map((r) => r.toolCallId)
                     .toSet()
               : (ids.contains(msg.toolCallId ?? '')
-                  ? {msg.toolCallId ?? ''}
-                  : <String>{});
+                    ? {msg.toolCallId ?? ''}
+                    : <String>{});
 
           if (matchIds.isEmpty) {
             toRemove.add(i);
@@ -676,8 +736,7 @@ class ContextCompressor {
           return '${tc.name}($argsPreview)';
         })
         .join('; ');
-    final inlineNote =
-        '[已调用工具: $toolSummary，但结果因上下文压缩被移除，请勿重复调用]';
+    final inlineNote = '[已调用工具: $toolSummary，但结果因上下文压缩被移除，请勿重复调用]';
 
     final newContent = (content == null || content.trim().isEmpty)
         ? inlineNote
@@ -777,11 +836,9 @@ class ContextCompressor {
   ) {
     final result = <ChatMessage>[];
     if (systemPrompt != null && systemPrompt.isNotEmpty) {
-      result.add(ChatMessage.system(
-        id: '',
-        employeeId: '',
-        content: systemPrompt,
-      ));
+      result.add(
+        ChatMessage.system(id: '', employeeId: '', content: systemPrompt),
+      );
     }
     result.addAll(allMessages);
     return result;

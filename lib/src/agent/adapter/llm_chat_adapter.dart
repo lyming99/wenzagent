@@ -224,12 +224,21 @@ class LlmChatAdapter implements IChatAdapter {
   /// [attempt] 当前重试次数（从 1 开始）
   /// [maxRetries] 最大重试次数
   /// [error] 导致重试的错误信息
+  /// [errors] 本轮重试已收集到的错误列表
+  /// [delayMs] 下一次重试前的等待时间（毫秒）
+  /// [contextOverflow] 是否识别为上下文长度溢出
+  /// [contextCompressed] 是否已触发上下文压缩后重试
   void Function({
     required bool isRetrying,
     int? attempt,
     int? maxRetries,
     String? error,
-  })? onRetryStatus;
+    List<String>? errors,
+    int? delayMs,
+    bool? contextOverflow,
+    bool? contextCompressed,
+  })?
+  onRetryStatus;
 
   // ===== IChatAdapter 属性实现 =====
 
@@ -747,14 +756,17 @@ class LlmChatAdapter implements IChatAdapter {
       builder.maxTokens(config.options.maxTokens!);
     } else {
       // Ollama 本地模型上下文窗口通常较小，使用保守默认值
-      final defaultMaxTokens =
-          config.provider == LLMProvider.ollama ? 4096 : 32000;
+      final defaultMaxTokens = config.provider == LLMProvider.ollama
+          ? 4096
+          : 32000;
       builder.maxTokens(defaultMaxTokens);
     }
     builder.reasoning(false);
 
     if (config.options.reasoningEffort != null) {
-      final effort = llm.ReasoningEffort.fromString(config.options.reasoningEffort!);
+      final effort = llm.ReasoningEffort.fromString(
+        config.options.reasoningEffort!,
+      );
       if (effort != null) {
         builder.reasoningEffort(effort);
       }

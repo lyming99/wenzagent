@@ -26,10 +26,7 @@ void main() {
             requestOptions: _reqOpts,
             type: DioExceptionType.badResponse,
             message: 'Too Many Requests',
-            response: Response(
-              requestOptions: _reqOpts,
-              statusCode: 429,
-            ),
+            response: Response(requestOptions: _reqOpts, statusCode: 429),
           ),
         ),
         isTrue,
@@ -43,10 +40,7 @@ void main() {
             requestOptions: _reqOpts,
             type: DioExceptionType.badResponse,
             message: 'Internal Server Error',
-            response: Response(
-              requestOptions: _reqOpts,
-              statusCode: 500,
-            ),
+            response: Response(requestOptions: _reqOpts, statusCode: 500),
           ),
         ),
         isTrue,
@@ -87,14 +81,12 @@ void main() {
             DioException(
               requestOptions: _reqOpts,
               type: DioExceptionType.badResponse,
-              message: "Invalid request: This model's maximum context length is "
+              message:
+                  "Invalid request: This model's maximum context length is "
                   "1048576 tokens. However, you requested 1529666 tokens "
                   "(1497666 in the messages, 32000 in the completion). "
                   "Please reduce the length of the messages or completion.",
-              response: Response(
-                requestOptions: _reqOpts,
-                statusCode: 400,
-              ),
+              response: Response(requestOptions: _reqOpts, statusCode: 400),
             ),
           ),
           isFalse,
@@ -109,10 +101,7 @@ void main() {
               requestOptions: _reqOpts,
               type: DioExceptionType.badResponse,
               message: "This model's maximum context length is 8192 tokens",
-              response: Response(
-                requestOptions: _reqOpts,
-                statusCode: 400,
-              ),
+              response: Response(requestOptions: _reqOpts, statusCode: 400),
             ),
           ),
           isFalse,
@@ -121,21 +110,44 @@ void main() {
       });
 
       test('context_length_exceeded 不重试', () {
+        final error = DioException(
+          requestOptions: _reqOpts,
+          type: DioExceptionType.badResponse,
+          message: 'context_length_exceeded: Token limit exceeded',
+          response: Response(requestOptions: _reqOpts, statusCode: 400),
+        );
+
         expect(
-          RetryUtil.isRetryableError(
-            DioException(
-              requestOptions: _reqOpts,
-              type: DioExceptionType.badResponse,
-              message: 'context_length_exceeded: Token limit exceeded',
-              response: Response(
-                requestOptions: _reqOpts,
-                statusCode: 400,
-              ),
-            ),
-          ),
+          RetryUtil.isRetryableError(error),
           isFalse,
           reason: 'context_length_exceeded 不应重试',
         );
+        expect(
+          RetryUtil.isContextOverflowError(error),
+          isTrue,
+          reason: '适配器应能单独识别 context overflow 以触发压缩补救',
+        );
+      });
+
+      test('response body 中的 context overflow 可识别', () {
+        final error = DioException(
+          requestOptions: _reqOpts,
+          type: DioExceptionType.badResponse,
+          message: 'Bad request',
+          response: Response(
+            requestOptions: _reqOpts,
+            statusCode: 400,
+            data: {
+              'error': {
+                'code': 'context_length_exceeded',
+                'message': 'Please reduce the length of the messages.',
+              },
+            },
+          ),
+        );
+
+        expect(RetryUtil.isRetryableError(error), isFalse);
+        expect(RetryUtil.isContextOverflowError(error), isTrue);
       });
 
       test('Anthropic prompt is too long 不重试', () {
@@ -145,10 +157,7 @@ void main() {
               requestOptions: _reqOpts,
               type: DioExceptionType.badResponse,
               message: 'prompt is too long: 200000 tokens > 190000 max',
-              response: Response(
-                requestOptions: _reqOpts,
-                statusCode: 400,
-              ),
+              response: Response(requestOptions: _reqOpts, statusCode: 400),
             ),
           ),
           isFalse,
@@ -164,10 +173,7 @@ void main() {
               type: DioExceptionType.badResponse,
               message:
                   'Request too large: exceeds the maximum number of tokens per request',
-              response: Response(
-                requestOptions: _reqOpts,
-                statusCode: 400,
-              ),
+              response: Response(requestOptions: _reqOpts, statusCode: 400),
             ),
           ),
           isFalse,
@@ -183,10 +189,7 @@ void main() {
               requestOptions: _reqOpts,
               type: DioExceptionType.badResponse,
               message: 'Bad request: invalid parameter',
-              response: Response(
-                requestOptions: _reqOpts,
-                statusCode: 400,
-              ),
+              response: Response(requestOptions: _reqOpts, statusCode: 400),
             ),
           ),
           isFalse,
@@ -217,9 +220,7 @@ void main() {
       test('不含上下文关键词的 requested 错误仍可重试', () {
         // "requested" 单独出现不应触发 token 超限判断
         expect(
-          RetryUtil.isRetryableError(
-            Exception('The server requested a retry'),
-          ),
+          RetryUtil.isRetryableError(Exception('The server requested a retry')),
           isTrue,
           reason: '不含 token/context/length 关键词的 requested 错误应可重试',
         );

@@ -60,6 +60,8 @@ abstract class _AgentImplBase implements IAgent {
   TokenUsageTracker? get _tokenUsageTracker;
   set _tokenUsageTracker(TokenUsageTracker? value);
   Map<String, Map<String, dynamic>> get _toolCallArguments;
+  AgentRetryProgress? get _retryProgress;
+  set _retryProgress(AgentRetryProgress? value);
   static Logger get _log => Logger('AgentImpl');
 
   void _touch();
@@ -179,6 +181,13 @@ class AgentImpl extends _AgentImplBase
   /// 当前 Agent 状态
   @override
   AgentStatus _status = AgentStatus.idle;
+
+  /// 当前重试进度
+  @override
+  AgentRetryProgress? _retryProgress;
+
+  /// 当前/最近一次 LLM 重试过程中收集到的错误历史
+  final List<String> _retryErrorHistory = [];
 
   /// 引用计数
   @override
@@ -535,6 +544,8 @@ class AgentImpl extends _AgentImplBase
     await _eventController.close();
 
     _callingToolIds.clear();
+    _retryErrorHistory.clear();
+    _retryProgress = null;
     _tokenUsageTracker?.dispose();
     _tokenUsageTracker = null;
   }
@@ -700,6 +711,7 @@ class AgentImpl extends _AgentImplBase
       queuedMessageIds: _processor?.queuedMessageIds ?? [],
       isStreaming: _chatAdapter.isStreaming,
       queueLength: _processor?.queueLength ?? 0,
+      retryProgress: _retryProgress,
     );
   }
 
@@ -1634,18 +1646,86 @@ class AgentImpl extends _AgentImplBase
     int? attempt,
     int? maxRetries,
     String? error,
+    List<String>? errors,
+    int? delayMs,
+    bool? contextOverflow,
+    bool? contextCompressed,
   }) {
     if (_status == AgentStatus.disposed) return;
 
     final messageId = _processor?.currentProcessingMessageId;
+    if (!isRetrying && error == null && errors == null) {
+      _retryProgress = null;
+      _retryErrorHistory.clear();
+
+      if (_status == AgentStatus.retrying) {
+        final processorStatus = _processor?.status;
+        if (processorStatus != null) {
+          _syncProcessorStatus(processorStatus);
+        } else {
+          _setStatus(AgentStatus.processing);
+        }
+      }
+
+      if (messageId != null) {
+        _broadcasterBroadcastMessageStatusChange(
+          messageId: messageId,
+          status: AgentMessageStatus.processing,
+          extraData: const {'retryEnded': true},
+        );
+      }
+      return;
+    }
+
+    final incomingErrors = errors;
+    if (incomingErrors != null) {
+      _retryErrorHistory
+        ..clear()
+        ..addAll(incomingErrors);
+    } else if (error != null && error.isNotEmpty) {
+      if (_retryErrorHistory.isEmpty || _retryErrorHistory.last != error) {
+        _retryErrorHistory.add(error);
+      }
+    }
+
+    final lastRetryError =
+        error ??
+        (_retryErrorHistory.isNotEmpty ? _retryErrorHistory.last : null);
+
     if (isRetrying) {
+      final nextRetryAt = delayMs != null
+          ? DateTime.now().add(Duration(milliseconds: delayMs))
+          : null;
+      _retryProgress = AgentRetryProgress(
+        attempt: attempt ?? 0,
+        maxRetries: maxRetries ?? 0,
+        error: lastRetryError,
+        errors: List.unmodifiable(_retryErrorHistory),
+        delayMs: delayMs,
+        nextRetryAt: nextRetryAt,
+        contextOverflow: contextOverflow ?? false,
+        contextCompressed: contextCompressed ?? false,
+      );
+      final wasRetrying = _status == AgentStatus.retrying;
       _setStatus(AgentStatus.retrying);
+      if (wasRetrying) {
+        _emitStateSnapshot();
+      }
       if (messageId != null) {
         _broadcasterBroadcastMessageStatusChange(
           messageId: messageId,
           status: AgentMessageStatus.retrying,
-          error: error,
-          extraData: {'attempt': ?attempt, 'maxRetries': ?maxRetries},
+          error: lastRetryError,
+          extraData: {
+            'attempt': ?attempt,
+            'maxRetries': ?maxRetries,
+            'delayMs': ?delayMs,
+            'nextRetryAt': ?nextRetryAt?.toIso8601String(),
+            'errors': List.unmodifiable(_retryErrorHistory),
+            'contextOverflow': ?contextOverflow,
+            'contextCompressed': ?contextCompressed,
+            'retryProgress': _retryProgress!.toMap(),
+          },
         );
       }
       _eventController.add(
@@ -1655,12 +1735,37 @@ class AgentImpl extends _AgentImplBase
             'messageId': ?messageId,
             'attempt': ?attempt,
             'maxRetries': ?maxRetries,
-            'error': ?error,
+            'error': ?lastRetryError,
+            'errors': List.unmodifiable(_retryErrorHistory),
+            'delayMs': ?delayMs,
+            'nextRetryAt': ?nextRetryAt?.toIso8601String(),
+            'contextOverflow': ?contextOverflow,
+            'contextCompressed': ?contextCompressed,
+            'retryProgress': _retryProgress!.toMap(),
           },
           employeeId: employeeId,
         ),
       );
       return;
+    }
+
+    final hasTerminalRetryError =
+        lastRetryError != null || _retryErrorHistory.isNotEmpty;
+    if (hasTerminalRetryError && _status == AgentStatus.retrying) {
+      _retryProgress = AgentRetryProgress(
+        attempt:
+            attempt ?? _retryProgress?.attempt ?? _retryErrorHistory.length,
+        maxRetries: maxRetries ?? _retryProgress?.maxRetries ?? 0,
+        error: lastRetryError,
+        errors: List.unmodifiable(_retryErrorHistory),
+        contextOverflow:
+            contextOverflow ?? _retryProgress?.contextOverflow ?? false,
+        contextCompressed:
+            contextCompressed ?? _retryProgress?.contextCompressed ?? false,
+      );
+    } else {
+      _retryProgress = null;
+      _retryErrorHistory.clear();
     }
 
     if (_status == AgentStatus.retrying) {
@@ -1672,11 +1777,19 @@ class AgentImpl extends _AgentImplBase
       }
     }
 
+    if (hasTerminalRetryError) {
+      _emitStateSnapshot();
+    }
+
     if (messageId != null) {
       _broadcasterBroadcastMessageStatusChange(
         messageId: messageId,
         status: AgentMessageStatus.processing,
-        extraData: const {'retryEnded': true},
+        error: lastRetryError,
+        extraData: {
+          'retryEnded': true,
+          if (_retryProgress != null) 'retryProgress': _retryProgress!.toMap(),
+        },
       );
     }
   }
@@ -1688,6 +1801,12 @@ class AgentImpl extends _AgentImplBase
         _setStatus(AgentStatus.idle);
         break;
       case AgentStatus.processing:
+        if (_status != AgentStatus.retrying) {
+          _retryProgress = null;
+          _retryErrorHistory.clear();
+        }
+        _setStatus(processorStatus);
+        break;
       case AgentStatus.streaming:
       case AgentStatus.retrying:
         _setStatus(processorStatus);
@@ -1706,6 +1825,10 @@ class AgentImpl extends _AgentImplBase
     if (_status == newStatus) return;
     _status = newStatus;
 
+    _emitStateSnapshot();
+  }
+
+  void _emitStateSnapshot() {
     final snapshot = getStateSnapshot();
     _stateController.add(snapshot);
     _eventController.add(

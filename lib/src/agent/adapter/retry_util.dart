@@ -45,8 +45,7 @@ class RetryUtil {
     Future<T> Function() fn, {
     RetryConfig config = const RetryConfig(),
     bool Function(Object error)? shouldRetry,
-    Future<void> Function(int attempt, Object error, Duration delay)?
-    onRetry,
+    Future<void> Function(int attempt, Object error, Duration delay)? onRetry,
   }) async {
     final errors = <Object>[];
 
@@ -106,7 +105,7 @@ class RetryUtil {
   static bool isRetryableError(Object error) {
     // 先检查错误消息中是否包含 token/上下文超限关键词
     // 这类错误重试无意义，只会浪费时间和 API 配额
-    if (_isTokenLimitError(error)) {
+    if (isContextOverflowError(error)) {
       _log.warn('检测到 token 超限错误，不重试: $error');
       return false;
     }
@@ -130,8 +129,7 @@ class RetryUtil {
               return true;
             }
             // 408 请求超时，5xx 服务端错误
-            return statusCode == 408 ||
-                (statusCode >= 500 && statusCode < 600);
+            return statusCode == 408 || (statusCode >= 500 && statusCode < 600);
           }
           return false;
         case DioExceptionType.cancel:
@@ -152,6 +150,14 @@ class RetryUtil {
     return true;
   }
 
+  /// 判断错误是否为上下文/token 长度溢出。
+  ///
+  /// 该判断本身不代表应按普通网络错误重试；主 Agent 可在识别后
+  /// 先触发上下文压缩，再重新发起一次 LLM 请求。
+  static bool isContextOverflowError(Object error) {
+    return _isTokenLimitError(error);
+  }
+
   /// 检查错误是否为 token/上下文长度超限错误
   ///
   /// 各提供商的错误消息模式：
@@ -160,7 +166,7 @@ class RetryUtil {
   /// - Google: "Request too large" / "exceeds the maximum number of tokens"
   /// - 通用: "context_length_exceeded" / "token limit" / "maximum context"
   static bool _isTokenLimitError(Object error) {
-    final errorStr = error.toString().toLowerCase();
+    final errorStr = _stringifyError(error).toLowerCase();
 
     // 常见的 token/上下文超限关键词
     const tokenLimitPatterns = [
@@ -186,11 +192,24 @@ class RetryUtil {
       'maxtokens',
     ];
 
-    final hasContextKeyword =
-        contextKeywords.any((kw) => errorStr.contains(kw));
+    final hasContextKeyword = contextKeywords.any(
+      (kw) => errorStr.contains(kw),
+    );
     if (!hasContextKeyword) return false;
 
     return tokenLimitPatterns.any((p) => errorStr.contains(p));
+  }
+
+  static String _stringifyError(Object error) {
+    if (error is DioException) {
+      return [
+        error.message,
+        error.error?.toString(),
+        error.response?.data?.toString(),
+        error.toString(),
+      ].whereType<String>().join('\n');
+    }
+    return error.toString();
   }
 
   /// 检查 429 错误是否为配额用尽（而非频率限制）
@@ -203,7 +222,8 @@ class RetryUtil {
   /// 配额用尽不应重试（重试只会浪费延迟），而频率限制可以等待后重试。
   static bool _isQuotaExhaustedError(DioException error) {
     final responseBody = error.response?.data;
-    final errorStr = responseBody?.toString().toLowerCase() ??
+    final errorStr =
+        responseBody?.toString().toLowerCase() ??
         error.message?.toLowerCase() ??
         '';
 

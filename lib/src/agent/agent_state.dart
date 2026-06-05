@@ -69,6 +69,90 @@ enum AgentMessageStatus {
   }
 }
 
+/// LLM 重试进度（支持 JSON 序列化）
+class AgentRetryProgress {
+  /// 当前重试次数（从 1 开始）
+  final int attempt;
+
+  /// 最大重试次数
+  final int maxRetries;
+
+  /// 最近一次触发重试的错误
+  final String? error;
+
+  /// 重试过程中收集到的错误列表
+  ///
+  /// 按发生顺序记录；[error] 始终表示最后一条错误，用于兼容旧调用方。
+  final List<String> errors;
+
+  /// 下一次重试前的等待时间（毫秒）
+  final int? delayMs;
+
+  /// 预计下一次重试时间
+  final DateTime? nextRetryAt;
+
+  /// 本次重试是否由上下文长度溢出触发
+  final bool contextOverflow;
+
+  /// 检测到上下文长度溢出后，是否已经触发过上下文压缩
+  final bool contextCompressed;
+
+  /// 更新时间
+  final DateTime updatedAt;
+
+  AgentRetryProgress({
+    required this.attempt,
+    required this.maxRetries,
+    this.error,
+    this.errors = const [],
+    this.delayMs,
+    this.nextRetryAt,
+    this.contextOverflow = false,
+    this.contextCompressed = false,
+    DateTime? updatedAt,
+  }) : updatedAt = updatedAt ?? DateTime.now();
+
+  /// 重试进度比例，范围 0~1
+  double get progress => maxRetries <= 0 ? 1 : attempt / maxRetries;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'attempt': attempt,
+      'maxRetries': maxRetries,
+      if (error != null) 'error': error,
+      if (errors.isNotEmpty) 'errors': errors,
+      if (delayMs != null) 'delayMs': delayMs,
+      if (nextRetryAt != null) 'nextRetryAt': nextRetryAt!.toIso8601String(),
+      if (contextOverflow) 'contextOverflow': true,
+      if (contextCompressed) 'contextCompressed': true,
+      'progress': progress,
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  factory AgentRetryProgress.fromMap(Map<String, dynamic> map) {
+    final error = map['error'] as String?;
+    final errors =
+        (map['errors'] as List?)?.cast<String>() ??
+        (error != null ? [error] : const <String>[]);
+    return AgentRetryProgress(
+      attempt: (map['attempt'] as num?)?.toInt() ?? 0,
+      maxRetries: (map['maxRetries'] as num?)?.toInt() ?? 0,
+      error: error,
+      errors: errors,
+      delayMs: (map['delayMs'] as num?)?.toInt(),
+      nextRetryAt: map['nextRetryAt'] != null
+          ? DateTime.parse(map['nextRetryAt'] as String)
+          : null,
+      contextOverflow: map['contextOverflow'] as bool? ?? false,
+      contextCompressed: map['contextCompressed'] as bool? ?? false,
+      updatedAt: map['updatedAt'] != null
+          ? DateTime.parse(map['updatedAt'] as String)
+          : DateTime.now(),
+    );
+  }
+}
+
 /// Agent 状态快照（支持 JSON 序列化）
 class AgentStateSnapshot {
   /// Agent 状态
@@ -86,6 +170,9 @@ class AgentStateSnapshot {
   /// 排队消息数量
   final int queueLength;
 
+  /// 重试进度（仅 retrying 状态下通常有值）
+  final AgentRetryProgress? retryProgress;
+
   /// 时间戳
   final DateTime timestamp;
 
@@ -95,6 +182,7 @@ class AgentStateSnapshot {
     this.queuedMessageIds = const [],
     this.isStreaming = false,
     this.queueLength = 0,
+    this.retryProgress,
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
 
@@ -105,6 +193,7 @@ class AgentStateSnapshot {
       'queuedMessageIds': queuedMessageIds,
       'isStreaming': isStreaming,
       'queueLength': queueLength,
+      if (retryProgress != null) 'retryProgress': retryProgress!.toMap(),
       'timestamp': timestamp.toIso8601String(),
     };
   }
@@ -117,6 +206,11 @@ class AgentStateSnapshot {
           (map['queuedMessageIds'] as List?)?.cast<String>() ?? [],
       isStreaming: map['isStreaming'] as bool? ?? false,
       queueLength: map['queueLength'] as int? ?? 0,
+      retryProgress: map['retryProgress'] is Map<String, dynamic>
+          ? AgentRetryProgress.fromMap(
+              map['retryProgress'] as Map<String, dynamic>,
+            )
+          : null,
       timestamp: map['timestamp'] != null
           ? DateTime.parse(map['timestamp'] as String)
           : DateTime.now(),

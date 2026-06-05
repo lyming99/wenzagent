@@ -19,12 +19,12 @@ class _RemoteOps {
     required void Function(List<Map<String, dynamic>>) removeConfirmedMessages,
     required StreamController<AgentEvent> eventController,
     required StreamController<AgentStateSnapshot> stateController,
-  })  : _rpcUtil = rpcUtil,
-        _employeeId = employeeId,
-        _remoteCache = remoteCache,
-        _removeConfirmedMessages = removeConfirmedMessages,
-        _eventController = eventController,
-        _stateController = stateController;
+  }) : _rpcUtil = rpcUtil,
+       _employeeId = employeeId,
+       _remoteCache = remoteCache,
+       _removeConfirmedMessages = removeConfirmedMessages,
+       _eventController = eventController,
+       _stateController = stateController;
 
   // ===== 会话消息查询 =====
 
@@ -35,7 +35,8 @@ class _RemoteOps {
     final request = GetSessionMessagesRequest(employeeId: _employeeId);
     final result = await _rpcUtil.getSessionMessages(request);
     final messages =
-        (result['result']['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        (result['result']['messages'] as List?)?.cast<Map<String, dynamic>>() ??
+        [];
     // 根据返回的消息ID，从消息队列中移除
     _removeConfirmedMessages(messages);
     // 转换为 AgentMessage 列表
@@ -55,7 +56,8 @@ class _RemoteOps {
     );
     final result = await _rpcUtil.getSessionMessagesByUserCount(request);
     final messages =
-        (result['result']['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        (result['result']['messages'] as List?)?.cast<Map<String, dynamic>>() ??
+        [];
     // 根据返回的消息ID，从消息队列中移除
     _removeConfirmedMessages(messages);
     // 转换为 AgentMessage 列表
@@ -77,7 +79,8 @@ class _RemoteOps {
     );
     final result = await _rpcUtil.getSessionMessagesPaged(request);
     final messages =
-        (result['result']['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        (result['result']['messages'] as List?)?.cast<Map<String, dynamic>>() ??
+        [];
     // 根据返回的消息ID，从消息队列中移除
     _removeConfirmedMessages(messages);
     // 转换为 AgentMessage 列表
@@ -104,7 +107,8 @@ class _RemoteOps {
     );
     final result = await _rpcUtil.getUnreceivedMessages(request);
     final messages =
-        (result['result']['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        (result['result']['messages'] as List?)?.cast<Map<String, dynamic>>() ??
+        [];
     // 转换为 AgentMessage 列表
     return messages.map((m) => AgentMessage.fromMap(m)).toList();
   }
@@ -141,7 +145,8 @@ class _RemoteOps {
     );
     final result = await _rpcUtil.getMessagesAfterSeq(request);
     final messages =
-        (result['result']['messages'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        (result['result']['messages'] as List?)?.cast<Map<String, dynamic>>() ??
+        [];
     return messages.map((m) => AgentMessage.fromMap(m)).toList();
   }
 
@@ -249,28 +254,41 @@ class _RemoteOps {
   Future<List<Map<String, dynamic>>> getCurrentTopics() async {
     final request = GetCurrentTopicsRequest(employeeId: _employeeId);
     final result = await _rpcUtil.getCurrentTopics(request);
-    return (result['result']['topics'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    return (result['result']['topics'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
   }
 
   /// 获取未完成待办主题
   Future<List<Map<String, dynamic>>> getPendingTopics() async {
     final request = GetPendingTopicsRequest(employeeId: _employeeId);
     final result = await _rpcUtil.getPendingTopics(request);
-    return (result['result']['topics'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    return (result['result']['topics'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
   }
 
   /// 获取所有待办主题
   Future<List<Map<String, dynamic>>> getAllTopics() async {
     final request = GetAllTopicsRequest(employeeId: _employeeId);
     final result = await _rpcUtil.getAllTopics(request);
-    return (result['result']['topics'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    return (result['result']['topics'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
   }
 
   /// 获取已完成主题
-  Future<List<Map<String, dynamic>>> getCompletedTopics({int limit = 50}) async {
-    final request = GetCompletedTopicsRequest(employeeId: _employeeId, limit: limit);
+  Future<List<Map<String, dynamic>>> getCompletedTopics({
+    int limit = 50,
+  }) async {
+    final request = GetCompletedTopicsRequest(
+      employeeId: _employeeId,
+      limit: limit,
+    );
     final result = await _rpcUtil.getCompletedTopics(request);
-    return (result['result']['topics'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    return (result['result']['topics'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
   }
 
   /// 获取待办统计
@@ -283,7 +301,11 @@ class _RemoteOps {
   // ===== Todo 写操作 =====
 
   /// 更新主题内容
-  Future<void> updateTopicContent(String topicId, {String? title, String? description}) async {
+  Future<void> updateTopicContent(
+    String topicId, {
+    String? title,
+    String? description,
+  }) async {
     final request = UpdateTopicContentRequest(
       employeeId: _employeeId,
       topicId: topicId,
@@ -295,19 +317,29 @@ class _RemoteOps {
 
   /// 删除主题
   Future<void> deleteTopic(String topicId) async {
-    final request = DeleteTopicRequest(employeeId: _employeeId, topicId: topicId);
+    final request = DeleteTopicRequest(
+      employeeId: _employeeId,
+      topicId: topicId,
+    );
     await _rpcUtil.deleteTopic(request);
   }
 
   /// 更新主题状态
   Future<void> updateTopicStatus(String topicId, String status) async {
-    final request = UpdateTopicStatusRequest(employeeId: _employeeId, topicId: topicId, status: status);
+    final request = UpdateTopicStatusRequest(
+      employeeId: _employeeId,
+      topicId: topicId,
+      status: status,
+    );
     await _rpcUtil.updateTopicStatus(request);
   }
 
   /// 批量更新主题排序
   Future<void> reorderTopics(List<String> topicIds) async {
-    final request = ReorderTopicsRequest(employeeId: _employeeId, topicIds: topicIds);
+    final request = ReorderTopicsRequest(
+      employeeId: _employeeId,
+      topicIds: topicIds,
+    );
     await _rpcUtil.reorderTopics(request);
   }
 
@@ -321,9 +353,13 @@ class _RemoteOps {
 
   /// 获取主题下的任务子项
   Future<List<Map<String, dynamic>>> getTaskItemsByTopic(String topicId) async {
-    final request = GetTaskItemsByTopicRequest(employeeId: _employeeId, topicId: topicId);
+    final request = GetTaskItemsByTopicRequest(
+      employeeId: _employeeId,
+      topicId: topicId,
+    );
     final result = await _rpcUtil.getTaskItemsByTopic(request);
-    return (result['result']['tasks'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    return (result['result']['tasks'] as List?)?.cast<Map<String, dynamic>>() ??
+        [];
   }
 
   /// 更新任务子项状态
@@ -337,7 +373,11 @@ class _RemoteOps {
   }
 
   /// 更新任务子项内容
-  Future<void> updateTaskItemContent(String taskId, {String? title, String? content}) async {
+  Future<void> updateTaskItemContent(
+    String taskId, {
+    String? title,
+    String? content,
+  }) async {
     final request = UpdateTaskItemContentRequest(
       employeeId: _employeeId,
       taskId: taskId,
@@ -349,13 +389,19 @@ class _RemoteOps {
 
   /// 删除任务子项
   Future<void> deleteTaskItem(String taskId) async {
-    final request = DeleteTaskItemRequest(employeeId: _employeeId, taskId: taskId);
+    final request = DeleteTaskItemRequest(
+      employeeId: _employeeId,
+      taskId: taskId,
+    );
     await _rpcUtil.deleteTaskItem(request);
   }
 
   /// 批量更新任务子项排序
   Future<void> reorderTaskItems(List<String> taskItemIds) async {
-    final request = ReorderTaskItemsRequest(employeeId: _employeeId, taskItemIds: taskItemIds);
+    final request = ReorderTaskItemsRequest(
+      employeeId: _employeeId,
+      taskItemIds: taskItemIds,
+    );
     await _rpcUtil.reorderTaskItems(request);
   }
 
@@ -365,14 +411,19 @@ class _RemoteOps {
   Future<List<Map<String, dynamic>>> getActiveSpecs() async {
     final request = GetActiveSpecsRequest(employeeId: _employeeId);
     final result = await _rpcUtil.getActiveSpecs(request);
-    return (result['result']['specs'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    return (result['result']['specs'] as List?)?.cast<Map<String, dynamic>>() ??
+        [];
   }
 
   /// 获取已完成 spec 项
   Future<List<Map<String, dynamic>>> getCompletedSpecs({int limit = 50}) async {
-    final request = GetCompletedSpecsRequest(employeeId: _employeeId, limit: limit);
+    final request = GetCompletedSpecsRequest(
+      employeeId: _employeeId,
+      limit: limit,
+    );
     final result = await _rpcUtil.getCompletedSpecs(request);
-    return (result['result']['specs'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    return (result['result']['specs'] as List?)?.cast<Map<String, dynamic>>() ??
+        [];
   }
 
   /// 获取 spec 统计
@@ -418,7 +469,10 @@ class _RemoteOps {
 
   /// 批量更新 spec 排序
   Future<void> reorderSpecs(List<String> specIds) async {
-    final request = ReorderSpecsRequest(employeeId: _employeeId, specIds: specIds);
+    final request = ReorderSpecsRequest(
+      employeeId: _employeeId,
+      specIds: specIds,
+    );
     await _rpcUtil.reorderSpecs(request);
   }
 
@@ -441,18 +495,23 @@ class _RemoteOps {
       offset: offset,
     );
     final result = await _rpcUtil.getFileOperations(request);
-    return (result['result']['operations'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    return (result['result']['operations'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
   }
 
   /// 获取指定消息的文件操作记录
   Future<List<Map<String, dynamic>>> getFileOperationsByMessage(
-      String messageId) async {
+    String messageId,
+  ) async {
     final request = GetFileOperationsByMessageRequest(
       employeeId: _employeeId,
       messageId: messageId,
     );
     final result = await _rpcUtil.getFileOperationsByMessage(request);
-    return (result['result']['operations'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    return (result['result']['operations'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
   }
 
   /// 清除文件操作记录
@@ -481,7 +540,8 @@ class _RemoteOps {
   Future<TokenUsageRecord> getSessionTokenUsageAsync() async {
     final request = GetTokenUsageRequest(employeeId: _employeeId);
     final result = await _rpcUtil.getTokenUsage(request);
-    final sessionUsageMap = result['result']['sessionUsage'] as Map<String, dynamic>?;
+    final sessionUsageMap =
+        result['result']['sessionUsage'] as Map<String, dynamic>?;
     if (sessionUsageMap != null) {
       return TokenUsageRecord.fromMap(sessionUsageMap);
     }
@@ -492,7 +552,8 @@ class _RemoteOps {
   Future<TokenUsageRecord?> getMessageTokenUsageAsync(String messageId) async {
     final request = GetTokenUsageRequest(employeeId: _employeeId);
     final result = await _rpcUtil.getTokenUsage(request);
-    final messageUsageMap = result['result']['messageUsage'] as Map<String, dynamic>?;
+    final messageUsageMap =
+        result['result']['messageUsage'] as Map<String, dynamic>?;
     if (messageUsageMap != null) {
       return TokenUsageRecord.fromMap(messageUsageMap);
     }
@@ -503,7 +564,8 @@ class _RemoteOps {
   Future<ProviderConfig?> getProviderConfigAsync() async {
     final request = GetProviderRequest(employeeId: _employeeId);
     final result = await _rpcUtil.getProvider(request);
-    final configMap = result['result']['providerConfig'] as Map<String, dynamic>?;
+    final configMap =
+        result['result']['providerConfig'] as Map<String, dynamic>?;
     if (configMap != null) {
       _remoteCache.providerConfig = configMap;
       return ProviderConfig.fromMap(configMap);
@@ -516,7 +578,8 @@ class _RemoteOps {
     final request = AgentGetSkillsRequest(employeeId: _employeeId);
     final result = await _rpcUtil.getSkills(request);
     final skills =
-        (result['result']['skills'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        (result['result']['skills'] as List?)?.cast<Map<String, dynamic>>() ??
+        [];
     _remoteCache.skillsConfig = skills;
     return skills;
   }
@@ -526,7 +589,9 @@ class _RemoteOps {
     final request = GetMcpConfigsRequest(employeeId: _employeeId);
     final result = await _rpcUtil.getMcpConfigs(request);
     final configs =
-        (result['result']['mcpConfigs'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        (result['result']['mcpConfigs'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
     _remoteCache.mcpConfigs = configs;
     return configs;
   }
@@ -546,8 +611,7 @@ class _RemoteOps {
   ///
   /// [path] 文件系统绝对路径
   Future<PathExistsResult> checkPathExists(String path) async {
-    final request =
-        CheckPathExistsRequest(employeeId: _employeeId, path: path);
+    final request = CheckPathExistsRequest(employeeId: _employeeId, path: path);
     final result = await _rpcUtil.checkPathExists(request);
     return PathExistsResult.fromMap(result['result']);
   }
@@ -556,8 +620,7 @@ class _RemoteOps {
   ///
   /// [path] 目录路径
   Future<DirectoryListingResult> listDirectory(String path) async {
-    final request =
-        ListDirectoryRequest(employeeId: _employeeId, path: path);
+    final request = ListDirectoryRequest(employeeId: _employeeId, path: path);
     final result = await _rpcUtil.listDirectory(request);
     return DirectoryListingResult.fromMap(result['result']);
   }
@@ -566,8 +629,7 @@ class _RemoteOps {
   ///
   /// [path] 文件路径
   Future<FileInfoResult> getFileInfo(String path) async {
-    final request =
-        GetFileInfoRequest(employeeId: _employeeId, path: path);
+    final request = GetFileInfoRequest(employeeId: _employeeId, path: path);
     final result = await _rpcUtil.getFileInfo(request);
     return FileInfoResult.fromMap(result['result']);
   }
@@ -576,8 +638,7 @@ class _RemoteOps {
   ///
   /// [path] 目录路径
   Future<FileOpResult> createDirectory(String path) async {
-    final request =
-        CreateDirectoryRequest(employeeId: _employeeId, path: path);
+    final request = CreateDirectoryRequest(employeeId: _employeeId, path: path);
     final result = await _rpcUtil.createDirectory(request);
     return FileOpResult.fromMap(result['result']);
   }
@@ -586,8 +647,7 @@ class _RemoteOps {
   ///
   /// [path] 文件/目录路径
   Future<FileOpResult> deleteFile(String path) async {
-    final request =
-        DeleteFileRequest(employeeId: _employeeId, path: path);
+    final request = DeleteFileRequest(employeeId: _employeeId, path: path);
     final result = await _rpcUtil.deleteFile(request);
     return FileOpResult.fromMap(result['result']);
   }
@@ -611,7 +671,12 @@ class _RemoteOps {
   /// [offset] 起始字节偏移
   /// [limit] 读取字节数限制
   /// [maxBytes] 最大读取字节数（默认 200KB）
-  Future<FileReadResult> readFile(String path, {int? offset, int? limit, int? maxBytes}) async {
+  Future<FileReadResult> readFile(
+    String path, {
+    int? offset,
+    int? limit,
+    int? maxBytes,
+  }) async {
     final request = ReadFileRequest(
       path: path,
       offset: offset,
@@ -627,7 +692,11 @@ class _RemoteOps {
   /// [path] 远程设备上的文件路径
   /// [content] 要写入的内容（字符串）
   /// [append] 是否追加模式（默认覆盖）
-  Future<FileWriteResult> writeFile(String path, String content, {bool append = false}) async {
+  Future<FileWriteResult> writeFile(
+    String path,
+    String content, {
+    bool append = false,
+  }) async {
     final contentBase64 = base64Encode(utf8.encode(content));
     final request = WriteFileRequest(
       path: path,
@@ -643,7 +712,11 @@ class _RemoteOps {
   /// [path] 远程设备上的文件路径
   /// [bytes] 要写入的字节数据
   /// [append] 是否追加模式
-  Future<FileWriteResult> writeFileBytes(String path, List<int> bytes, {bool append = false}) async {
+  Future<FileWriteResult> writeFileBytes(
+    String path,
+    List<int> bytes, {
+    bool append = false,
+  }) async {
     final contentBase64 = base64Encode(bytes);
     final request = WriteFileRequest(
       path: path,
@@ -676,7 +749,10 @@ class _RemoteOps {
   ///
   /// 返回临时 Token 信息，客户端需自行通过 HTTP 上传文件。
   /// URL 格式：http://{hostIp}:{hostPort}/file-upload?token={token}
-  Future<FileUploadUrlResult> requestUploadToken(String path, {bool overwrite = true}) async {
+  Future<FileUploadUrlResult> requestUploadToken(
+    String path, {
+    bool overwrite = true,
+  }) async {
     final request = UploadFileRequest(path: path, overwrite: overwrite);
     final result = await _rpcUtil.uploadFile(request);
     final data = Map<String, dynamic>.from(result['result']);
@@ -724,10 +800,12 @@ class _RemoteOps {
     switch (type) {
       case AgentEventType.agentStatusChanged:
         final snapshot = AgentStateSnapshot.fromMap(data);
-        // 只在状态真正改变时才更新和广播
-        if (_remoteCache.status != snapshot.status) {
-          _remoteCache.snapshot = snapshot;
-          _remoteCache.status = snapshot.status;
+        // Retry progress can change while status remains retrying, so always
+        // refresh the cached snapshot and notify listeners.
+        _remoteCache.snapshot = snapshot;
+        final statusChanged = _remoteCache.status != snapshot.status;
+        _remoteCache.status = snapshot.status;
+        if (statusChanged || snapshot.status == AgentStatus.retrying) {
           _stateController.add(snapshot);
         }
         break;

@@ -10,7 +10,7 @@ class RetryConfig {
 
   /// 基础延迟（毫秒）
   ///
-  /// 指数退避的初始延迟时间，默认 1000ms（1 秒）。
+  /// 指数退避的初始延迟时间，默认 5000ms（5 秒）。
   final int baseDelayMs;
 
   /// 最大延迟（毫秒）
@@ -31,7 +31,7 @@ class RetryConfig {
 
   const RetryConfig({
     this.maxRetries = 5,
-    this.baseDelayMs = 1000,
+    this.baseDelayMs = 5000,
     this.maxDelayMs = 20000,
     this.jitter = true,
     this.retryableStatusCodes = const [408, 429, 500, 502, 503, 504],
@@ -60,10 +60,11 @@ class RetryConfig {
   factory RetryConfig.fromMap(Map<String, dynamic> map) {
     return RetryConfig(
       maxRetries: (map['maxRetries'] as num?)?.toInt() ?? 5,
-      baseDelayMs: (map['baseDelayMs'] as num?)?.toInt() ?? 1000,
+      baseDelayMs: (map['baseDelayMs'] as num?)?.toInt() ?? 5000,
       maxDelayMs: (map['maxDelayMs'] as num?)?.toInt() ?? 20000,
       jitter: (map['jitter'] as bool?) ?? true,
-      retryableStatusCodes: (map['retryableStatusCodes'] as List<dynamic>?)
+      retryableStatusCodes:
+          (map['retryableStatusCodes'] as List<dynamic>?)
               ?.map((e) => e as int)
               .toList() ??
           const [408, 429, 500, 502, 503, 504],
@@ -72,12 +73,12 @@ class RetryConfig {
 
   /// 转换为 Map
   Map<String, dynamic> toMap() => {
-        'maxRetries': maxRetries,
-        'baseDelayMs': baseDelayMs,
-        'maxDelayMs': maxDelayMs,
-        'jitter': jitter,
-        'retryableStatusCodes': retryableStatusCodes,
-      };
+    'maxRetries': maxRetries,
+    'baseDelayMs': baseDelayMs,
+    'maxDelayMs': maxDelayMs,
+    'jitter': jitter,
+    'retryableStatusCodes': retryableStatusCodes,
+  };
 
   /// 默认配置
   static const RetryConfig defaultConfig = RetryConfig();
@@ -103,6 +104,5 @@ class RetryConfig {
           jitter == other.jitter;
 
   @override
-  int get hashCode =>
-      Object.hash(maxRetries, baseDelayMs, maxDelayMs, jitter);
+  int get hashCode => Object.hash(maxRetries, baseDelayMs, maxDelayMs, jitter);
 }
