@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import 'migration.dart';
 import '../schemas/global_skill_schema.dart';
@@ -11,7 +11,7 @@ class V16Migration extends Migration {
   int get version => 16;
 
   @override
-  void onUpgrade(Database db) {
-    GlobalSkillSchema.create(db);
+  Future<void> onUpgrade(SqliteDatabase db) async {
+    await GlobalSkillSchema.create(db);
   }
 }

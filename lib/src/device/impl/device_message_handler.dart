@@ -396,12 +396,12 @@ class DeviceMessageHandler {
               // 刷新 summary
               final summaryStore = SessionSummaryStore(deviceId: _deviceId);
               summaryStore.markAsReadBySeq(employeeId, readSeq, deviceId: _deviceId);
-              // 用 DB 统计修正内存缓存
-              final dbUnreadCount = messageStore.getUnreadCount(_deviceId, employeeId);
-              _stateHolder.notificationHub.restoreUnreadCount(
-                employeeId: employeeId,
-                count: dbUnreadCount,
-              );
+              messageStore.getUnreadCount(_deviceId, employeeId).then((dbUnreadCount) {
+                _stateHolder.notificationHub.restoreUnreadCount(
+                  employeeId: employeeId,
+                  count: dbUnreadCount,
+                );
+              });
             } else {
               // 全部已读（原有逻辑）
               _stateHolder.notificationHub.markAllAsRead(
@@ -675,7 +675,7 @@ class DeviceMessageHandler {
         final messageStore = MessageStoreService.getInstance(_deviceId);
 
         // 在删除消息前获取 maxSeq，用于设置水位线
-        final maxSeq = messageStore.getMaxSeq(_deviceId, employeeId);
+        final maxSeq = await messageStore.getMaxSeq(_deviceId, employeeId);
 
         // 删除本地消息
         await messageStore.deleteMessages(_deviceId, employeeId);

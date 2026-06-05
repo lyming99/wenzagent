@@ -1,9 +1,9 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 /// global_skills 表 schema
 class GlobalSkillSchema {
-  static void create(Database db) {
-    db.execute('''
+  static Future<void> create(SqliteDatabase db) async {
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS global_skills (
         uuid         TEXT PRIMARY KEY,
         name         TEXT NOT NULL,

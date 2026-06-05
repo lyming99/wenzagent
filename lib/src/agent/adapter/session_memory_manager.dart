@@ -341,7 +341,7 @@ class SessionMemoryManager {
 
     // 从 DB 恢复压缩状态
     if (_compressionMetaStore != null) {
-      final meta = _compressionMetaStore!.getMeta(employeeId, _deviceId!);
+      final meta = await _compressionMetaStore!.getMeta(employeeId, _deviceId!);
       if (meta != null) {
         session.pruneStartId = meta.pruneStartId;
         session.messagesSinceCompression = meta.messagesSinceCompression;
@@ -360,8 +360,8 @@ class SessionMemoryManager {
   }
 
   /// 获取指定 employee 的最大 seq（含已软删除的消息）
-  int getMaxSeq(String employeeId) {
-    return _messageStore?.getMaxSeq(_deviceId!, employeeId) ?? 0;
+  Future<int> getMaxSeq(String employeeId) async {
+    return await (_messageStore?.getMaxSeq(_deviceId!, employeeId) ?? Future.value(0));
   }
 
   /// 更新消息状态（写 DB）

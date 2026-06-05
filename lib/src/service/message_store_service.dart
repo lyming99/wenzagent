@@ -111,7 +111,7 @@ abstract class MessageStoreService {
   /// 用于清空水位线场景：服务端设置 clear_seq 后，
   /// 客户端同步时删除本地所有 seq < clearSeq 的消息。
   /// 返回被删除的消息数量。
-  int deleteMessagesBeforeSeq(
+  Future<int> deleteMessagesBeforeSeq(
     String deviceId,
     String employeeId,
     int beforeSeq,
@@ -120,7 +120,7 @@ abstract class MessageStoreService {
   /// 获取指定会话的最大 seq（含已软删除的消息）
   ///
   /// 用于清空会话时设置清空水位线。
-  int getMaxSeq(String deviceId, String employeeId);
+  Future<int> getMaxSeq(String deviceId, String employeeId);
 
   /// 硬删除单条消息（从数据库直接删除，非软删除）
   ///
@@ -132,30 +132,30 @@ abstract class MessageStoreService {
   Future<ChatMessage?> getLastMessage(String deviceId, String employeeId);
 
   /// 统计指定员工的未读消息数量（从 session_summary 表读取，O(1)）
-  int getUnreadCount(String deviceId, String employeeId);
+  Future<int> getUnreadCount(String deviceId, String employeeId);
 
   /// 全局未读总数（从 session_summary 表 SUM 聚合，O(S)）
-  int getTotalUnreadCount({String deviceId});
+  Future<int> getTotalUnreadCount({String deviceId});
 
   /// 获取最新消息摘要（从 session_summary 表读取，O(1)）
-  SessionSummaryEntity? getLatestMessageSummary(String deviceId, String employeeId);
+  Future<SessionSummaryEntity?> getLatestMessageSummary(String deviceId, String employeeId);
 
   /// 批量获取所有会话摘要（从 session_summary 表读取）
-  List<SessionSummaryEntity> getAllSummaries({String deviceId = ''});
+  Future<List<SessionSummaryEntity>> getAllSummaries({String deviceId = ''});
 
   /// 批量标记指定员工的消息为已读（SQL 直接更新，返回受影响行数）
   ///
   /// 同时将 session_summary.unread_count 置为 0。
-  int markAsReadInDb(String deviceId, String employeeId);
+  Future<int> markAsReadInDb(String deviceId, String employeeId);
 
   /// 基于 seq 批量标记已读
-  int markAsReadBySeqInDb(String deviceId, String employeeId, int readSeq);
+  Future<int> markAsReadBySeqInDb(String deviceId, String employeeId, int readSeq);
 
   /// 获取指定员工的未读消息 ID 列表
-  List<String> getUnreadMessageIds(String deviceId, String employeeId);
+  Future<List<String>> getUnreadMessageIds(String deviceId, String employeeId);
 
   /// 获取指定员工中仍处于 processing 状态的本地工具调用消息 ID 列表
-  List<String> getStaleLocalToolCallMessages(
+  Future<List<String>> getStaleLocalToolCallMessages(
     String deviceId,
     String employeeId,
   );
@@ -164,7 +164,7 @@ abstract class MessageStoreService {
   Stream<MessageChangeEvent> get onMessageChanged;
 
   /// 获取同步水位线（lastSeq）
-  int getLastSeq(String deviceId, String employeeId);
+  Future<int> getLastSeq(String deviceId, String employeeId);
 
   /// 更新同步水位线（MAX 语义，防止回退）
   void updateLastSeq(String deviceId, String employeeId, int lastSeq);
@@ -345,7 +345,7 @@ class MessageStoreServiceImpl implements MessageStoreService {
 
     // 更新摘要
     if (message != null) {
-      final summary = _summaryStore.getSummary(message.employeeId, deviceId: deviceId);
+      final summary = await _summaryStore.getSummary(message.employeeId, deviceId: deviceId);
       final wasLatest = summary?.lastMsgId == uuid;
       final wasUnread = !message.isRead && message.role == MessageRole.assistant;
 
@@ -393,22 +393,22 @@ class MessageStoreServiceImpl implements MessageStoreService {
   }
 
   @override
-  int deleteMessagesBeforeSeq(String deviceId, String employeeId, int beforeSeq) {
-    final deleted = _store.deleteBeforeSeq(
+  Future<int> deleteMessagesBeforeSeq(String deviceId, String employeeId, int beforeSeq) async {
+    final deleted = await _store.deleteBeforeSeq(
       employeeId,
       beforeSeq,
       deviceId: deviceId,
     );
     // 有消息被删除，重建摘要以保持一致
     if (deleted > 0) {
-      _summaryStore.rebuildSummary(employeeId, deviceId: deviceId);
+      await _summaryStore.rebuildSummary(employeeId, deviceId: deviceId);
     }
     return deleted;
   }
 
   @override
-  int getMaxSeq(String deviceId, String employeeId) {
-    return _store.getMaxSeqForEmployeeAll(
+  Future<int> getMaxSeq(String deviceId, String employeeId) async {
+    return await _store.getMaxSeqForEmployeeAll(
       employeeId,
       deviceId: deviceId,
     );
@@ -425,53 +425,53 @@ class MessageStoreServiceImpl implements MessageStoreService {
   }
 
   @override
-  int getUnreadCount(String deviceId, String employeeId) {
+  Future<int> getUnreadCount(String deviceId, String employeeId) async {
     // 委托给摘要表（O(1) PK 查找）
-    return _summaryStore.getUnreadCount(employeeId, deviceId: deviceId);
+    return await _summaryStore.getUnreadCount(employeeId, deviceId: deviceId);
   }
 
   @override
-  int getTotalUnreadCount({String deviceId = ''}) {
-    return _summaryStore.getTotalUnreadCount(deviceId: deviceId);
+  Future<int> getTotalUnreadCount({String deviceId = ''}) async {
+    return await _summaryStore.getTotalUnreadCount(deviceId: deviceId);
   }
 
   @override
-  SessionSummaryEntity? getLatestMessageSummary(String deviceId, String employeeId) {
-    return _summaryStore.getSummary(employeeId, deviceId: deviceId);
+  Future<SessionSummaryEntity?> getLatestMessageSummary(String deviceId, String employeeId) async {
+    return await _summaryStore.getSummary(employeeId, deviceId: deviceId);
   }
 
   @override
-  List<SessionSummaryEntity> getAllSummaries({String deviceId = ''}) {
-    return _summaryStore.getAllSummaries(deviceId: deviceId);
+  Future<List<SessionSummaryEntity>> getAllSummaries({String deviceId = ''}) async {
+    return await _summaryStore.getAllSummaries(deviceId: deviceId);
   }
 
   @override
-  int markAsReadInDb(String deviceId, String employeeId) {
-    final affected = _store.markAsReadByEmployee(employeeId, deviceId: deviceId);
+  Future<int> markAsReadInDb(String deviceId, String employeeId) async {
+    final affected = await _store.markAsReadByEmployee(employeeId, deviceId: deviceId);
     // 同步将摘要表未读计数置为 0（O(1)）
-    _summaryStore.markAsRead(employeeId, deviceId: deviceId);
+    await _summaryStore.markAsRead(employeeId, deviceId: deviceId);
     return affected;
   }
 
   @override
-  int markAsReadBySeqInDb(String deviceId, String employeeId, int readSeq) {
+  Future<int> markAsReadBySeqInDb(String deviceId, String employeeId, int readSeq) async {
     // 修复：先更新 messages 表的 is_read，再使用 affected 数量直接更新 summary。
     // 之前的 BUG：先更新 messages.is_read=1，再查询 is_read=0 的数量得到 delta=0，
     // 导致 summary 的 unread_count 不会减少。
-    final affected = _store.markAsReadBySeq(employeeId, readSeq, deviceId: deviceId);
+    final affected = await _store.markAsReadBySeq(employeeId, readSeq, deviceId: deviceId);
     // 直接使用 affected 值来更新 summary，避免再次查询 messages 表
-    _summaryStore.decrementUnreadCount(employeeId, affected, deviceId: deviceId);
+    await _summaryStore.decrementUnreadCount(employeeId, affected, deviceId: deviceId);
     return affected;
   }
 
   @override
-  List<String> getUnreadMessageIds(String deviceId, String employeeId) {
-    return _store.getUnreadMessageIds(employeeId, deviceId: deviceId);
+  Future<List<String>> getUnreadMessageIds(String deviceId, String employeeId) async {
+    return await _store.getUnreadMessageIds(employeeId, deviceId: deviceId);
   }
 
   @override
-  List<String> getStaleLocalToolCallMessages(String deviceId, String employeeId) {
-    return _store.getStaleLocalToolCallMessages(
+  Future<List<String>> getStaleLocalToolCallMessages(String deviceId, String employeeId) async {
+    return await _store.getStaleLocalToolCallMessages(
       employeeId,
       deviceId: deviceId,
     );
@@ -481,9 +481,9 @@ class MessageStoreServiceImpl implements MessageStoreService {
   Stream<MessageChangeEvent> get onMessageChanged => _changeController.stream;
 
   @override
-  int getLastSeq(String deviceId, String employeeId) {
+  Future<int> getLastSeq(String deviceId, String employeeId) async {
     final store = SyncWatermarkStore(dbManager: _store.dbManager);
-    return store.getLastSeq(employeeId, deviceId: deviceId);
+    return await store.getLastSeq(employeeId, deviceId: deviceId);
   }
 
   @override

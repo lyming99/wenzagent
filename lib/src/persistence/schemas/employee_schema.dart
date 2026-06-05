@@ -1,9 +1,9 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 /// employees 表 schema
 class EmployeeSchema {
-  static void create(Database db) {
-    db.execute('''
+  static Future<void> create(SqliteDatabase db) async {
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS employees (
         uuid             TEXT PRIMARY KEY,
         name             TEXT NOT NULL,
@@ -36,7 +36,7 @@ class EmployeeSchema {
         update_time      INTEGER NOT NULL
       );
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_employees_device
         ON employees(device_id);
     ''');

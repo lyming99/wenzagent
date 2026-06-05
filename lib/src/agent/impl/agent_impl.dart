@@ -694,19 +694,19 @@ class AgentImpl extends _AgentImplBase
 
     // 主题查询
     todoTool.getCurrentTopics = (eid) async {
-      return todoStore.findCurrentTopics(eid);
+      return await todoStore.findCurrentTopics(eid);
     };
 
     todoTool.getPendingTopics = (eid) async {
-      return todoStore.findPendingTopics(eid);
+      return await todoStore.findPendingTopics(eid);
     };
 
     todoTool.getAllTopics = (eid) async {
-      return todoStore.findAllTopics(eid);
+      return await todoStore.findAllTopics(eid);
     };
 
     todoTool.getCompletedTopics = (eid, {limit = 50}) async {
-      return todoStore.findCompletedTopics(eid, limit: limit);
+      return await todoStore.findCompletedTopics(eid, limit: limit);
     };
 
     // 主题写入
@@ -728,7 +728,7 @@ class AgentImpl extends _AgentImplBase
 
     // 任务子项
     todoTool.getTaskItemsByTopic = (topicId) async {
-      return todoStore.findTaskItemsByTopic(topicId);
+      return await todoStore.findTaskItemsByTopic(topicId);
     };
 
     todoTool.saveTaskItem = (item) async {
@@ -743,18 +743,18 @@ class AgentImpl extends _AgentImplBase
       todoStore.updateTaskItemStatus(id, status);
       // 更新子项状态后，重新推导主题状态
       // 需要先找到子项的 topicId
-      final taskItem = todoStore.findTaskItemById(id);
+      final taskItem = await todoStore.findTaskItemById(id);
       if (taskItem != null) {
-        todoStore.recalculateTopicStatus(taskItem.topicId);
+        await todoStore.recalculateTopicStatus(taskItem.topicId);
       }
     };
 
     todoTool.removeTaskItem = (id) async {
       // 先找到子项的 topicId
-      final taskItem = todoStore.findTaskItemById(id);
-      todoStore.softDeleteTaskItem(id);
+      final taskItem = await todoStore.findTaskItemById(id);
+      await todoStore.softDeleteTaskItem(id);
       if (taskItem != null) {
-        todoStore.recalculateTopicStatus(taskItem.topicId);
+        await todoStore.recalculateTopicStatus(taskItem.topicId);
       }
     };
 
@@ -784,35 +784,35 @@ class AgentImpl extends _AgentImplBase
   @override
   Future<List<Map<String, dynamic>>> getCurrentTopics() async {
     final store = TodoStore(deviceId: deviceId);
-    final items = store.findCurrentTopics(employeeId);
+    final items = await store.findCurrentTopics(employeeId);
     return items.map((e) => e.toMap()).toList();
   }
 
   @override
   Future<List<Map<String, dynamic>>> getPendingTopics() async {
     final store = TodoStore(deviceId: deviceId);
-    final items = store.findPendingTopics(employeeId);
+    final items = await store.findPendingTopics(employeeId);
     return items.map((e) => e.toMap()).toList();
   }
 
   @override
   Future<List<Map<String, dynamic>>> getAllTopics() async {
     final store = TodoStore(deviceId: deviceId);
-    final items = store.findAllTopics(employeeId);
+    final items = await store.findAllTopics(employeeId);
     return items.map((e) => e.toMap()).toList();
   }
 
   @override
   Future<List<Map<String, dynamic>>> getCompletedTopics({int limit = 50}) async {
     final store = TodoStore(deviceId: deviceId);
-    final items = store.findCompletedTopics(employeeId, limit: limit);
+    final items = await store.findCompletedTopics(employeeId, limit: limit);
     return items.map((e) => e.toMap()).toList();
   }
 
   @override
   Future<Map<String, dynamic>> getTodoStats() async {
     final store = TodoStore(deviceId: deviceId);
-    return store.countTopicsByStatus(employeeId);
+    return await store.countTopicsByStatus(employeeId);
   }
 
   @override
@@ -851,7 +851,7 @@ class AgentImpl extends _AgentImplBase
   @override
   Future<List<Map<String, dynamic>>> getTaskItemsByTopic(String topicId) async {
     final store = TodoStore(deviceId: deviceId);
-    final items = store.findTaskItemsByTopic(topicId);
+    final items = await store.findTaskItemsByTopic(topicId);
     return items.map((e) => e.toMap()).toList();
   }
 
@@ -859,9 +859,9 @@ class AgentImpl extends _AgentImplBase
   Future<void> updateTaskItemStatus(String taskId, String status) async {
     final store = TodoStore(deviceId: deviceId);
     store.updateTaskItemStatus(taskId, status);
-    final taskItem = store.findTaskItemById(taskId);
+    final taskItem = await store.findTaskItemById(taskId);
     if (taskItem != null) {
-      store.recalculateTopicStatus(taskItem.topicId);
+      await store.recalculateTopicStatus(taskItem.topicId);
     }
     _eventController.add(AgentEvent(
       type: AgentEventType.todoTaskItemChanged,
@@ -884,10 +884,10 @@ class AgentImpl extends _AgentImplBase
   @override
   Future<void> deleteTaskItem(String taskId) async {
     final store = TodoStore(deviceId: deviceId);
-    final taskItem = store.findTaskItemById(taskId);
+    final taskItem = await store.findTaskItemById(taskId);
     store.softDeleteTaskItem(taskId);
     if (taskItem != null) {
-      store.recalculateTopicStatus(taskItem.topicId);
+      await store.recalculateTopicStatus(taskItem.topicId);
     }
     _eventController.add(AgentEvent(
       type: AgentEventType.todoTaskItemChanged,
@@ -941,12 +941,12 @@ class AgentImpl extends _AgentImplBase
 
     // 活跃 spec 查询
     specTool.getActiveSpecs = (eid) async {
-      return specStore.findActiveByEmployee(eid);
+      return await specStore.findActiveByEmployee(eid);
     };
 
     // 已完成 spec 查询
     specTool.getCompletedSpecs = (eid, {limit = 50}) async {
-      return specStore.findCompletedByEmployee(eid, limit: limit);
+      return await specStore.findCompletedByEmployee(eid, limit: limit);
     };
 
     // 保存 spec 项
@@ -992,28 +992,28 @@ class AgentImpl extends _AgentImplBase
   @override
   Future<List<Map<String, dynamic>>> getActiveSpecs() async {
     final store = SpecStore(deviceId: deviceId);
-    final items = store.findActiveByEmployee(employeeId);
+    final items = await store.findActiveByEmployee(employeeId);
     return items.map((e) => e.toMap()).toList();
   }
 
   @override
   Future<List<Map<String, dynamic>>> getCompletedSpecs({int limit = 50}) async {
     final store = SpecStore(deviceId: deviceId);
-    final items = store.findCompletedByEmployee(employeeId, limit: limit);
+    final items = await store.findCompletedByEmployee(employeeId, limit: limit);
     return items.map((e) => e.toMap()).toList();
   }
 
   @override
   Future<Map<String, dynamic>> getSpecStats() async {
     final store = SpecStore(deviceId: deviceId);
-    return store.countByStatus(employeeId);
+    return await store.countByStatus(employeeId);
   }
 
   @override
   Future<void> updateSpecStatus(String specId, String status) async {
     final store = SpecStore(deviceId: deviceId);
     store.updateStatus(specId, status);
-    final spec = store.findByIdIncludingDeleted(specId);
+    final spec = await store.findByIdIncludingDeleted(specId);
     _eventController.add(AgentEvent(
       type: AgentEventType.specChanged,
       data: {
@@ -1030,7 +1030,7 @@ class AgentImpl extends _AgentImplBase
   Future<void> updateSpecContent(String specId, String content) async {
     final store = SpecStore(deviceId: deviceId);
     store.updateContent(specId, content: content);
-    final spec = store.findByIdIncludingDeleted(specId);
+    final spec = await store.findByIdIncludingDeleted(specId);
     _eventController.add(AgentEvent(
       type: AgentEventType.specChanged,
       data: {
@@ -1046,7 +1046,7 @@ class AgentImpl extends _AgentImplBase
   Future<void> deleteSpec(String specId) async {
     final store = SpecStore(deviceId: deviceId);
     store.softDelete(specId);
-    final spec = store.findByIdIncludingDeleted(specId);
+    final spec = await store.findByIdIncludingDeleted(specId);
     _eventController.add(AgentEvent(
       type: AgentEventType.specChanged,
       data: {
@@ -1087,14 +1087,14 @@ class AgentImpl extends _AgentImplBase
     int limit = 100,
     int offset = 0,
   }) async {
-    final ops = _fileOperationTracker?.getOperations(limit: limit, offset: offset) ?? [];
+    final ops = await (_fileOperationTracker?.getOperations(limit: limit, offset: offset) ?? Future.value(<FileOperationEntity>[]));
     return ops.map((e) => e.toMap()).toList();
   }
 
   @override
   Future<List<Map<String, dynamic>>> getFileOperationsByMessage(
       String messageId) async {
-    final ops = _fileOperationTracker?.getOperationsByMessage(messageId) ?? [];
+    final ops = await (_fileOperationTracker?.getOperationsByMessage(messageId) ?? Future.value(<FileOperationEntity>[]));
     return ops.map((e) => e.toMap()).toList();
   }
 

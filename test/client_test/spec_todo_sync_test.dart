@@ -486,26 +486,26 @@ void main() {
       await fixture.dispose();
     });
 
-    test('空数据 → 所有状态计数为 0', () {
-      final counts = specStore.countByStatus(_employeeId);
+    test('空数据 → 所有状态计数为 0', () async {
+      final counts = await specStore.countByStatus(_employeeId);
       expect(counts['draft'], equals(0));
       expect(counts['pending'], equals(0));
       expect(counts['in_progress'], equals(0));
       expect(counts['completed'], equals(0));
     });
 
-    test('只有 pending 状态 → 计数正确', () {
+    test('只有 pending 状态 → 计数正确', () async {
       specStore.save(_createSpec(title: 'Spec P1', status: 'pending'));
       specStore.save(_createSpec(title: 'Spec P2', status: 'pending'));
 
-      final counts = specStore.countByStatus(_employeeId);
+      final counts = await specStore.countByStatus(_employeeId);
       expect(counts['pending'], equals(2));
       expect(counts['in_progress'], equals(0));
       expect(counts['completed'], equals(0));
       expect(counts['draft'], equals(0));
     });
 
-    test('混合状态 → 各状态计数正确', () {
+    test('混合状态 → 各状态计数正确', () async {
       specStore.save(_createSpec(title: 'Draft A', status: 'draft'));
       specStore.save(_createSpec(title: 'Pending A', status: 'pending'));
       specStore.save(_createSpec(title: 'Pending B', status: 'pending'));
@@ -514,7 +514,7 @@ void main() {
       specStore.save(_createSpec(title: 'Completed B', status: 'completed'));
       specStore.save(_createSpec(title: 'Completed C', status: 'completed'));
 
-      final counts = specStore.countByStatus(_employeeId);
+      final counts = await specStore.countByStatus(_employeeId);
       expect(counts['draft'], equals(1));
       expect(counts['pending'], equals(2));
       expect(counts['in_progress'], equals(1));
@@ -526,7 +526,7 @@ void main() {
       specStore.save(spec);
 
       // 初始：pending=1
-      expect(specStore.countByStatus(_employeeId)['pending'], equals(1));
+      expect((await specStore.countByStatus(_employeeId))['pending'], equals(1));
 
       // 通过 RPC 更新状态为 in_progress
       await fixture.callRpc(
@@ -541,7 +541,7 @@ void main() {
         },
       );
 
-      final newCounts = specStore.countByStatus(_employeeId);
+      final newCounts = await specStore.countByStatus(_employeeId);
       expect(newCounts['pending'], equals(0));
       expect(newCounts['in_progress'], equals(1));
     });
@@ -553,7 +553,7 @@ void main() {
         HostRpcConfig.methodSyncSpecs,
         {'specs': [spec.toMap()]},
       );
-      expect(specStore.countByStatus(_employeeId)['pending'], equals(1));
+      expect((await specStore.countByStatus(_employeeId))['pending'], equals(1));
 
       // 标记删除（deleted=1）
       await fixture.callRpc(
@@ -568,22 +568,22 @@ void main() {
         },
       );
 
-      final counts = specStore.countByStatus(_employeeId);
+      final counts = await specStore.countByStatus(_employeeId);
       expect(counts['pending'], equals(0));
     });
 
-    test('不同员工的 spec 互不影响', () {
+    test('不同员工的 spec 互不影响', () async {
       specStore.save(_createSpec(title: 'Emp1 Spec'));
       specStore.save(_createSpec(title: 'Emp1 Spec 2'));
 
-      final countsEmp1 = specStore.countByStatus(_employeeId);
+      final countsEmp1 = await specStore.countByStatus(_employeeId);
       expect(countsEmp1['pending'], equals(2));
 
-      final countsOther = specStore.countByStatus('other-employee');
+      final countsOther = await specStore.countByStatus('other-employee');
       expect(countsOther['pending'], equals(0));
     });
 
-    test('upsertAllFromRemote 后 countByStatus 正确', () {
+    test('upsertAllFromRemote 后 countByStatus 正确', () async {
       final specs = [
         _createSpec(title: 'A', status: 'draft'),
         _createSpec(title: 'B', status: 'draft'),
@@ -595,15 +595,15 @@ void main() {
       final changed = specStore.upsertAllFromRemote(specs);
       expect(changed, equals(5));
 
-      final counts = specStore.countByStatus(_employeeId);
+      final counts = await specStore.countByStatus(_employeeId);
       expect(counts['draft'], equals(2));
       expect(counts['pending'], equals(1));
       expect(counts['in_progress'], equals(1));
       expect(counts['completed'], equals(1));
     });
 
-    test('countAll 返回所有非删除 spec 的总数量（含已完成）', () {
-      expect(specStore.countAll(_employeeId), equals(0));
+    test('countAll 返回所有非删除 spec 的总数量（含已完成）', () async {
+      expect(await specStore.countAll(_employeeId), equals(0));
 
       specStore.save(_createSpec(title: 'A', status: 'draft'));
       specStore.save(_createSpec(title: 'B', status: 'pending'));
@@ -611,10 +611,10 @@ void main() {
       specStore.save(_createSpec(title: 'D', status: 'completed'));
       specStore.save(_createSpec(title: 'E', status: 'completed'));
 
-      expect(specStore.countAll(_employeeId), equals(5));
+      expect(await specStore.countAll(_employeeId), equals(5));
     });
 
-    test('countAll 等于 countByStatus 各状态之和', () {
+    test('countAll 等于 countByStatus 各状态之和', () async {
       specStore.save(_createSpec(title: 'X1', status: 'draft'));
       specStore.save(_createSpec(title: 'X2', status: 'pending'));
       specStore.save(_createSpec(title: 'X3', status: 'pending'));
@@ -623,10 +623,10 @@ void main() {
       specStore.save(_createSpec(title: 'X6', status: 'completed'));
       specStore.save(_createSpec(title: 'X7', status: 'completed'));
 
-      final counts = specStore.countByStatus(_employeeId);
+      final counts = await specStore.countByStatus(_employeeId);
       final sum = counts['draft']! + counts['pending']! +
           counts['in_progress']! + counts['completed']!;
-      final total = specStore.countAll(_employeeId);
+      final total = await specStore.countAll(_employeeId);
 
       expect(total, equals(sum));
       expect(total, equals(7));
@@ -635,7 +635,7 @@ void main() {
     test('countAll 不计入已删除的 spec', () async {
       final spec = _createSpec(title: '将被删除');
       specStore.save(spec);
-      expect(specStore.countAll(_employeeId), equals(1));
+      expect(await specStore.countAll(_employeeId), equals(1));
 
       await fixture.callRpc(
         HostRpcConfig.methodSyncSpecs,
@@ -649,7 +649,7 @@ void main() {
         },
       );
 
-      expect(specStore.countAll(_employeeId), equals(0));
+      expect(await specStore.countAll(_employeeId), equals(0));
     });
   });
 
@@ -670,24 +670,24 @@ void main() {
       await fixture.dispose();
     });
 
-    test('空数据 → 所有状态计数为 0', () {
-      final counts = todoStore.countTopicsByStatus(_employeeId);
+    test('空数据 → 所有状态计数为 0', () async {
+      final counts = await todoStore.countTopicsByStatus(_employeeId);
       expect(counts['pending'], equals(0));
       expect(counts['in_progress'], equals(0));
       expect(counts['completed'], equals(0));
     });
 
-    test('只有 pending topic → 计数正确', () {
+    test('只有 pending topic → 计数正确', () async {
       todoStore.saveTopic(_createTopic(title: 'Topic 1', status: 'pending'));
       todoStore.saveTopic(_createTopic(title: 'Topic 2', status: 'pending'));
 
-      final counts = todoStore.countTopicsByStatus(_employeeId);
+      final counts = await todoStore.countTopicsByStatus(_employeeId);
       expect(counts['pending'], equals(2));
       expect(counts['in_progress'], equals(0));
       expect(counts['completed'], equals(0));
     });
 
-    test('混合状态 topic → 各状态计数正确', () {
+    test('混合状态 topic → 各状态计数正确', () async {
       todoStore.saveTopic(_createTopic(title: 'P1', status: 'pending'));
       todoStore.saveTopic(_createTopic(title: 'P2', status: 'pending'));
       todoStore.saveTopic(_createTopic(title: 'P3', status: 'pending'));
@@ -695,13 +695,13 @@ void main() {
       todoStore.saveTopic(_createTopic(title: 'IP2', status: 'in_progress'));
       todoStore.saveTopic(_createTopic(title: 'C1', status: 'completed'));
 
-      final counts = todoStore.countTopicsByStatus(_employeeId);
+      final counts = await todoStore.countTopicsByStatus(_employeeId);
       expect(counts['pending'], equals(3));
       expect(counts['in_progress'], equals(2));
       expect(counts['completed'], equals(1));
     });
 
-    test('添加 taskItem 后 topic 状态自动重新计算', () {
+    test('添加 taskItem 后 topic 状态自动重新计算', () async {
       final topic = _createTopic(title: '自动计算状态');
       todoStore.saveTopic(topic);
 
@@ -710,15 +710,15 @@ void main() {
       todoStore.saveTaskItem(task1);
       todoStore.recalculateTopicStatus(topic.id);
 
-      expect(todoStore.countTopicsByStatus(_employeeId)['pending'], equals(1));
-      expect(todoStore.countTopicsByStatus(_employeeId)['in_progress'], equals(0));
+      expect((await todoStore.countTopicsByStatus(_employeeId))['pending'], equals(1));
+      expect((await todoStore.countTopicsByStatus(_employeeId))['in_progress'], equals(0));
 
       // 添加 in_progress 任务 → topic 变为 in_progress
       final task2 = _createTaskItem(topicId: topic.id, title: 'Task 2', status: 'in_progress');
       todoStore.saveTaskItem(task2);
       todoStore.recalculateTopicStatus(topic.id);
 
-      final countsAfterIP = todoStore.countTopicsByStatus(_employeeId);
+      final countsAfterIP = await todoStore.countTopicsByStatus(_employeeId);
       expect(countsAfterIP['pending'], equals(0));
       expect(countsAfterIP['in_progress'], equals(1));
 
@@ -727,7 +727,7 @@ void main() {
       todoStore.updateTaskItemStatus(task2.id, 'completed');
       todoStore.recalculateTopicStatus(topic.id);
 
-      final countsAfterComplete = todoStore.countTopicsByStatus(_employeeId);
+      final countsAfterComplete = await todoStore.countTopicsByStatus(_employeeId);
       expect(countsAfterComplete['in_progress'], equals(0));
       expect(countsAfterComplete['completed'], equals(1));
     });
@@ -735,7 +735,7 @@ void main() {
     test('已删除的 topic 不计入 countTopicsByStatus', () async {
       final topic = _createTopic(title: '将被删除');
       todoStore.saveTopic(topic);
-      expect(todoStore.countTopicsByStatus(_employeeId)['pending'], equals(1));
+      expect((await todoStore.countTopicsByStatus(_employeeId))['pending'], equals(1));
 
       // 通过 RPC 标记删除
       await fixture.callRpc(
@@ -751,18 +751,18 @@ void main() {
         },
       );
 
-      expect(todoStore.countTopicsByStatus(_employeeId)['pending'], equals(0));
+      expect((await todoStore.countTopicsByStatus(_employeeId))['pending'], equals(0));
     });
 
-    test('不同员工的 todo topic 互不影响', () {
+    test('不同员工的 todo topic 互不影响', () async {
       todoStore.saveTopic(_createTopic(title: 'Emp1 Topic'));
       todoStore.saveTopic(_createTopic(title: 'Emp1 Topic 2'));
 
-      expect(todoStore.countTopicsByStatus(_employeeId)['pending'], equals(2));
-      expect(todoStore.countTopicsByStatus('other-employee')['pending'], equals(0));
+      expect((await todoStore.countTopicsByStatus(_employeeId))['pending'], equals(2));
+      expect((await todoStore.countTopicsByStatus('other-employee'))['pending'], equals(0));
     });
 
-    test('upsertAllTopicsFromRemote 后 countTopicsByStatus 正确', () {
+    test('upsertAllTopicsFromRemote 后 countTopicsByStatus 正确', () async {
       final topics = [
         _createTopic(title: 'A', status: 'pending'),
         _createTopic(title: 'B', status: 'pending'),
@@ -775,33 +775,33 @@ void main() {
       final changed = todoStore.upsertAllTopicsFromRemote(topics);
       expect(changed, equals(6));
 
-      final counts = todoStore.countTopicsByStatus(_employeeId);
+      final counts = await todoStore.countTopicsByStatus(_employeeId);
       expect(counts['pending'], equals(2));
       expect(counts['in_progress'], equals(3));
       expect(counts['completed'], equals(1));
     });
 
-    test('countAllTopics 返回所有非删除 topic 的总数量（含已完成）', () {
-      expect(todoStore.countAllTopics(_employeeId), equals(0));
+    test('countAllTopics 返回所有非删除 topic 的总数量（含已完成）', () async {
+      expect(await todoStore.countAllTopics(_employeeId), equals(0));
 
       todoStore.saveTopic(_createTopic(title: 'A', status: 'pending'));
       todoStore.saveTopic(_createTopic(title: 'B', status: 'in_progress'));
       todoStore.saveTopic(_createTopic(title: 'C', status: 'completed'));
       todoStore.saveTopic(_createTopic(title: 'D', status: 'completed'));
 
-      expect(todoStore.countAllTopics(_employeeId), equals(4));
+      expect(await todoStore.countAllTopics(_employeeId), equals(4));
     });
 
-    test('countAllTopics 等于 countTopicsByStatus 各状态之和', () {
+    test('countAllTopics 等于 countTopicsByStatus 各状态之和', () async {
       todoStore.saveTopic(_createTopic(title: 'Y1', status: 'pending'));
       todoStore.saveTopic(_createTopic(title: 'Y2', status: 'pending'));
       todoStore.saveTopic(_createTopic(title: 'Y3', status: 'in_progress'));
       todoStore.saveTopic(_createTopic(title: 'Y4', status: 'completed'));
       todoStore.saveTopic(_createTopic(title: 'Y5', status: 'completed'));
 
-      final counts = todoStore.countTopicsByStatus(_employeeId);
+      final counts = await todoStore.countTopicsByStatus(_employeeId);
       final sum = counts['pending']! + counts['in_progress']! + counts['completed']!;
-      final total = todoStore.countAllTopics(_employeeId);
+      final total = await todoStore.countAllTopics(_employeeId);
 
       expect(total, equals(sum));
       expect(total, equals(5));
@@ -810,7 +810,7 @@ void main() {
     test('countAllTopics 不计入已删除的 topic', () async {
       final topic = _createTopic(title: '将被删除');
       todoStore.saveTopic(topic);
-      expect(todoStore.countAllTopics(_employeeId), equals(1));
+      expect(await todoStore.countAllTopics(_employeeId), equals(1));
 
       await fixture.callRpc(
         HostRpcConfig.methodSyncTodos,
@@ -825,7 +825,7 @@ void main() {
         },
       );
 
-      expect(todoStore.countAllTopics(_employeeId), equals(0));
+      expect(await todoStore.countAllTopics(_employeeId), equals(0));
     });
   });
 
@@ -885,7 +885,7 @@ void main() {
       expect(specsOnServer.first['title'], equals('E2E Spec 测试'));
 
       // Server 端直接查询 store 验证
-      expect(serverSpecStore.countByStatus(_employeeId)['pending'], equals(1));
+      expect((await serverSpecStore.countByStatus(_employeeId))['pending'], equals(1));
     });
 
     test('Client 创建 spec → Server 查询后 countByStatus 正确', () async {
@@ -909,7 +909,7 @@ void main() {
       );
 
       // Server 端 countByStatus
-      final counts = serverSpecStore.countByStatus(_employeeId);
+      final counts = await serverSpecStore.countByStatus(_employeeId);
       expect(counts['draft'], equals(1));
       expect(counts['pending'], equals(2));
       expect(counts['in_progress'], equals(1));
@@ -972,7 +972,7 @@ void main() {
       );
 
       // Server 端 countTopicsByStatus
-      final counts = serverTodoStore.countTopicsByStatus(_employeeId);
+      final counts = await serverTodoStore.countTopicsByStatus(_employeeId);
       expect(counts['pending'], equals(1));
       expect(counts['in_progress'], equals(1));
       expect(counts['completed'], equals(1));
@@ -997,7 +997,7 @@ void main() {
       clientSpecStore.upsertAllFromRemote(specsFromServer);
 
       // Client 端验证
-      expect(clientSpecStore.countByStatus(_employeeId)['pending'], equals(1));
+      expect((await clientSpecStore.countByStatus(_employeeId))['pending'], equals(1));
     });
   });
 }

@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import 'migration.dart';
 
@@ -12,8 +12,12 @@ class V2Migration extends Migration {
   int get version => 2;
 
   /// 检查表中是否存在指定列
-  bool _columnExists(Database db, String table, String column) {
-    final result = db.select('''
+  Future<bool> _columnExists(
+    SqliteDatabase db,
+    String table,
+    String column,
+  ) async {
+    final result = await db.getAll('''
       SELECT count(*) as cnt FROM pragma_table_info('$table')
         WHERE name = '$column'
     ''');
@@ -21,24 +25,24 @@ class V2Migration extends Migration {
   }
 
   @override
-  void onUpgrade(Database db) {
+  Future<void> onUpgrade(SqliteDatabase db) async {
     // 如果 space_id 列不存在，说明已经是 V2 schema，无需迁移
-    if (!_columnExists(db, 'employees', 'space_id')) {
+    if (!await _columnExists(db, 'employees', 'space_id')) {
       return;
     }
 
     // 将 space_id 值迁移到 device_id（仅当 device_id 为空时）
-    db.execute('''
+    await db.execute('''
       UPDATE employees SET device_id = space_id
         WHERE (device_id IS NULL OR device_id = '') AND space_id IS NOT NULL
     ''');
 
     // 删除旧索引
-    db.execute('DROP INDEX IF EXISTS idx_employees_space');
+    await db.execute('DROP INDEX IF EXISTS idx_employees_space');
 
     // SQLite 不支持直接 DROP COLUMN（3.35.0+ 才支持），
     // 创建新表不含 space_id 列，迁移数据后重命名
-    db.execute('''
+    await db.execute('''
       CREATE TABLE employees_new (
         uuid             TEXT PRIMARY KEY,
         name             TEXT NOT NULL,
@@ -72,7 +76,7 @@ class V2Migration extends Migration {
       )
     ''');
 
-    db.execute('''
+    await db.execute('''
       INSERT INTO employees_new
         SELECT uuid, name, avatar, role, status, description,
                system_prompt, provider, model, api_key, api_base_url, model_config,
@@ -83,11 +87,11 @@ class V2Migration extends Migration {
         FROM employees
     ''');
 
-    db.execute('DROP TABLE employees');
-    db.execute('ALTER TABLE employees_new RENAME TO employees');
+    await db.execute('DROP TABLE employees');
+    await db.execute('ALTER TABLE employees_new RENAME TO employees');
 
     // 创建新索引
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_employees_device
         ON employees(device_id)
     ''');

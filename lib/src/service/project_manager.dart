@@ -127,16 +127,16 @@ abstract class ProjectManager {
   Future<void> deleteIssue(String uuid);
 
   /// 同步合并远程项目数据（由 RPC handler 调用）
-  bool upsertProjectFromRemote(ProjectEntity remote);
+  Future<bool> upsertProjectFromRemote(ProjectEntity remote);
 
   /// 同步合并远程模块数据
-  bool upsertModuleFromRemote(ProjectModuleEntity remote);
+  Future<bool> upsertModuleFromRemote(ProjectModuleEntity remote);
 
   /// 同步合并远程技能数据
-  bool upsertSkillFromRemote(ProjectSkillEntity remote);
+  Future<bool> upsertSkillFromRemote(ProjectSkillEntity remote);
 
   /// 同步合并远程工单数据
-  bool upsertIssueFromRemote(ProjectIssueEntity remote);
+  Future<bool> upsertIssueFromRemote(ProjectIssueEntity remote);
 
   // ==================== 变更通知 ====================
 
@@ -345,22 +345,22 @@ class ProjectManagerImpl implements ProjectManager {
   // ==================== 远程同步合并 ====================
 
   @override
-  bool upsertProjectFromRemote(ProjectEntity remote) {
+  Future<bool> upsertProjectFromRemote(ProjectEntity remote) async {
     return _store.upsertFromRemote(remote);
   }
 
   @override
-  bool upsertModuleFromRemote(ProjectModuleEntity remote) {
+  Future<bool> upsertModuleFromRemote(ProjectModuleEntity remote) async {
     return _store.upsertModuleFromRemote(remote);
   }
 
   @override
-  bool upsertSkillFromRemote(ProjectSkillEntity remote) {
+  Future<bool> upsertSkillFromRemote(ProjectSkillEntity remote) async {
     return _store.upsertSkillFromRemote(remote);
   }
 
   @override
-  bool upsertIssueFromRemote(ProjectIssueEntity remote) {
+  Future<bool> upsertIssueFromRemote(ProjectIssueEntity remote) async {
     return _store.upsertIssueFromRemote(remote);
   }
 

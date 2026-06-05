@@ -1042,7 +1042,7 @@ void main() {
       );
 
       // 2. 获取设备A的摘要
-      final summaryA = summaryStoreA.getSummary(empId, deviceId: deviceA.deviceId);
+      final summaryA = await summaryStoreA.getSummary(empId, deviceId: deviceA.deviceId);
       expect(summaryA, isNotNull);
       expect(summaryA!.unreadCount, greaterThanOrEqualTo(1));
 
@@ -1054,7 +1054,7 @@ void main() {
       summaryStoreB.upsertFromRemote(summaryA);
 
       // 5. 验证设备B有该摘要
-      final summaryB = summaryStoreB.getSummary(empId, deviceId: deviceA.deviceId);
+      final summaryB = await summaryStoreB.getSummary(empId, deviceId: deviceA.deviceId);
       expect(summaryB, isNotNull);
       expect(summaryB!.employeeId, equals(empId));
     });
@@ -1134,8 +1134,8 @@ void main() {
       );
 
       // 3. 验证各自的摘要互不干扰
-      final summaryA = summaryStoreA.getSummary(empId, deviceId: deviceA.deviceId);
-      final summaryB = summaryStoreB.getSummary(empId, deviceId: deviceB.deviceId);
+      final summaryA = await summaryStoreA.getSummary(empId, deviceId: deviceA.deviceId);
+      final summaryB = await summaryStoreB.getSummary(empId, deviceId: deviceB.deviceId);
 
       expect(summaryA, isNotNull);
       expect(summaryA!.lastMsgContent, equals('From A'));
@@ -1144,7 +1144,7 @@ void main() {
       expect(summaryB!.lastMsgContent, equals('From B'));
 
       // 4. 设备A查询不到设备B的摘要（按 deviceId 隔离）
-      final summaryAofB = summaryStoreA.getSummary(empId, deviceId: deviceB.deviceId);
+      final summaryAofB = await summaryStoreA.getSummary(empId, deviceId: deviceB.deviceId);
       expect(summaryAofB, isNull);
     });
   });

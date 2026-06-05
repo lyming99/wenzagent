@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import 'migration.dart';
 
@@ -12,8 +12,12 @@ class V4Migration extends Migration {
   int get version => 4;
 
   /// 检查表中是否存在指定列
-  bool _columnExists(Database db, String table, String column) {
-    final result = db.select('''
+  Future<bool> _columnExists(
+    SqliteDatabase db,
+    String table,
+    String column,
+  ) async {
+    final result = await db.getAll('''
       SELECT count(*) as cnt FROM pragma_table_info('$table')
         WHERE name = '$column'
     ''');
@@ -21,14 +25,14 @@ class V4Migration extends Migration {
   }
 
   @override
-  void onUpgrade(Database db) {
+  Future<void> onUpgrade(SqliteDatabase db) async {
     // 如果 json_data 列不存在，说明已经是 V4 schema，无需迁移
-    if (!_columnExists(db, 'messages', 'json_data')) {
+    if (!await _columnExists(db, 'messages', 'json_data')) {
       return;
     }
 
     // 创建新表（不含 json_data 列）
-    db.execute('''
+    await db.execute('''
       CREATE TABLE messages_new (
         uuid              TEXT PRIMARY KEY,
         employee_id       TEXT NOT NULL,
@@ -53,7 +57,7 @@ class V4Migration extends Migration {
     ''');
 
     // 迁移数据（排除 json_data）
-    db.execute('''
+    await db.execute('''
       INSERT INTO messages_new (
         uuid, employee_id, role, type, content,
         tool_call_id, tool_name, tool_arguments, tool_result, tool_calls,
@@ -68,17 +72,17 @@ class V4Migration extends Migration {
       FROM messages
     ''');
 
-    db.execute('DROP TABLE messages');
-    db.execute('ALTER TABLE messages_new RENAME TO messages');
+    await db.execute('DROP TABLE messages');
+    await db.execute('ALTER TABLE messages_new RENAME TO messages');
 
     // 重建索引
-    db.execute('DROP INDEX IF EXISTS idx_messages_employee');
-    db.execute('DROP INDEX IF EXISTS idx_messages_seq');
-    db.execute('''
+    await db.execute('DROP INDEX IF EXISTS idx_messages_employee');
+    await db.execute('DROP INDEX IF EXISTS idx_messages_seq');
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_messages_employee
         ON messages(employee_id, create_time)
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_messages_seq
         ON messages(seq)
     ''');

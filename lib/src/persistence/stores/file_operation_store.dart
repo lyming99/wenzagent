@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import '../database_manager.dart';
 import '../entities/file_operation_entity.dart';
@@ -14,7 +14,7 @@ class FileOperationStore {
   FileOperationStore({String? deviceId, DatabaseManager? dbManager})
       : _dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
 
-  Database get _db {
+  SqliteDatabase get _db {
     if (!_dbManager.isInitialized) {
       throw StateError(
         '$runtimeType: DatabaseManager 未初始化，请先调用 initialize()。',
@@ -24,7 +24,7 @@ class FileOperationStore {
   }
 
   /// 从数据库行解码为 FileOperationEntity
-  FileOperationEntity _rowToEntity(Row row) {
+  FileOperationEntity _rowToEntity(Map<String, Object?> row) {
     final extraStr = row['extra'] as String?;
     Map<String, dynamic>? extra;
     if (extraStr != null) {
@@ -51,8 +51,8 @@ class FileOperationStore {
   }
 
   /// 保存文件操作记录
-  void save(FileOperationEntity entity) {
-    _db.execute('''
+  Future<void> save(FileOperationEntity entity) async {
+    await _db.execute('''
       INSERT INTO file_operations (
         id, employee_id, message_id, tool_call_id, tool_name,
         operation_type, path, file_size, extra, success,
@@ -75,9 +75,9 @@ class FileOperationStore {
   }
 
   /// 查询指定员工的文件操作（按时间倒序）
-  List<FileOperationEntity> findByEmployee(String employeeId,
-      {int limit = 100, int offset = 0}) {
-    final resultSet = _db.select(
+  Future<List<FileOperationEntity>> findByEmployee(String employeeId,
+      {int limit = 100, int offset = 0}) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM file_operations WHERE employee_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
       [employeeId, limit, offset],
     );
@@ -85,8 +85,8 @@ class FileOperationStore {
   }
 
   /// 查询指定消息关联的所有文件操作
-  List<FileOperationEntity> findByMessageId(String messageId) {
-    final resultSet = _db.select(
+  Future<List<FileOperationEntity>> findByMessageId(String messageId) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM file_operations WHERE message_id = ? ORDER BY created_at ASC',
       [messageId],
     );
@@ -94,12 +94,12 @@ class FileOperationStore {
   }
 
   /// 查询指定时间范围内的文件操作
-  List<FileOperationEntity> findByTimeRange(
+  Future<List<FileOperationEntity>> findByTimeRange(
     String employeeId, {
     DateTime? since,
     DateTime? until,
     int limit = 100,
-  }) {
+  }) async {
     final conditions = <String>['employee_id = ?'];
     final params = <Object?>[employeeId];
 
@@ -115,7 +115,7 @@ class FileOperationStore {
     final where = conditions.join(' AND ');
     params.add(limit);
 
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT * FROM file_operations WHERE $where ORDER BY created_at DESC LIMIT ?',
       params,
     );
@@ -123,8 +123,8 @@ class FileOperationStore {
   }
 
   /// 获取指定路径的最新操作记录
-  FileOperationEntity? findLatestByPath(String employeeId, String path) {
-    final resultSet = _db.select(
+  Future<FileOperationEntity?> findLatestByPath(String employeeId, String path) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM file_operations WHERE employee_id = ? AND path = ? ORDER BY created_at DESC LIMIT 1',
       [employeeId, path],
     );
@@ -135,8 +135,8 @@ class FileOperationStore {
   }
 
   /// 清除指定员工的所有记录
-  void deleteByEmployee(String employeeId) {
-    _db.execute(
+  Future<void> deleteByEmployee(String employeeId) async {
+    await _db.execute(
       'DELETE FROM file_operations WHERE employee_id = ?',
       [employeeId],
     );

@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import 'migration.dart';
 
@@ -8,17 +8,23 @@ class V18Migration extends Migration {
   int get version => 18;
 
   @override
-  void onUpgrade(Database db) {
-    if (!_columnExists(db, 'skills', 'delete_time')) {
-      db.execute('ALTER TABLE skills ADD COLUMN delete_time INTEGER');
+  Future<void> onUpgrade(SqliteDatabase db) async {
+    if (!await _columnExists(db, 'skills', 'delete_time')) {
+      await db.execute('ALTER TABLE skills ADD COLUMN delete_time INTEGER');
     }
-    if (!_columnExists(db, 'global_skills', 'delete_time')) {
-      db.execute('ALTER TABLE global_skills ADD COLUMN delete_time INTEGER');
+    if (!await _columnExists(db, 'global_skills', 'delete_time')) {
+      await db.execute(
+        'ALTER TABLE global_skills ADD COLUMN delete_time INTEGER',
+      );
     }
   }
 
-  bool _columnExists(Database db, String table, String column) {
-    final result = db.select('PRAGMA table_info($table)');
+  Future<bool> _columnExists(
+    SqliteDatabase db,
+    String table,
+    String column,
+  ) async {
+    final result = await db.getAll('PRAGMA table_info($table)');
     for (final row in result) {
       if (row['name'] == column) return true;
     }

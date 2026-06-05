@@ -7,7 +7,7 @@ library;
 
 import 'dart:convert';
 
-import 'package:sqlite3/sqlite3.dart';
+// Row type is now Map<String, Object?> from sqlite_async
 
 import '../utils/logger.dart';
 import 'chat_message.dart';
@@ -148,7 +148,7 @@ class MessageMapper {
   // ── MessageRecord / Row → ChatMessage ──
 
   /// 从 SQLite Row 直接创建 ChatMessage
-  static ChatMessage fromRow(Row row) {
+  static ChatMessage fromRow(Map<String, Object?> row) {
     return ChatMessage(
       id: row['uuid'] as String,
       employeeId: row['employee_id'] as String,

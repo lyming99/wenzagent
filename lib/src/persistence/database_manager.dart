@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import '../utils/logger.dart';
 import 'migrations/migration.dart';
@@ -30,14 +30,8 @@ import 'migrations/v22_migration.dart';
 
 /// 数据库管理器
 ///
-/// 使用 sqlite3 (纯 Dart FFI) 进行本地数据持久化，支持版本迁移。
+/// 使用 sqlite_async 进行本地数据持久化，支持版本迁移。
 /// 单例模式，提供数据库初始化、连接管理和数据清理功能。
-///
-/// ## UI 阻塞说明
-///
-/// sqlite3 为同步 API，单个 DB 操作通常在微秒~毫秒级完成。
-/// 如需避免 UI 阻塞，调用方（如 Flutter App）可用 `Isolate.run()` 或
-/// `compute()` 将 DB 调用放到后台线程。
 ///
 /// ## 版本迁移
 ///
@@ -57,8 +51,8 @@ import 'migrations/v22_migration.dart';
 ///   int get version => 2;
 ///
 ///   @override
-///   void onUpgrade(Database db) {
-///     db.execute('ALTER TABLE employees ADD COLUMN new_field TEXT');
+///   Future<void> onUpgrade(SqliteDatabase db) async {
+///     await db.execute('ALTER TABLE employees ADD COLUMN new_field TEXT');
 ///   }
 /// }
 /// ```
@@ -77,9 +71,12 @@ class DatabaseManager {
 
   DatabaseManager._();
 
-  Database? _db;
+  SqliteDatabase? _db;
   bool _initialized = false;
   String? _dbPath;
+
+  /// 缓存的数据库 schema 版本号
+  int _cachedVersion = 0;
 
   /// 当前 schema 版本号
   static const int currentVersion = 22;
@@ -113,7 +110,7 @@ class DatabaseManager {
   ];
 
   /// 获取数据库连接
-  Database get db {
+  SqliteDatabase get db {
     if (_db == null) {
       throw StateError(
         'DatabaseManager 未初始化，请先调用 initialize()。'
@@ -126,12 +123,10 @@ class DatabaseManager {
   /// 检查是否已初始化
   bool get isInitialized => _initialized;
 
-  /// 获取当前数据库文件的 schema 版本
-  int get databaseVersion {
-    if (_db == null) return 0;
-    final result = _db!.select('PRAGMA user_version');
-    return result.first.values.first as int;
-  }
+  /// 获取当前数据库文件的 schema 版本（缓存值）
+  ///
+  /// 版本在初始化时读取并缓存，如需重新读取请调用 [_readDatabaseVersion。
+  int get databaseVersion => _cachedVersion;
 
   /// 初始化数据库
   ///
@@ -142,24 +137,33 @@ class DatabaseManager {
     final dir = storagePath ?? Directory.current.path;
     final dbPath = p.join(dir, 'wenzagent.db');
     _dbPath = dbPath;
-    _db = sqlite3.open(dbPath);
+    _db = SqliteDatabase(path: dbPath);
 
     // 启用WAL模式提升并发性能
-    _db!.execute('PRAGMA journal_mode = WAL;');
-    _db!.execute('PRAGMA foreign_keys = ON;');
+    await _db!.execute('PRAGMA journal_mode = WAL;');
+    await _db!.execute('PRAGMA foreign_keys = ON;');
+
+    // 读取当前版本并缓存
+    await _readDatabaseVersion();
 
     // 执行版本迁移
-    _runMigrations();
+    await _runMigrations();
 
     _initialized = true;
+  }
+
+  /// 从数据库读取当前 schema 版本号并缓存
+  Future<void> _readDatabaseVersion() async {
+    final result = await _db!.getOptional('PRAGMA user_version');
+    _cachedVersion = result?['user_version'] as int? ?? 0;
   }
 
   /// 执行版本迁移
   ///
   /// 读取当前数据库版本，按顺序执行所有待运行的迁移。
   /// 每个迁移版本在独立事务中执行，确保原子性。
-  void _runMigrations() {
-    final oldVersion = databaseVersion;
+  Future<void> _runMigrations() async {
+    final oldVersion = _cachedVersion;
     _log.info('当前数据库版本: $oldVersion, 目标版本: $currentVersion');
 
     if (oldVersion >= currentVersion) return;
@@ -174,14 +178,14 @@ class DatabaseManager {
       final version = migration.version;
       _log.info('迁移到版本 $version ...');
 
-      _db!.execute('BEGIN');
       try {
-        migration.onUpgrade(_db!);
-        _db!.execute('PRAGMA user_version = $version');
-        _db!.execute('COMMIT');
+        await _db!.writeTransaction((tx) async {
+          await migration.onUpgrade(_db!);
+          await tx.execute('PRAGMA user_version = $version');
+        });
+        _cachedVersion = version;
         _log.info('迁移到版本 $version 完成');
       } catch (e) {
-        _db!.execute('ROLLBACK');
         _log.error('迁移到版本 $version 失败', e);
         rethrow;
       }
@@ -192,34 +196,35 @@ class DatabaseManager {
   ///
   /// [deviceId] 设备ID，如果为null则清空所有无设备绑定的数据
   Future<void> clearDevice(String? deviceId) async {
-    _db!.execute(
+    await _db!.execute(
       'DELETE FROM employees WHERE device_id = ? OR current_device_id = ?',
       [deviceId, deviceId],
     );
 
     if (deviceId != null) {
-      _db!.execute(
+      await _db!.execute(
         "DELETE FROM messages WHERE employee_id LIKE ? ESCAPE '\\'",
         ['$deviceId-%'],
       );
-      _db!.execute("DELETE FROM skills WHERE employee_id LIKE ? ESCAPE '\\'", [
-        '$deviceId-%',
-      ]);
-      _db!.execute('DELETE FROM sync_watermark WHERE device_id = ?', [
+      await _db!.execute(
+        "DELETE FROM skills WHERE employee_id LIKE ? ESCAPE '\\'",
+        ['$deviceId-%'],
+      );
+      await _db!.execute('DELETE FROM sync_watermark WHERE device_id = ?', [
         deviceId,
       ]);
-      _db!.execute('DELETE FROM session_summary WHERE device_id = ?', [
+      await _db!.execute('DELETE FROM session_summary WHERE device_id = ?', [
         deviceId,
       ]);
-      _db!.execute(
+      await _db!.execute(
         "DELETE FROM todo_task_items WHERE employee_id LIKE ? ESCAPE '\\'",
         ['$deviceId-%'],
       );
-      _db!.execute(
+      await _db!.execute(
         "DELETE FROM todo_topics WHERE employee_id LIKE ? ESCAPE '\\'",
         ['$deviceId-%'],
       );
-      _db!.execute(
+      await _db!.execute(
         "DELETE FROM file_operations WHERE employee_id LIKE ? ESCAPE '\\'",
         ['$deviceId-%'],
       );
@@ -228,7 +233,7 @@ class DatabaseManager {
 
   /// 关闭数据库连接
   Future<void> close() async {
-    _db?.dispose();
+    await _db?.close();
     _db = null;
     _initialized = false;
   }

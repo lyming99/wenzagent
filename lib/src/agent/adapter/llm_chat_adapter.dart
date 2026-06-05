@@ -567,7 +567,7 @@ class LlmChatAdapter implements IChatAdapter {
     if (currentEmployeeUuid != null) {
       final empId = currentEmployeeUuid!;
       // 在删除前获取 maxSeq，用于设置 clearSeq = lastSeq
-      final maxSeq = memoryManager.getMaxSeq(empId);
+      final maxSeq = await memoryManager.getMaxSeq(empId);
       await memoryManager.clearSessionFromDb(empId);
       // 压缩状态已随 clearSessionFromDb 一并清除（CompressionMetaStore.deleteMeta）
       await onSessionCleared?.call(empId, maxSeq);

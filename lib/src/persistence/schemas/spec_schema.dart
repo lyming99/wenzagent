@@ -1,9 +1,9 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 /// spec_items 表 schema
 class SpecItemSchema {
-  static void create(Database db) {
-    db.execute('''
+  static Future<void> create(SqliteDatabase db) async {
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS spec_items (
         id           TEXT PRIMARY KEY,
         employee_id  TEXT NOT NULL,
@@ -18,7 +18,7 @@ class SpecItemSchema {
         update_time  INTEGER NOT NULL
       );
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_spec_items_employee
         ON spec_items(employee_id);
     ''');

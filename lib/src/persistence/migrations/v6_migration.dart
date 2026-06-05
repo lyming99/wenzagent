@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import 'migration.dart';
 
@@ -11,8 +11,8 @@ class V6Migration extends Migration {
   int get version => 6;
 
   @override
-  void onUpgrade(Database db) {
-    db.execute('''
+  Future<void> onUpgrade(SqliteDatabase db) async {
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS mark_read_queue (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         employee_id TEXT NOT NULL,

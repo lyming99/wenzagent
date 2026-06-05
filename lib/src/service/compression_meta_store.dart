@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import '../utils/logger.dart';
 import '../persistence/database_manager.dart';
@@ -17,15 +17,15 @@ class CompressionMetaStore {
   CompressionMetaStore({String? deviceId, DatabaseManager? dbManager})
       : __dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
 
-  Database get _db => __dbManager.db;
+  SqliteDatabase get _db => __dbManager.db;
 
   // ═══════════════════════════════════════════════════
   // 查询
   // ═══════════════════════════════════════════════════
 
   /// 获取压缩元数据（PK 查找）
-  CompressionMetaEntity? getMeta(String employeeId, String deviceId) {
-    final result = _db.select(
+  Future<CompressionMetaEntity?> getMeta(String employeeId, String deviceId) async {
+    final result = await _db.getAll(
       'SELECT * FROM context_compression_meta '
       'WHERE employee_id = ? AND device_id = ?',
       [employeeId, deviceId],
@@ -39,11 +39,11 @@ class CompressionMetaStore {
   // ═══════════════════════════════════════════════════
 
   /// 保存压缩元数据（INSERT OR REPLACE）
-  void saveMeta(CompressionMetaEntity meta) {
+  Future<void> saveMeta(CompressionMetaEntity meta) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     meta.updateTime = now;
 
-    _db.execute('''
+    await _db.execute('''
       INSERT INTO context_compression_meta (
         employee_id, device_id, prune_start_id,
         last_compression_time,
@@ -65,9 +65,9 @@ class CompressionMetaStore {
   }
 
   /// 递增冷却计数（每条新消息后调用）
-  void incrementCoolDown(String employeeId, String deviceId) {
+  Future<void> incrementCoolDown(String employeeId, String deviceId) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    _db.execute('''
+    await _db.execute('''
       UPDATE context_compression_meta SET
         messages_since_compression = messages_since_compression + 1,
         update_time = ?
@@ -76,9 +76,9 @@ class CompressionMetaStore {
   }
 
   /// 重置冷却计数（压缩完成后调用）
-  void resetCoolDown(String employeeId, String deviceId) {
+  Future<void> resetCoolDown(String employeeId, String deviceId) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    _db.execute('''
+    await _db.execute('''
       UPDATE context_compression_meta SET
         messages_since_compression = 0,
         last_compression_time = ?,
@@ -92,8 +92,8 @@ class CompressionMetaStore {
   // ═══════════════════════════════════════════════════
 
   /// 删除压缩元数据（清空会话时调用）
-  void deleteMeta(String employeeId, String deviceId) {
-    _db.execute(
+  Future<void> deleteMeta(String employeeId, String deviceId) async {
+    await _db.execute(
       'DELETE FROM context_compression_meta '
       'WHERE employee_id = ? AND device_id = ?',
       [employeeId, deviceId],

@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import '../database_manager.dart';
 import '../entities/session_entity.dart';
@@ -15,7 +15,7 @@ class SessionStore {
   SessionStore({String? deviceId, DatabaseManager? dbManager})
       : _dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
 
-  Database get _db {
+  SqliteDatabase get _db {
     if (!_dbManager.isInitialized) {
       throw StateError(
         '$runtimeType: DatabaseManager 未初始化，请先调用 initialize()。',
@@ -25,7 +25,7 @@ class SessionStore {
   }
 
   /// 从数据库行解码为实体
-  AiEmployeeSessionEntity _rowToEntity(Row row) {
+  AiEmployeeSessionEntity _rowToEntity(Map<String, Object?> row) {
     Map<String, DeviceSessionConfig> configMap = {};
     final configStr = row['config'] as String?;
     if (configStr != null && configStr.isNotEmpty) {
@@ -54,7 +54,7 @@ class SessionStore {
 
   /// 获取Session（主键查找）
   Future<AiEmployeeSessionEntity?> find(String employeeId) async {
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT * FROM sessions WHERE employee_id = ?',
       [employeeId],
     );
@@ -94,7 +94,7 @@ class SessionStore {
 
   /// 保存Session（INSERT OR REPLACE）
   Future<void> save(AiEmployeeSessionEntity session) async {
-    _db.execute('''
+    await _db.execute('''
       INSERT OR REPLACE INTO sessions (
         employee_id, config, title, is_archived, is_pinned,
         deleted, delete_time, create_time, update_time
@@ -132,7 +132,7 @@ class SessionStore {
     final sql =
         'SELECT * FROM sessions $where ORDER BY is_pinned DESC, update_time DESC';
 
-    return _db.select(sql, params).map(_rowToEntity).toList();
+    return (await _db.getAll(sql, params)).map(_rowToEntity).toList();
   }
 
   /// 删除Session（软删除，记录 deleteTime）
@@ -150,7 +150,7 @@ class SessionStore {
 
   /// 硬删除Session
   Future<void> hardDelete(String employeeId) async {
-    _db.execute('DELETE FROM sessions WHERE employee_id = ?', [employeeId]);
+    await _db.execute('DELETE FROM sessions WHERE employee_id = ?', [employeeId]);
   }
 
   /// 获取会话数量

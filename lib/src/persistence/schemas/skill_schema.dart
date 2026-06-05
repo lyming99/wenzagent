@@ -1,12 +1,12 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 /// skills 表 schema
 ///
 /// Skill 绑定员工（employeeId），不绑定设备（deviceId）。
 /// device_id 保留作为元数据，不建索引，不用于查询过滤。
 class SkillSchema {
-  static void create(Database db) {
-    db.execute('''
+  static Future<void> create(SqliteDatabase db) async {
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS skills (
         uuid         TEXT PRIMARY KEY,
         employee_id  TEXT NOT NULL,
@@ -25,7 +25,7 @@ class SkillSchema {
         update_time  INTEGER NOT NULL
       );
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_skills_employee
         ON skills(employee_id);
     ''');

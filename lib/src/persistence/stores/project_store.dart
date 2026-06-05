@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import '../database_manager.dart';
 import '../entities/entities.dart';
@@ -13,7 +13,7 @@ class ProjectStore {
   ProjectStore({String? deviceId, DatabaseManager? dbManager})
       : _dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
 
-  Database get _db {
+  SqliteDatabase get _db {
     if (!_dbManager.isInitialized) {
       throw StateError(
         '$runtimeType: DatabaseManager 未初始化，请先调用 initialize()。',
@@ -24,7 +24,7 @@ class ProjectStore {
 
   // ==================== 项目 ====================
 
-  ProjectEntity _rowToProject(Row row) {
+  ProjectEntity _rowToProject(Map<String, Object?> row) {
     return ProjectEntity.fromMap({
       'uuid': row['uuid'],
       'userId': row['user_id'],
@@ -45,7 +45,7 @@ class ProjectStore {
 
   /// 获取所有项目（未删除）
   Future<List<ProjectEntity>> findAllProjects() async {
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_projects WHERE deleted = 0 ORDER BY update_time DESC',
     );
     return rs.map(_rowToProject).toList();
@@ -54,7 +54,7 @@ class ProjectStore {
   /// 按关键词搜索项目
   Future<List<ProjectEntity>> searchProjects(String keyword) async {
     final pattern = '%$keyword%';
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_projects WHERE deleted = 0 AND (title LIKE ? OR description LIKE ?) ORDER BY update_time DESC',
       [pattern, pattern],
     );
@@ -63,7 +63,7 @@ class ProjectStore {
 
   /// 获取单个项目
   Future<ProjectEntity?> findProject(String uuid) async {
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_projects WHERE uuid = ? AND deleted = 0',
       [uuid],
     );
@@ -75,7 +75,7 @@ class ProjectStore {
 
   /// 获取单个项目（含已删除）
   Future<ProjectEntity?> findProjectIncludingDeleted(String uuid) async {
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_projects WHERE uuid = ?',
       [uuid],
     );
@@ -87,7 +87,7 @@ class ProjectStore {
 
   /// 保存项目（INSERT OR REPLACE）
   Future<void> saveProject(ProjectEntity entity) async {
-    _db.execute('''
+    await _db.execute('''
       INSERT OR REPLACE INTO wenz_projects (
         uuid, user_id, space_id, title, description, work_path, git_url,
         deleted, delete_by, delete_time, create_by, create_time, update_by, update_time
@@ -112,7 +112,7 @@ class ProjectStore {
 
   /// 软删除项目
   Future<void> deleteProject(String uuid) async {
-    _db.execute(
+    await _db.execute(
       'UPDATE wenz_projects SET deleted = 1, delete_time = ? WHERE uuid = ?',
       [DateTime.now().millisecondsSinceEpoch, uuid],
     );
@@ -120,7 +120,7 @@ class ProjectStore {
 
   // ==================== 模块 ====================
 
-  ProjectModuleEntity _rowToModule(Row row) {
+  ProjectModuleEntity _rowToModule(Map<String, Object?> row) {
     return ProjectModuleEntity.fromMap({
       'uuid': row['uuid'],
       'projectUuid': row['project_uuid'],
@@ -140,7 +140,7 @@ class ProjectStore {
 
   /// 获取项目的模块列表
   Future<List<ProjectModuleEntity>> findModules(String projectUuid) async {
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_project_modules WHERE project_uuid = ? AND deleted = 0 ORDER BY sort_order ASC',
       [projectUuid],
     );
@@ -149,7 +149,7 @@ class ProjectStore {
 
   /// 保存模块
   Future<void> saveModule(ProjectModuleEntity entity) async {
-    _db.execute('''
+    await _db.execute('''
       INSERT OR REPLACE INTO wenz_project_modules (
         uuid, project_uuid, title, description, note_uuid, sort_order,
         deleted, delete_by, delete_time, create_by, create_time, update_by, update_time
@@ -173,7 +173,7 @@ class ProjectStore {
 
   /// 软删除模块
   Future<void> deleteModule(String uuid) async {
-    _db.execute(
+    await _db.execute(
       'UPDATE wenz_project_modules SET deleted = 1, delete_time = ? WHERE uuid = ?',
       [DateTime.now().millisecondsSinceEpoch, uuid],
     );
@@ -181,7 +181,7 @@ class ProjectStore {
 
   // ==================== 技能 ====================
 
-  ProjectSkillEntity _rowToSkill(Row row) {
+  ProjectSkillEntity _rowToSkill(Map<String, Object?> row) {
     return ProjectSkillEntity.fromMap({
       'uuid': row['uuid'],
       'projectUuid': row['project_uuid'],
@@ -205,7 +205,7 @@ class ProjectStore {
 
   /// 获取项目的技能列表
   Future<List<ProjectSkillEntity>> findSkills(String projectUuid) async {
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_project_skills WHERE project_uuid = ? AND deleted = 0 ORDER BY sort_order ASC',
       [projectUuid],
     );
@@ -214,7 +214,7 @@ class ProjectStore {
 
   /// 保存技能
   Future<void> saveSkill(ProjectSkillEntity entity) async {
-    _db.execute('''
+    await _db.execute('''
       INSERT OR REPLACE INTO wenz_project_skills (
         uuid, project_uuid, title, description, skill_type, note_uuid, document_uuid,
         mcp_config, file_config, sort_order,
@@ -243,7 +243,7 @@ class ProjectStore {
 
   /// 软删除技能
   Future<void> deleteSkill(String uuid) async {
-    _db.execute(
+    await _db.execute(
       'UPDATE wenz_project_skills SET deleted = 1, delete_time = ? WHERE uuid = ?',
       [DateTime.now().millisecondsSinceEpoch, uuid],
     );
@@ -251,7 +251,7 @@ class ProjectStore {
 
   // ==================== 工单 ====================
 
-  ProjectIssueEntity _rowToIssue(Row row) {
+  ProjectIssueEntity _rowToIssue(Map<String, Object?> row) {
     return ProjectIssueEntity.fromMap({
       'uuid': row['uuid'],
       'projectUuid': row['project_uuid'],
@@ -277,13 +277,13 @@ class ProjectStore {
     String? status,
   }) async {
     if (status != null) {
-      final rs = _db.select(
+      final rs = await _db.getAll(
         'SELECT * FROM wenz_project_issues WHERE project_uuid = ? AND deleted = 0 AND status = ? ORDER BY create_time DESC',
         [projectUuid, status],
       );
       return rs.map(_rowToIssue).toList();
     }
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_project_issues WHERE project_uuid = ? AND deleted = 0 ORDER BY create_time DESC',
       [projectUuid],
     );
@@ -292,7 +292,7 @@ class ProjectStore {
 
   /// 保存工单
   Future<void> saveIssue(ProjectIssueEntity entity) async {
-    _db.execute('''
+    await _db.execute('''
       INSERT OR REPLACE INTO wenz_project_issues (
         uuid, project_uuid, title, description, status, priority, assignee, close_time,
         deleted, delete_by, delete_time, create_by, create_time, update_by, update_time
@@ -318,7 +318,7 @@ class ProjectStore {
 
   /// 获取单个工单（通过 uuid，跨项目查询）
   Future<ProjectIssueEntity?> findIssue(String uuid) async {
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_project_issues WHERE uuid = ? AND deleted = 0',
       [uuid],
     );
@@ -330,7 +330,7 @@ class ProjectStore {
 
   /// 软删除工单
   Future<void> deleteIssue(String uuid) async {
-    _db.execute(
+    await _db.execute(
       'UPDATE wenz_project_issues SET deleted = 1, delete_time = ? WHERE uuid = ?',
       [DateTime.now().millisecondsSinceEpoch, uuid],
     );
@@ -340,7 +340,7 @@ class ProjectStore {
 
   /// 获取所有项目（含已删除）
   Future<List<ProjectEntity>> findAllProjectsIncludingDeleted() async {
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_projects ORDER BY update_time DESC',
     );
     return rs.map(_rowToProject).toList();
@@ -348,7 +348,7 @@ class ProjectStore {
 
   /// 获取项目的所有模块（含已删除）
   Future<List<ProjectModuleEntity>> findAllModulesIncludingDeleted(String projectUuid) async {
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_project_modules WHERE project_uuid = ? ORDER BY sort_order ASC',
       [projectUuid],
     );
@@ -357,7 +357,7 @@ class ProjectStore {
 
   /// 获取项目的所有技能（含已删除）
   Future<List<ProjectSkillEntity>> findAllSkillsIncludingDeleted(String projectUuid) async {
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_project_skills WHERE project_uuid = ? ORDER BY sort_order ASC',
       [projectUuid],
     );
@@ -366,7 +366,7 @@ class ProjectStore {
 
   /// 获取项目的所有工单（含已删除）
   Future<List<ProjectIssueEntity>> findAllIssuesIncludingDeleted(String projectUuid) async {
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_project_issues WHERE project_uuid = ? ORDER BY create_time DESC',
       [projectUuid],
     );
@@ -377,7 +377,7 @@ class ProjectStore {
 
   /// 获取单个模块（含已删除）
   Future<ProjectModuleEntity?> findModuleIncludingDeleted(String uuid) async {
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_project_modules WHERE uuid = ?',
       [uuid],
     );
@@ -389,7 +389,7 @@ class ProjectStore {
 
   /// 获取单个技能（含已删除）
   Future<ProjectSkillEntity?> findSkillIncludingDeleted(String uuid) async {
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_project_skills WHERE uuid = ?',
       [uuid],
     );
@@ -401,7 +401,7 @@ class ProjectStore {
 
   /// 获取单个工单（含已删除）
   Future<ProjectIssueEntity?> findIssueIncludingDeleted(String uuid) async {
-    final rs = _db.select(
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_project_issues WHERE uuid = ?',
       [uuid],
     );
@@ -417,15 +417,15 @@ class ProjectStore {
   ///
   /// 返回 true 表示有更新，false 表示无需更新。
   /// 使用 StoreMergeUtil.mergeDeleteState + shouldUpdateData 进行合并判断。
-  bool upsertFromRemote(ProjectEntity remote) {
-    final rs = _db.select(
+  Future<bool> upsertFromRemote(ProjectEntity remote) async {
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_projects WHERE uuid = ?',
       [remote.uuid],
     );
     if (rs.isEmpty) {
       // 本地不存在 → 直接保存（未删除的才保存）
       if (remote.deleted != 1) {
-        saveProject(remote);
+        await saveProject(remote);
       }
       return remote.deleted != 1;
     }
@@ -445,7 +445,7 @@ class ProjectStore {
             mergeResult.mergedDeleted != existing.deleted;
     if (shouldUpdateData || shouldUpdateDelete) {
       final base = shouldUpdateData ? remote : existing;
-      saveProject(base.copyWith(
+      await saveProject(base.copyWith(
         deleted: mergeResult.mergedDeleted,
         deleteTime: mergeResult.mergedDeleteTime,
       ));
@@ -455,14 +455,14 @@ class ProjectStore {
   }
 
   /// 远程模块数据合并写入
-  bool upsertModuleFromRemote(ProjectModuleEntity remote) {
-    final rs = _db.select(
+  Future<bool> upsertModuleFromRemote(ProjectModuleEntity remote) async {
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_project_modules WHERE uuid = ?',
       [remote.uuid],
     );
     if (rs.isEmpty) {
       if (remote.deleted != 1) {
-        saveModule(remote);
+        await saveModule(remote);
       }
       return remote.deleted != 1;
     }
@@ -482,7 +482,7 @@ class ProjectStore {
             mergeResult.mergedDeleted != existing.deleted;
     if (shouldUpdateData || shouldUpdateDelete) {
       final base = shouldUpdateData ? remote : existing;
-      saveModule(base.copyWith(
+      await saveModule(base.copyWith(
         deleted: mergeResult.mergedDeleted,
         deleteTime: mergeResult.mergedDeleteTime,
       ));
@@ -492,14 +492,14 @@ class ProjectStore {
   }
 
   /// 远程技能数据合并写入
-  bool upsertSkillFromRemote(ProjectSkillEntity remote) {
-    final rs = _db.select(
+  Future<bool> upsertSkillFromRemote(ProjectSkillEntity remote) async {
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_project_skills WHERE uuid = ?',
       [remote.uuid],
     );
     if (rs.isEmpty) {
       if (remote.deleted != 1) {
-        saveSkill(remote);
+        await saveSkill(remote);
       }
       return remote.deleted != 1;
     }
@@ -519,7 +519,7 @@ class ProjectStore {
             mergeResult.mergedDeleted != existing.deleted;
     if (shouldUpdateData || shouldUpdateDelete) {
       final base = shouldUpdateData ? remote : existing;
-      saveSkill(base.copyWith(
+      await saveSkill(base.copyWith(
         deleted: mergeResult.mergedDeleted,
         deleteTime: mergeResult.mergedDeleteTime,
       ));
@@ -529,14 +529,14 @@ class ProjectStore {
   }
 
   /// 远程工单数据合并写入
-  bool upsertIssueFromRemote(ProjectIssueEntity remote) {
-    final rs = _db.select(
+  Future<bool> upsertIssueFromRemote(ProjectIssueEntity remote) async {
+    final rs = await _db.getAll(
       'SELECT * FROM wenz_project_issues WHERE uuid = ?',
       [remote.uuid],
     );
     if (rs.isEmpty) {
       if (remote.deleted != 1) {
-        saveIssue(remote);
+        await saveIssue(remote);
       }
       return remote.deleted != 1;
     }
@@ -556,7 +556,7 @@ class ProjectStore {
             mergeResult.mergedDeleted != existing.deleted;
     if (shouldUpdateData || shouldUpdateDelete) {
       final base = shouldUpdateData ? remote : existing;
-      saveIssue(base.copyWith(
+      await saveIssue(base.copyWith(
         deleted: mergeResult.mergedDeleted,
         deleteTime: mergeResult.mergedDeleteTime,
       ));

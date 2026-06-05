@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import '../database_manager.dart';
 import '../entities/sync_watermark_entity.dart';
@@ -10,7 +10,7 @@ class SyncWatermarkStore {
   SyncWatermarkStore({String? deviceId, DatabaseManager? dbManager})
       : _dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
 
-  Database get _db {
+  SqliteDatabase get _db {
     if (!_dbManager.isInitialized) {
       throw StateError(
         '$runtimeType: DatabaseManager 未初始化，请先调用 initialize()。',
@@ -34,8 +34,8 @@ class SyncWatermarkStore {
   }
 
   /// 获取指定 employee + device 的水位线
-  SyncWatermarkEntity? getWatermark(String employeeId, {String deviceId = ''}) {
-    final resultSet = _db.select(
+  Future<SyncWatermarkEntity?> getWatermark(String employeeId, {String deviceId = ''}) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM sync_watermark WHERE employee_id = ? AND device_id = ?',
       [employeeId, deviceId],
     );
@@ -52,14 +52,14 @@ class SyncWatermarkStore {
   }
 
   /// 获取指定 employee + device 的 last_seq，不存在返回 0
-  int getLastSeq(String employeeId, {String deviceId = ''}) {
-    final watermark = getWatermark(employeeId, deviceId: deviceId);
+  Future<int> getLastSeq(String employeeId, {String deviceId = ''}) async {
+    final watermark = await getWatermark(employeeId, deviceId: deviceId);
     return watermark?.lastSeq ?? 0;
   }
 
   /// 更新或插入水位线
-  void upsert(SyncWatermarkEntity entity) {
-    _db.execute('''
+  Future<void> upsert(SyncWatermarkEntity entity) async {
+    await _db.execute('''
       INSERT OR REPLACE INTO sync_watermark (employee_id, device_id, last_seq, clear_seq, update_time)
         VALUES (?, ?, ?, ?, ?)
     ''', [
@@ -75,9 +75,9 @@ class SyncWatermarkStore {
   ///
   /// 使用 MAX 语义：只在 lastSeq 大于当前值时才更新，
   /// 防止推送和拉取并发时水位线回退。
-  void updateLastSeq(String employeeId, int lastSeq, {String deviceId = ''}) {
+  Future<void> updateLastSeq(String employeeId, int lastSeq, {String deviceId = ''}) async {
     _validateDeviceId(deviceId, 'updateLastSeq');
-    _db.execute('''
+    await _db.execute('''
       INSERT INTO sync_watermark (employee_id, device_id, last_seq, update_time)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(employee_id, device_id) DO UPDATE SET
@@ -98,11 +98,11 @@ class SyncWatermarkStore {
   ///
   /// [enforceMax] 为 true 时（默认），使用 MAX 语义防止水位线回退；
   /// 为 false 时直接设置值（仅用于需要真正归零的特殊场景）。
-  void resetLastSeq(String employeeId, int lastSeq,
-      {String deviceId = '', bool enforceMax = true}) {
+  Future<void> resetLastSeq(String employeeId, int lastSeq,
+      {String deviceId = '', bool enforceMax = true}) async {
     if (enforceMax) {
       // MAX 语义：只增不减，防止清空会话等场景意外降低水位线
-      _db.execute('''
+      await _db.execute('''
         INSERT INTO sync_watermark (employee_id, device_id, last_seq, update_time)
           VALUES (?, ?, ?, ?)
           ON CONFLICT(employee_id, device_id) DO UPDATE SET
@@ -116,7 +116,7 @@ class SyncWatermarkStore {
       ]);
     } else {
       // 直接设置值，不受 MAX 语义限制（仅用于特殊场景）
-      _db.execute('''
+      await _db.execute('''
         INSERT INTO sync_watermark (employee_id, device_id, last_seq, update_time)
           VALUES (?, ?, ?, ?)
           ON CONFLICT(employee_id, device_id) DO UPDATE SET
@@ -132,8 +132,8 @@ class SyncWatermarkStore {
   }
 
   /// 获取清空水位线，不存在或已清除返回 null
-  int? getClearSeq(String employeeId, {String deviceId = ''}) {
-    final watermark = getWatermark(employeeId, deviceId: deviceId);
+  Future<int?> getClearSeq(String employeeId, {String deviceId = ''}) async {
+    final watermark = await getWatermark(employeeId, deviceId: deviceId);
     return watermark?.clearSeq;
   }
 
@@ -144,8 +144,8 @@ class SyncWatermarkStore {
   ///
   /// INSERT 分支使用子查询保留已有 last_seq，避免首次插入时将 last_seq 硬编码为 0
   /// 导致后续增量同步从 0 开始全量拉取。
-  void setClearSeq(String employeeId, int clearSeq, {String deviceId = ''}) {
-    _db.execute('''
+  Future<void> setClearSeq(String employeeId, int clearSeq, {String deviceId = ''}) async {
+    await _db.execute('''
       INSERT INTO sync_watermark (employee_id, device_id, last_seq, clear_seq, update_time)
         VALUES (?, ?,
           COALESCE((SELECT last_seq FROM sync_watermark WHERE employee_id = ? AND device_id = ?), 0),
@@ -166,8 +166,8 @@ class SyncWatermarkStore {
   /// 清除清空水位线标记
   ///
   /// 客户端处理完清空操作后调用，将 clear_seq 重置为 NULL。
-  void clearClearSeq(String employeeId, {String deviceId = ''}) {
-    _db.execute('''
+  Future<void> clearClearSeq(String employeeId, {String deviceId = ''}) async {
+    await _db.execute('''
       UPDATE sync_watermark SET clear_seq = NULL, update_time = ?
         WHERE employee_id = ? AND device_id = ?
     ''', [

@@ -1,9 +1,9 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 /// sessions 表 schema
 class SessionSchema {
-  static void create(Database db) {
-    db.execute('''
+  static Future<void> create(SqliteDatabase db) async {
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS sessions (
         employee_id  TEXT PRIMARY KEY,
         config       TEXT NOT NULL DEFAULT '{}',

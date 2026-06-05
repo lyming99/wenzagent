@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import 'migration.dart';
 import '../schemas/project_schema.dart';
@@ -9,7 +9,7 @@ class V17Migration extends Migration {
   int get version => 17;
 
   @override
-  void onUpgrade(Database db) {
-    ProjectSchema.create(db);
+  Future<void> onUpgrade(SqliteDatabase db) async {
+    await ProjectSchema.create(db);
   }
 }

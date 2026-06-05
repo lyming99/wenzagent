@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import '../database_manager.dart';
 import '../entities/device_config_entity.dart';
@@ -15,7 +15,7 @@ class DeviceConfigStore {
   DeviceConfigStore({String? deviceId, DatabaseManager? dbManager})
       : _dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
 
-  Database get _db {
+  SqliteDatabase get _db {
     if (!_dbManager.isInitialized) {
       throw StateError(
         '$runtimeType: DatabaseManager 未初始化，请先调用 initialize()。',
@@ -25,7 +25,7 @@ class DeviceConfigStore {
   }
 
   /// 从数据库行解码为实体
-  DeviceConfigEntity _rowToEntity(Row row) {
+  DeviceConfigEntity _rowToEntity(Map<String, Object?> row) {
     DeviceInfoConfig deviceInfo = DeviceInfoConfig();
     final deviceInfoStr = row['device_info'] as String?;
     if (deviceInfoStr != null && deviceInfoStr.isNotEmpty) {
@@ -54,7 +54,7 @@ class DeviceConfigStore {
 
   /// 获取设备配置（主键查找）
   Future<DeviceConfigEntity?> find(String deviceId) async {
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT * FROM device_configs WHERE device_id = ?',
       [deviceId],
     );
@@ -82,7 +82,7 @@ class DeviceConfigStore {
 
   /// 保存设备配置（INSERT OR REPLACE）
   Future<void> save(DeviceConfigEntity config) async {
-    _db.execute('''
+    await _db.execute('''
       INSERT OR REPLACE INTO device_configs (
         device_id, device_info, env_vars, create_time, update_time
       ) VALUES (?, ?, ?, ?, ?)
@@ -160,7 +160,7 @@ class DeviceConfigStore {
 
   /// 删除设备配置
   Future<void> delete(String deviceId) async {
-    _db.execute(
+    await _db.execute(
       'DELETE FROM device_configs WHERE device_id = ?',
       [deviceId],
     );
@@ -168,15 +168,14 @@ class DeviceConfigStore {
 
   /// 获取所有设备配置
   Future<List<DeviceConfigEntity>> findAll() async {
-    return _db
-        .select('SELECT * FROM device_configs')
+    return (await _db.getAll('SELECT * FROM device_configs'))
         .map(_rowToEntity)
         .toList();
   }
 
   /// 获取设备配置数量
   Future<int> count() async {
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT COUNT(*) as cnt FROM device_configs',
     );
     return resultSet.first['cnt'] as int;

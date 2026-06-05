@@ -24,7 +24,7 @@ int _testCounter = 0;
 /// - 两条路径的合并逻辑一致（upsertFromRemote 的 MAX/CASE-WHEN 策略）
 /// - 路径一致性：同一变更通过 event 和 query 同步到不同设备，结果一致
 /// - 端到端场景：离线→上线、并发冲突、多轮同步稳定性
-void main() {
+Future<void> main() async {
   late String testDbPathA;
   late String testDbPathB;
   late String deviceA;
@@ -59,8 +59,8 @@ void main() {
     storeA = SessionSummaryStore(deviceId: deviceA);
     storeB = SessionSummaryStore(deviceId: deviceB);
 
-    storeA.ensureTable();
-    storeB.ensureTable();
+    await storeA.ensureTable();
+    await storeB.ensureTable();
   });
 
   tearDown(() async {
@@ -96,7 +96,7 @@ void main() {
     String? deviceId,
   }) {
     final did = deviceId ?? storeDeviceIdA;
-    final summary = from.getSummary(employeeId, deviceId: did);
+    final summary = await from.getSummary(employeeId, deviceId: did);
     if (summary == null) return;
 
     // 序列化 → 反序列化（模拟网络传输）
@@ -104,7 +104,7 @@ void main() {
     final received = SessionSummaryEntity.fromMap(map);
 
     // 接收端执行 upsertFromRemote（与 _handleSessionSummaryChanged 一致）
-    to.upsertFromRemote(received);
+    await to.upsertFromRemote(received);
   }
 
   // ─── 同步路径2 模拟：query → update store ───
@@ -120,12 +120,12 @@ void main() {
     SessionSummaryStore to, {
     String? deviceId,
   }) {
-    final summaries = from.getAllSummaries(deviceId: deviceId ?? '');
+    final summaries = await from.getAllSummaries(deviceId: deviceId ?? '');
     for (final s in summaries) {
       // 序列化 → 反序列化（模拟网络传输）
       final map = s.toMap();
       final received = SessionSummaryEntity.fromMap(map);
-      to.upsertFromRemote(received);
+      await to.upsertFromRemote(received);
     }
   }
 
@@ -159,7 +159,7 @@ void main() {
     int seq = 0,
     String? content,
   }) {
-    store.onMessageAdded(
+    await store.onMessageAdded(
       employeeId: employeeId,
       deviceId: deviceId,
       role: role,
@@ -180,7 +180,7 @@ void main() {
 
     group('1.1 消息新增同步', () {
       test('Device A 新增 assistant 消息 → 广播到 B → B 的未读计数 +1、最新消息更新',
-          () {
+          () async {
         final empId = randomEmpId();
 
         // Device A 新增 assistant 消息（未读）
@@ -198,9 +198,9 @@ void main() {
         syncViaEvent(storeA, storeB, empId);
 
         // B 的未读计数 +1
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
         // B 的最新消息更新
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB, isNotNull);
         expect(summaryB!.lastMsgId, equals('msg-1'));
         expect(summaryB.lastMsgRole, equals('assistant'));
@@ -210,7 +210,7 @@ void main() {
       });
 
       test('Device A 新增 user 消息 → 广播到 B → B 的未读计数不变、最新消息更新',
-          () {
+          () async {
         final empId = randomEmpId();
 
         // Device A 新增 user 消息
@@ -228,16 +228,16 @@ void main() {
         syncViaEvent(storeA, storeB, empId);
 
         // B 的未读计数不变（user 消息不计入未读）
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
         // B 的最新消息预览更新
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB, isNotNull);
         expect(summaryB!.lastMsgId, equals('msg-user'));
         expect(summaryB.lastMsgRole, equals('user'));
         expect(summaryB.lastMsgContent, equals('用户输入'));
       });
 
-      test('Device A 新增已读消息 → 广播到 B → B 的未读计数不变', () {
+      test('Device A 新增已读消息 → 广播到 B → B 的未读计数不变', () async {
         final empId = randomEmpId();
 
         // Device A 新增已读 assistant 消息
@@ -255,24 +255,24 @@ void main() {
         syncViaEvent(storeA, storeB, empId);
 
         // B 的未读计数不变
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
       });
 
-      test('广播空摘要（getSummary 返回 null）→ 无副作用', () {
+      test('广播空摘要（getSummary 返回 null）→ 无副作用', () async {
         final empId = randomEmpId();
 
         // Device A 没有此摘要
-        expect(storeA.getSummary(empId, deviceId: deviceA), isNull);
+        expect(await storeA.getSummary(empId, deviceId: deviceA), isNull);
 
         // 广播（空）
         syncViaEvent(storeA, storeB, empId);
 
         // B 也没有
-        expect(storeB.getSummary(empId, deviceId: deviceA), isNull);
-        expect(storeB.getAllSummaries(), isEmpty);
+        expect(await storeB.getSummary(empId, deviceId: deviceA), isNull);
+        expect(await storeB.getAllSummaries(), isEmpty);
       });
 
-      test('同一消息多次广播 → 幂等（未读不重复累加）', () {
+      test('同一消息多次广播 → 幂等（未读不重复累加）', () async {
         final empId = randomEmpId();
 
         addMessage(storeA,
@@ -291,8 +291,8 @@ void main() {
         }
 
         // 未读不重复累加（MAX 策略：max(0, 1) = 1）
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB!.lastMsgId, equals('msg-1'));
       });
     });
@@ -301,7 +301,7 @@ void main() {
 
     group('1.2 消息更新同步', () {
       test('Device A 产生新 assistant 消息（seq 递增）→ 广播 → B 的 lastMsg 全部更新',
-          () {
+          () async {
         final empId = randomEmpId();
 
         // 初始消息
@@ -329,7 +329,7 @@ void main() {
         syncViaEvent(storeA, storeB, empId);
 
         // B 全部更新
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB!.lastMsgId, equals('msg-new'));
         expect(summaryB.lastMsgRole, equals('assistant'));
         expect(summaryB.lastMsgContent, equals('新消息'));
@@ -337,7 +337,7 @@ void main() {
         expect(summaryB.lastMsgSeq, equals(2));
       });
 
-      test('旧广播延迟到达（网络延迟场景）→ 不覆盖 B 上已有的更新数据', () {
+      test('旧广播延迟到达（网络延迟场景）→ 不覆盖 B 上已有的更新数据', () async {
         final empId = randomEmpId();
 
         // B 先收到较新的消息
@@ -364,13 +364,13 @@ void main() {
         syncViaEvent(storeA, storeB, empId);
 
         // B 的最新消息不被覆盖
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB!.lastMsgId, equals('msg-new'));
         expect(summaryB.lastMsgContent, equals('最新消息'));
         expect(summaryB.lastMsgTime, equals(3000));
       });
 
-      test('Device A 产生多条连续消息 → 逐次广播后 B 的摘要状态正确', () {
+      test('Device A 产生多条连续消息 → 逐次广播后 B 的摘要状态正确', () async {
         final empId = randomEmpId();
 
         // 逐次产生消息并广播
@@ -388,7 +388,7 @@ void main() {
         }
 
         // B 最终状态：最新消息是 msg-5
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB!.lastMsgId, equals('msg-5'));
         expect(summaryB.lastMsgContent, equals('消息5'));
         expect(summaryB.lastMsgTime, equals(5000));
@@ -401,7 +401,7 @@ void main() {
     // ---- 1.3 未读计数同步 ----
 
     group('1.3 未读计数同步', () {
-      test('Device A 有 5 条未读 → 广播到 B → B 显示 5 条未读', () {
+      test('Device A 有 5 条未读 → 广播到 B → B 显示 5 条未读', () async {
         final empId = randomEmpId();
 
         for (int i = 1; i <= 5; i++) {
@@ -416,14 +416,14 @@ void main() {
               content: '消息$i');
         }
 
-        expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(5));
+        expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(5));
 
         syncViaEvent(storeA, storeB, empId);
 
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
       });
 
-      test('B 本地已有 3 条未读 → 收到 A 的 5 条未读广播 → 取 MAX = 5', () {
+      test('B 本地已有 3 条未读 → 收到 A 的 5 条未读广播 → 取 MAX = 5', () async {
         final empId = randomEmpId();
 
         // B 本地有 3 条未读
@@ -438,7 +438,7 @@ void main() {
               seq: i,
               content: 'B消息$i');
         }
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
 
         // A 有 5 条未读
         for (int i = 1; i <= 5; i++) {
@@ -457,10 +457,10 @@ void main() {
         syncViaEvent(storeA, storeB, empId);
 
         // 取 MAX(3, 5) = 5
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
       });
 
-      test('B 本地已有 5 条未读 → 收到 A 的 3 条未读广播 → 保持 MAX = 5', () {
+      test('B 本地已有 5 条未读 → 收到 A 的 3 条未读广播 → 保持 MAX = 5', () async {
         final empId = randomEmpId();
 
         // B 本地有 5 条未读
@@ -493,10 +493,10 @@ void main() {
         syncViaEvent(storeA, storeB, empId);
 
         // 取 MAX(5, 3) = 5（不减少）
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
       });
 
-      test('B 本地已有 0 条未读 → 收到 A 的 0 条未读广播 → 保持 0', () {
+      test('B 本地已有 0 条未读 → 收到 A 的 0 条未读广播 → 保持 0', () async {
         final empId = randomEmpId();
 
         // A 创建已读消息
@@ -513,14 +513,14 @@ void main() {
         syncViaEvent(storeA, storeB, empId);
 
         // 不引入假未读
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
       });
     });
 
     // ---- 1.4 Pending 请求同步 ----
 
     group('1.4 Pending请求同步', () {
-      test('Device A 产生权限请求 → 广播到 B → B 显示 pendingPermission', () {
+      test('Device A 产生权限请求 → 广播到 B → B 显示 pendingPermission', () async {
         final empId = randomEmpId();
 
         addMessage(storeA,
@@ -532,19 +532,19 @@ void main() {
             createTime: 1000,
             seq: 1,
             content: '需要权限');
-        storeA.setPendingPermission(
+        await storeA.setPendingPermission(
             empId, deviceA, '{"type":"permission","id":"req-1"}');
 
         syncViaEvent(storeA, storeB, empId);
 
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB, isNotNull);
         expect(summaryB!.hasPendingPermission, isTrue);
         expect(summaryB.pendingPermission, contains('req-1'));
         expect(summaryB.pendingPermissionTime, isNotNull);
       });
 
-      test('Device A 产生确认请求 → 广播到 B → B 显示 pendingConfirm', () {
+      test('Device A 产生确认请求 → 广播到 B → B 显示 pendingConfirm', () async {
         final empId = randomEmpId();
 
         addMessage(storeA,
@@ -556,18 +556,18 @@ void main() {
             createTime: 1000,
             seq: 1,
             content: '请确认');
-        storeA.setPendingConfirm(
+        await storeA.setPendingConfirm(
             empId, deviceA, '{"type":"confirm","id":"conf-1"}');
 
         syncViaEvent(storeA, storeB, empId);
 
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB, isNotNull);
         expect(summaryB!.hasPendingConfirm, isTrue);
         expect(summaryB.pendingConfirm, contains('conf-1'));
       });
 
-      test('权限和确认请求可同时存在 → 广播到 B → B 两个 pending 都有', () {
+      test('权限和确认请求可同时存在 → 广播到 B → B 两个 pending 都有', () async {
         final empId = randomEmpId();
 
         addMessage(storeA,
@@ -579,20 +579,20 @@ void main() {
             createTime: 1000,
             seq: 1,
             content: '需要权限和确认');
-        storeA.setPendingPermission(
+        await storeA.setPendingPermission(
             empId, deviceA, '{"type":"permission","id":"req-1"}');
-        storeA.setPendingConfirm(
+        await storeA.setPendingConfirm(
             empId, deviceA, '{"type":"confirm","id":"conf-1"}');
 
         syncViaEvent(storeA, storeB, empId);
 
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB!.hasPendingPermission, isTrue);
         expect(summaryB.hasPendingConfirm, isTrue);
         expect(summaryB.hasPendingRequest, isTrue);
       });
 
-      test('B 已有 pending → 收到 A 的空 pending 广播 → 保留本地（不覆盖）', () {
+      test('B 已有 pending → 收到 A 的空 pending 广播 → 保留本地（不覆盖）', () async {
         final empId = randomEmpId();
 
         // B 本地有 pending
@@ -605,7 +605,7 @@ void main() {
             createTime: 1000,
             seq: 1,
             content: '消息');
-        storeB.setPendingPermission(
+        await storeB.setPendingPermission(
             empId, deviceA, '{"type":"permission","id":"req-local"}');
 
         // A 没有 pending（只有消息）
@@ -622,12 +622,12 @@ void main() {
         syncViaEvent(storeA, storeB, empId);
 
         // B 保留本地 pending
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB!.hasPendingPermission, isTrue);
         expect(summaryB.pendingPermission, contains('req-local'));
       });
 
-      test('B 已有 pending → 收到 A 的更新 pending（时间更新）→ 覆盖为新的', () {
+      test('B 已有 pending → 收到 A 的更新 pending（时间更新）→ 覆盖为新的', () async {
         final empId = randomEmpId();
 
         // B 本地有旧 pending
@@ -640,7 +640,7 @@ void main() {
             createTime: 1000,
             seq: 1,
             content: '消息');
-        storeB.setPendingPermission(
+        await storeB.setPendingPermission(
             empId, deviceA, '{"type":"permission","id":"req-old"}');
 
         // A 有更新的 pending
@@ -653,14 +653,14 @@ void main() {
             createTime: 2000,
             seq: 2,
             content: '新消息');
-        storeA.setPendingPermission(
+        await storeA.setPendingPermission(
             empId, deviceA, '{"type":"permission","id":"req-new"}');
 
         // A 的 pendingTime > B 的 pendingTime（因为 A 是后设置的）
         syncViaEvent(storeA, storeB, empId);
 
         // B 被更新为 A 的 pending
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB!.hasPendingPermission, isTrue);
         expect(summaryB.pendingPermission, contains('req-new'));
       });
@@ -669,7 +669,7 @@ void main() {
     // ---- 1.5 摘要删除同步 ----
 
     group('1.5 摘要删除同步', () {
-      test('Device A 删除摘要 → 广播删除通知 → B 也删除', () {
+      test('Device A 删除摘要 → 广播删除通知 → B 也删除', () async {
         final empId = randomEmpId();
 
         addMessage(storeA,
@@ -684,17 +684,17 @@ void main() {
         syncViaEvent(storeA, storeB, empId);
 
         // B 有摘要
-        expect(storeB.getSummary(empId, deviceId: deviceA), isNotNull);
+        expect(await storeB.getSummary(empId, deviceId: deviceA), isNotNull);
 
         // A 删除
-        storeA.deleteSummary(empId, deviceId: deviceA);
+        await storeA.deleteSummary(empId, deviceId: deviceA);
         // B 也删除（模拟删除通知广播）
-        storeB.deleteSummary(empId, deviceId: deviceA);
+        await storeB.deleteSummary(empId, deviceId: deviceA);
 
-        expect(storeB.getSummary(empId, deviceId: deviceA), isNull);
+        expect(await storeB.getSummary(empId, deviceId: deviceA), isNull);
       });
 
-      test('删除后重新广播不产生幽灵摘要', () {
+      test('删除后重新广播不产生幽灵摘要', () async {
         final empId = randomEmpId();
 
         addMessage(storeA,
@@ -709,19 +709,19 @@ void main() {
         syncViaEvent(storeA, storeB, empId);
 
         // 两端都删除
-        storeA.deleteSummary(empId, deviceId: deviceA);
-        storeB.deleteSummary(empId, deviceId: deviceA);
+        await storeA.deleteSummary(empId, deviceId: deviceA);
+        await storeB.deleteSummary(empId, deviceId: deviceA);
 
         // 尝试同步（A 已删除，getSummary 返回 null，不会写入）
         syncViaEvent(storeA, storeB, empId);
         syncViaEvent(storeB, storeA, empId);
 
         // 不产生幽灵摘要
-        expect(storeA.getSummary(empId, deviceId: deviceA), isNull);
-        expect(storeB.getSummary(empId, deviceId: deviceA), isNull);
+        expect(await storeA.getSummary(empId, deviceId: deviceA), isNull);
+        expect(await storeB.getSummary(empId, deviceId: deviceA), isNull);
       });
 
-      test('删除一个员工摘要不影响其他员工', () {
+      test('删除一个员工摘要不影响其他员工', () async {
         final emp1 = randomEmpId();
         final emp2 = randomEmpId();
         final emp3 = randomEmpId();
@@ -741,23 +741,23 @@ void main() {
         }
 
         // 删除 emp2
-        storeA.deleteSummary(emp2, deviceId: deviceA);
-        storeB.deleteSummary(emp2, deviceId: deviceA);
+        await storeA.deleteSummary(emp2, deviceId: deviceA);
+        await storeB.deleteSummary(emp2, deviceId: deviceA);
 
         // emp1 和 emp3 不受影响
-        expect(storeA.getSummary(emp1, deviceId: deviceA), isNotNull);
-        expect(storeA.getSummary(emp3, deviceId: deviceA), isNotNull);
-        expect(storeB.getSummary(emp1, deviceId: deviceA), isNotNull);
-        expect(storeB.getSummary(emp3, deviceId: deviceA), isNotNull);
-        expect(storeA.getAllSummaries().length, equals(2));
-        expect(storeB.getAllSummaries().length, equals(2));
+        expect(await storeA.getSummary(emp1, deviceId: deviceA), isNotNull);
+        expect(await storeA.getSummary(emp3, deviceId: deviceA), isNotNull);
+        expect(await storeB.getSummary(emp1, deviceId: deviceA), isNotNull);
+        expect(await storeB.getSummary(emp3, deviceId: deviceA), isNotNull);
+        expect(await storeA.getAllSummaries().length, equals(2));
+        expect(await storeB.getAllSummaries().length, equals(2));
       });
     });
 
     // ---- 1.6 标记已读(清空未读)同步 ----
 
     group('1.6 标记已读同步', () {
-      test('Device A 有 3 条未读 → A 标记已读 → 广播到 B → B 未读清零', () {
+      test('Device A 有 3 条未读 → A 标记已读 → 广播到 B → B 未读清零', () async {
         final empId = randomEmpId();
 
         // A 有 3 条未读
@@ -773,24 +773,24 @@ void main() {
               content: '消息$i');
         }
         syncViaEvent(storeA, storeB, empId);
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
 
         // A 标记已读（unread=0）
-        storeA.markAsRead(empId, deviceId: deviceA);
-        expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        await storeA.markAsRead(empId, deviceId: deviceA);
+        expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
 
         // 广播已读状态到 B
         syncViaEvent(storeA, storeB, empId);
 
         // MAX 策略：B 已有 3 条未读，A 标记已读后广播 unread=0，MAX(3, 0) = 3
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
         // 最新消息不变
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB!.lastMsgId, equals('msg-3'));
         expect(summaryB.lastMsgContent, equals('消息3'));
       });
 
-      test('B 有 5 条未读 → 收到 A 的已读广播(unread=0) → B 未读清零', () {
+      test('B 有 5 条未读 → 收到 Future<A> 的已读广播(unread=0) → B 未读清零', () async {
         final empId = randomEmpId();
 
         // B 有 5 条未读
@@ -805,10 +805,10 @@ void main() {
               seq: i,
               content: 'B消息$i');
         }
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
 
         // A 标记已读
-        storeA.markAsRead(empId, deviceId: deviceA);
+        await storeA.markAsRead(empId, deviceId: deviceA);
 
         // 广播到 B
         syncViaEvent(storeA, storeB, empId);
@@ -817,10 +817,10 @@ void main() {
         // 注意：当前 MAX 策略下，B 的未读不会被清零
         // 这是设计取舍：MAX 策略防止未读丢失，已读同步需要额外机制
         // 验证当前行为：MAX(5, 0) = 5
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
       });
 
-      test('A 标记已读 → 广播 → B 再收到新消息 → 未读从 0 开始计数', () {
+      test('A 标记已读 → 广播 → B 再收到新消息 → 未读从 0 开始计数', () async {
         final empId = randomEmpId();
 
         // A 有 2 条未读
@@ -843,13 +843,13 @@ void main() {
             seq: 2,
             content: '消息2');
         syncViaEvent(storeA, storeB, empId);
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(2));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(2));
 
         // A 标记已读 → 广播
-        storeA.markAsRead(empId, deviceId: deviceA);
+        await storeA.markAsRead(empId, deviceId: deviceA);
         syncViaEvent(storeA, storeB, empId);
         // MAX 策略：B 已有 2 条未读，A 标记已读后广播 unread=0，MAX(2, 0) = 2
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(2));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(2));
 
         // B 收到新消息（本地 unread +1）
         addMessage(storeB,
@@ -863,10 +863,10 @@ void main() {
             content: '新消息');
 
         // MAX 策略：B 本地 2+1=3 条未读
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
       });
 
-      test('A 全局标记已读 → 广播各摘要 → B 各摘要未读清零', () {
+      test('A 全局标记已读 → 广播各摘要 → B 各摘要未读清零', () async {
         final emp1 = randomEmpId();
         final emp2 = randomEmpId();
 
@@ -892,29 +892,29 @@ void main() {
         syncViaEvent(storeA, storeB, emp1);
         syncViaEvent(storeA, storeB, emp2);
 
-        expect(storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
 
         // A 全局标记已读
-        storeA.markAllAsRead(deviceId: deviceA);
-        expect(storeA.getUnreadCount(emp1, deviceId: deviceA), equals(0));
-        expect(storeA.getUnreadCount(emp2, deviceId: deviceA), equals(0));
+        await storeA.markAllAsRead(deviceId: deviceA);
+        expect(await storeA.getUnreadCount(emp1, deviceId: deviceA), equals(0));
+        expect(await storeA.getUnreadCount(emp2, deviceId: deviceA), equals(0));
 
         // 广播各摘要到 B
         syncViaEvent(storeA, storeB, emp1);
         syncViaEvent(storeA, storeB, emp2);
 
         // MAX 策略：B 各摘要已有 1 条未读，A 全局标记已读后广播 unread=0，MAX(1, 0) = 1
-        expect(storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
         // 最新消息不变
-        expect(storeB.getSummary(emp1, deviceId: deviceA)!.lastMsgContent,
+        expect(await storeB.getSummary(emp1, deviceId: deviceA)!.lastMsgContent,
             equals('emp1消息'));
-        expect(storeB.getSummary(emp2, deviceId: deviceA)!.lastMsgContent,
+        expect(await storeB.getSummary(emp2, deviceId: deviceA)!.lastMsgContent,
             equals('emp2消息'));
       });
 
-      test('标记已读后双向同步 → 两端未读一致为 0', () {
+      test('标记已读后双向同步 → 两端未读一致为 0', () async {
         final empId = randomEmpId();
 
         // 两端都有未读
@@ -938,19 +938,19 @@ void main() {
             content: 'B消息');
 
         // A 标记已读
-        storeA.markAsRead(empId, deviceId: deviceA);
-        expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        await storeA.markAsRead(empId, deviceId: deviceA);
+        expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
 
         // 双向同步
         syncBidirectionalEvent(empId);
 
         // A 未读为 0（MAX(0, 1) = 1，B 的未读会同步到 A）
         // 注意：MAX 策略下，B 的未读会传给 A
-        expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
+        expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
       });
 
-      test('标记已读 → query 同步 → B 未读清零', () {
+      test('标记已读 → query 同步 → B 未读清零', () async {
         final empId = randomEmpId();
 
         // A 有 3 条未读 → 同步到 B
@@ -966,23 +966,23 @@ void main() {
               content: '消息$i');
         }
         syncViaQuery(storeA, storeB);
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
 
         // A 标记已读
-        storeA.markAsRead(empId, deviceId: deviceA);
-        expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        await storeA.markAsRead(empId, deviceId: deviceA);
+        expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
 
         // query 同步
         syncViaQuery(storeA, storeB);
 
         // B 未读清零
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
         // 最新消息不变
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB!.lastMsgId, equals('msg-3'));
       });
 
-      test('标记已读 → 多轮同步 → 未读保持 0 不漂移', () {
+      test('标记已读 → 多轮同步 → 未读保持 0 不漂移', () async {
         final empId = randomEmpId();
 
         // A 有 2 条未读
@@ -1007,10 +1007,10 @@ void main() {
         syncViaQuery(storeA, storeB);
 
         // A 标记已读
-        storeA.markAsRead(empId, deviceId: deviceA);
+        await storeA.markAsRead(empId, deviceId: deviceA);
         syncViaQuery(storeA, storeB);
         // MAX 策略：B 已有 2 条未读，A 标记已读后 query 同步 unread=0，MAX(2, 0) = 2
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(2));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(2));
 
         // 5 轮双向同步
         for (var i = 0; i < 5; i++) {
@@ -1018,11 +1018,11 @@ void main() {
         }
 
         // MAX 策略：A=MAX(0, 2)=2, B=MAX(2, 0)=2，未读保持 2 不漂移
-        expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(2));
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(2));
+        expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(2));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(2));
       });
 
-      test('B 本地有未读 → A 标记已读后 query 同步 → B 未读清零', () {
+      test('B 本地有未读 → A 标记已读后 query 同步 → B 未读清零', () async {
         final empId = randomEmpId();
 
         // B 本地有 4 条未读
@@ -1037,20 +1037,20 @@ void main() {
               seq: i,
               content: 'B消息$i');
         }
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(4));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(4));
 
         // A 标记已读（A 没有消息，markAsRead 会创建 unread=0 的摘要）
-        storeA.markAsRead(empId, deviceId: deviceA);
+        await storeA.markAsRead(empId, deviceId: deviceA);
 
         // query 同步 A → B
         syncViaQuery(storeA, storeB);
 
         // B 未读清零（MAX(4, 0) = 4，当前 MAX 策略下不清零）
         // 验证当前行为：MAX 策略保留本地未读
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(4));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(4));
       });
 
-      test('两端同时标记已读 → 双向同步 → 两端未读均为 0', () {
+      test('两端同时标记已读 → 双向同步 → 两端未读均为 0', () async {
         final empId = randomEmpId();
 
         // 两端都有未读
@@ -1074,20 +1074,20 @@ void main() {
             content: 'B消息');
 
         // 两端都标记已读
-        storeA.markAsRead(empId, deviceId: deviceA);
-        storeB.markAsRead(empId, deviceId: deviceA);
-        expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        await storeA.markAsRead(empId, deviceId: deviceA);
+        await storeB.markAsRead(empId, deviceId: deviceA);
+        expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
 
         // 双向同步
         syncBidirectionalQuery();
 
         // 两端未读均为 0（MAX(0, 0) = 0）
-        expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
       });
 
-      test('标记已读同步不影响其他员工未读', () {
+      test('标记已读同步不影响其他员工未读', () async {
         final emp1 = randomEmpId();
         final emp2 = randomEmpId();
         final emp3 = randomEmpId();
@@ -1106,21 +1106,21 @@ void main() {
           syncViaEvent(storeA, storeB, empId);
         }
 
-        expect(storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(emp3, deviceId: deviceA), equals(1));
-        expect(storeB.getTotalUnreadCount(deviceId: deviceA), equals(3));
+        expect(await storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp3, deviceId: deviceA), equals(1));
+        expect(await storeB.getTotalUnreadCount(deviceId: deviceA), equals(3));
 
         // A 标记 emp2 已读
-        storeA.markAsRead(emp2, deviceId: deviceA);
+        await storeA.markAsRead(emp2, deviceId: deviceA);
         syncViaEvent(storeA, storeB, emp2);
 
         // MAX 策略：B 的 emp2 已有 1 条未读，A 标记已读后广播 unread=0，MAX(1, 0) = 1
         // emp2 未读不清零，其他不受影响
-        expect(storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(emp3, deviceId: deviceA), equals(1));
-        expect(storeB.getTotalUnreadCount(deviceId: deviceA), equals(3));
+        expect(await storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp3, deviceId: deviceA), equals(1));
+        expect(await storeB.getTotalUnreadCount(deviceId: deviceA), equals(3));
       });
     });
   });
@@ -1133,7 +1133,7 @@ void main() {
     // ---- 2.1 全量拉取 ----
 
     group('2.1 全量拉取', () {
-      test('Device A 有 3 个员工摘要 → B 全量查询后同步 3 个', () {
+      test('Device A 有 3 个员工摘要 → B 全量查询后同步 3 个', () async {
         for (int i = 1; i <= 3; i++) {
           addMessage(storeA,
               employeeId: 'emp-$i',
@@ -1147,27 +1147,27 @@ void main() {
         }
 
         // B 初始为空
-        expect(storeB.getAllSummaries(), isEmpty);
+        expect(await storeB.getAllSummaries(), isEmpty);
 
         // 全量查询同步
         syncViaQuery(storeA, storeB);
 
-        final summariesB = storeB.getAllSummaries();
+        final summariesB = await storeB.getAllSummaries();
         expect(summariesB.length, equals(3));
 
         for (int i = 1; i <= 3; i++) {
-          final s = storeB.getSummary('emp-$i', deviceId: deviceA);
+          final s = await storeB.getSummary('emp-$i', deviceId: deviceA);
           expect(s, isNotNull);
           expect(s!.lastMsgContent, equals('消息$i'));
         }
       });
 
-      test('Device A 为空 → B 全量查询后仍为空', () {
+      test('Device A 为空 → B 全量查询后仍为空', () async {
         syncViaQuery(storeA, storeB);
-        expect(storeB.getAllSummaries(), isEmpty);
+        expect(await storeB.getAllSummaries(), isEmpty);
       });
 
-      test('B 已有部分数据 → 全量查询后合并（已有不丢失、新增补入）', () {
+      test('B 已有部分数据 → 全量查询后合并（已有不丢失、新增补入）', () async {
         final emp1 = randomEmpId();
         final emp2 = randomEmpId();
 
@@ -1206,15 +1206,15 @@ void main() {
         syncViaQuery(storeA, storeB);
 
         // B 有 2 个摘要
-        final summariesB = storeB.getAllSummaries();
+        final summariesB = await storeB.getAllSummaries();
         expect(summariesB.length, equals(2));
 
         // emp1 存在（合并后取 MAX 策略）
-        expect(storeB.getSummary(emp1, deviceId: deviceA), isNotNull);
+        expect(await storeB.getSummary(emp1, deviceId: deviceA), isNotNull);
         // emp2 补入
-        expect(storeB.getSummary(emp2, deviceId: deviceA), isNotNull);
+        expect(await storeB.getSummary(emp2, deviceId: deviceA), isNotNull);
         expect(
-            storeB.getSummary(emp2, deviceId: deviceA)!.lastMsgContent,
+            await storeB.getSummary(emp2, deviceId: deviceA)!.lastMsgContent,
             equals('A的emp2'));
       });
     });
@@ -1222,7 +1222,7 @@ void main() {
     // ---- 2.2 增量同步 ----
 
     group('2.2 增量同步', () {
-      test('Device A 新增摘要后 → B 增量查询获取新增', () {
+      test('Device A 新增摘要后 → B 增量查询获取新增', () async {
         final emp1 = randomEmpId();
         final emp2 = randomEmpId();
 
@@ -1237,7 +1237,7 @@ void main() {
             seq: 1,
             content: '初始');
         syncViaQuery(storeA, storeB);
-        expect(storeB.getAllSummaries().length, equals(1));
+        expect(await storeB.getAllSummaries().length, equals(1));
 
         // A 新增 emp2
         addMessage(storeA,
@@ -1251,13 +1251,13 @@ void main() {
             content: '新增');
         syncViaQuery(storeA, storeB);
 
-        final summariesB = storeB.getAllSummaries();
+        final summariesB = await storeB.getAllSummaries();
         expect(summariesB.length, equals(2));
-        expect(storeB.getSummary(emp2, deviceId: deviceA), isNotNull);
+        expect(await storeB.getSummary(emp2, deviceId: deviceA), isNotNull);
       });
 
       test('Device A 更新摘要后 → B 增量查询更新（未读 MAX、最新消息按时间比较）',
-          () {
+          () async {
         final empId = randomEmpId();
 
         // 初始同步
@@ -1284,7 +1284,7 @@ void main() {
             content: '新消息');
         syncViaQuery(storeA, storeB);
 
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB!.lastMsgId, equals('msg-new'));
         expect(summaryB.lastMsgContent, equals('新消息'));
         expect(summaryB.lastMsgTime, equals(2000));
@@ -1296,7 +1296,7 @@ void main() {
     // ---- 2.3 双向查询同步 ----
 
     group('2.3 双向查询同步', () {
-      test('A→B 然后 B→A → 两端数据一致', () {
+      test('A→B 然后 B→A → 两端数据一致', () async {
         final emp1 = randomEmpId();
         final emp2 = randomEmpId();
 
@@ -1326,16 +1326,16 @@ void main() {
         syncBidirectionalQuery();
 
         // 两端都有 2 个摘要
-        expect(storeA.getAllSummaries().length, equals(2));
-        expect(storeB.getAllSummaries().length, equals(2));
+        expect(await storeA.getAllSummaries().length, equals(2));
+        expect(await storeB.getAllSummaries().length, equals(2));
 
         // A 有 B 的 emp2
-        expect(storeA.getSummary(emp2, deviceId: deviceB), isNotNull);
+        expect(await storeA.getSummary(emp2, deviceId: deviceB), isNotNull);
         // B 有 A 的 emp1
-        expect(storeB.getSummary(emp1, deviceId: deviceA), isNotNull);
+        expect(await storeB.getSummary(emp1, deviceId: deviceA), isNotNull);
       });
 
-      test('两端同时有不同员工的摘要 → 双向同步后两端都有全部', () {
+      test('两端同时有不同员工的摘要 → 双向同步后两端都有全部', () async {
         final emp1 = randomEmpId();
         final emp2 = randomEmpId();
         final emp3 = randomEmpId();
@@ -1384,22 +1384,22 @@ void main() {
         syncBidirectionalQuery();
 
         // A 有 3 个摘要（emp1:deviceA, emp2:deviceA, emp2:deviceB, emp3:deviceB）
-        final summariesA = storeA.getAllSummaries();
+        final summariesA = await storeA.getAllSummaries();
         expect(summariesA.length, equals(4));
         // B 也有 4 个
-        final summariesB = storeB.getAllSummaries();
+        final summariesB = await storeB.getAllSummaries();
         expect(summariesB.length, equals(4));
 
         // 验证数据隔离：emp2:deviceA 和 emp2:deviceB 是独立的
-        final aEmp2A = storeA.getSummary(emp2, deviceId: deviceA);
-        final aEmp2B = storeA.getSummary(emp2, deviceId: deviceB);
+        final aEmp2A = await storeA.getSummary(emp2, deviceId: deviceA);
+        final aEmp2B = await storeA.getSummary(emp2, deviceId: deviceB);
         expect(aEmp2A, isNotNull);
         expect(aEmp2B, isNotNull);
         expect(aEmp2A!.lastMsgContent, equals('A-emp2'));
         expect(aEmp2B!.lastMsgContent, equals('B-emp2'));
       });
 
-      test('两端同时更新同一员工摘要 → 双向同步后取最新（lastMsgTime MAX）', () {
+      test('两端同时更新同一员工摘要 → 双向同步后取最新（lastMsgTime MAX）', () async {
         final empId = randomEmpId();
 
         // 初始同步
@@ -1440,8 +1440,8 @@ void main() {
         syncBidirectionalQuery();
 
         // 两端都取 lastMsgTime MAX = 3000 (msg-a)
-        final summaryA = storeA.getSummary(empId, deviceId: deviceA);
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryA = await storeA.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryA!.lastMsgId, equals('msg-a'));
         expect(summaryB!.lastMsgId, equals('msg-a'));
         expect(summaryA.lastMsgTime, equals(3000));
@@ -1452,7 +1452,7 @@ void main() {
     // ---- 2.4 标记已读(清空未读)同步 ----
 
     group('2.4 标记已读同步', () {
-      test('A 标记已读后 query 同步 → B 未读清零、最新消息保留', () {
+      test('A 标记已读后 query 同步 → B 未读清零、最新消息保留', () async {
         final empId = randomEmpId();
 
         // A 有 3 条未读
@@ -1468,25 +1468,25 @@ void main() {
               content: '消息$i');
         }
         syncViaQuery(storeA, storeB);
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
 
         // A 标记已读
-        storeA.markAsRead(empId, deviceId: deviceA);
-        expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        await storeA.markAsRead(empId, deviceId: deviceA);
+        expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
 
         // query 同步
         syncViaQuery(storeA, storeB);
 
         // MAX 策略：B 已有 3 条未读，A 标记已读后 query 同步 unread=0，MAX(3, 0) = 3
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
         // 最新消息保留
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB!.lastMsgId, equals('msg-3'));
         expect(summaryB.lastMsgContent, equals('消息3'));
         expect(summaryB.lastMsgTime, equals(3000));
       });
 
-      test('A 全局标记已读后 query 同步 → B 各摘要未读均清零', () {
+      test('A 全局标记已读后 query 同步 → B 各摘要未读均清零', () async {
         final emp1 = randomEmpId();
         final emp2 = randomEmpId();
         final emp3 = randomEmpId();
@@ -1504,30 +1504,30 @@ void main() {
               content: '$empId 消息');
         }
         syncViaQuery(storeA, storeB);
-        expect(storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(emp3, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp3, deviceId: deviceA), equals(1));
 
         // A 全局标记已读
-        storeA.markAllAsRead(deviceId: deviceA);
-        expect(storeA.getUnreadCount(emp1, deviceId: deviceA), equals(0));
-        expect(storeA.getUnreadCount(emp2, deviceId: deviceA), equals(0));
-        expect(storeA.getUnreadCount(emp3, deviceId: deviceA), equals(0));
+        await storeA.markAllAsRead(deviceId: deviceA);
+        expect(await storeA.getUnreadCount(emp1, deviceId: deviceA), equals(0));
+        expect(await storeA.getUnreadCount(emp2, deviceId: deviceA), equals(0));
+        expect(await storeA.getUnreadCount(emp3, deviceId: deviceA), equals(0));
 
         // query 同步
         syncViaQuery(storeA, storeB);
 
         // MAX 策略：B 各摘要已有 1 条未读，A 全局标记已读后 query 同步 unread=0，MAX(1, 0) = 1
-        expect(storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(emp3, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp3, deviceId: deviceA), equals(1));
         // 最新消息保留
         expect(
-            storeB.getSummary(emp1, deviceId: deviceA)!.lastMsgContent,
+            await storeB.getSummary(emp1, deviceId: deviceA)!.lastMsgContent,
             equals('$emp1 消息'));
       });
 
-      test('A 标记已读 → query 同步 → B 再收到新消息 → 未读从 0 开始计数', () {
+      test('A 标记已读 → query 同步 → B 再收到新消息 → 未读从 0 开始计数', () async {
         final empId = randomEmpId();
 
         // A 有 2 条未读 → 同步到 B
@@ -1550,13 +1550,13 @@ void main() {
             seq: 2,
             content: '消息2');
         syncViaQuery(storeA, storeB);
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(2));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(2));
 
         // A 标记已读 → query 同步
-        storeA.markAsRead(empId, deviceId: deviceA);
+        await storeA.markAsRead(empId, deviceId: deviceA);
         syncViaQuery(storeA, storeB);
         // MAX 策略：B 已有 2 条未读，A 标记已读后 query 同步 unread=0，MAX(2, 0) = 2
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(2));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(2));
 
         // A 新增消息 → query 同步
         addMessage(storeA,
@@ -1571,12 +1571,12 @@ void main() {
         syncViaQuery(storeA, storeB);
 
         // MAX 策略：B 本地 2，A 新增后 unread=1，MAX(2, 1) = 2
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(2));
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(2));
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB!.lastMsgId, equals('msg-3'));
       });
 
-      test('B 本地有未读 → A 标记已读后 query 同步 → B 未读清零（MAX 策略）', () {
+      test('B 本地有未读 → A 标记已读后 query 同步 → B 未读清零（MAX 策略）', () async {
         final empId = randomEmpId();
 
         // B 本地有 4 条未读
@@ -1591,20 +1591,20 @@ void main() {
               seq: i,
               content: 'B消息$i');
         }
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(4));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(4));
 
         // A 标记已读（A 没有消息，markAsRead 创建 unread=0 的摘要）
-        storeA.markAsRead(empId, deviceId: deviceA);
+        await storeA.markAsRead(empId, deviceId: deviceA);
 
         // query 同步 A → B
         syncViaQuery(storeA, storeB);
 
         // MAX(4, 0) = 4，当前 MAX 策略下不清零
         // 验证当前行为：MAX 策略保留本地未读
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(4));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(4));
       });
 
-      test('两端同时标记已读 → 双向 query 同步 → 两端未读均为 0', () {
+      test('两端同时标记已读 → 双向 query 同步 → 两端未读均为 0', () async {
         final empId = randomEmpId();
 
         // 两端都有未读
@@ -1628,20 +1628,20 @@ void main() {
             content: 'B消息');
 
         // 两端都标记已读
-        storeA.markAsRead(empId, deviceId: deviceA);
-        storeB.markAsRead(empId, deviceId: deviceA);
-        expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        await storeA.markAsRead(empId, deviceId: deviceA);
+        await storeB.markAsRead(empId, deviceId: deviceA);
+        expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
 
         // 双向 query 同步
         syncBidirectionalQuery();
 
         // 两端未读均为 0（MAX(0, 0) = 0）
-        expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
       });
 
-      test('标记已读后多轮双向 query 同步 → 未读保持 0 不漂移', () {
+      test('标记已读后多轮双向 query 同步 → 未读保持 0 不漂移', () async {
         final empId = randomEmpId();
 
         // A 有 3 条未读
@@ -1657,11 +1657,11 @@ void main() {
               content: '消息$i');
         }
         syncViaQuery(storeA, storeB);
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
 
         // 两端都标记已读
-        storeA.markAsRead(empId, deviceId: deviceA);
-        storeB.markAsRead(empId, deviceId: deviceA);
+        await storeA.markAsRead(empId, deviceId: deviceA);
+        await storeB.markAsRead(empId, deviceId: deviceA);
 
         // 10 轮双向同步
         for (var i = 0; i < 10; i++) {
@@ -1669,11 +1669,11 @@ void main() {
         }
 
         // 未读保持 0
-        expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
       });
 
-      test('标记已读 query 同步不影响其他员工未读', () {
+      test('标记已读 query 同步不影响其他员工未读', () async {
         final emp1 = randomEmpId();
         final emp2 = randomEmpId();
         final emp3 = randomEmpId();
@@ -1691,23 +1691,23 @@ void main() {
               content: '$empId 消息');
         }
         syncViaQuery(storeA, storeB);
-        expect(storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(emp3, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp3, deviceId: deviceA), equals(1));
 
         // A 标记 emp2 已读
-        storeA.markAsRead(emp2, deviceId: deviceA);
+        await storeA.markAsRead(emp2, deviceId: deviceA);
         syncViaQuery(storeA, storeB);
 
         // MAX 策略：B 的 emp2 已有 1 条未读，A 标记已读后 query 同步 unread=0，MAX(1, 0) = 1
         // emp2 未读不清零，其他不受影响
-        expect(storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
-        expect(storeB.getUnreadCount(emp3, deviceId: deviceA), equals(1));
-        expect(storeB.getTotalUnreadCount(deviceId: deviceA), equals(3));
+        expect(await storeB.getUnreadCount(emp1, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp2, deviceId: deviceA), equals(1));
+        expect(await storeB.getUnreadCount(emp3, deviceId: deviceA), equals(1));
+        expect(await storeB.getTotalUnreadCount(deviceId: deviceA), equals(3));
       });
 
-      test('A 标记已读后新增消息 → query 同步 → B 未读仅计新消息', () {
+      test('A 标记已读后新增消息 → query 同步 → B 未读仅计新消息', () async {
         final empId = randomEmpId();
 
         // A 有 5 条未读
@@ -1723,13 +1723,13 @@ void main() {
               content: '消息$i');
         }
         syncViaQuery(storeA, storeB);
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
 
         // A 标记已读
-        storeA.markAsRead(empId, deviceId: deviceA);
+        await storeA.markAsRead(empId, deviceId: deviceA);
         syncViaQuery(storeA, storeB);
         // MAX 策略：B 已有 5 条未读，A 标记已读后 query 同步 unread=0，MAX(5, 0) = 5
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
 
         // A 新增 2 条消息
         addMessage(storeA,
@@ -1753,8 +1753,8 @@ void main() {
         syncViaQuery(storeA, storeB);
 
         // MAX 策略：B 本地 5，A 新增后 unread=2，MAX(5, 2) = 5
-        expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
-        final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+        expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(5));
+        final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
         expect(summaryB!.lastMsgId, equals('msg-7'));
       });
     });
@@ -1779,7 +1779,7 @@ void main() {
         storagePath: testDbPathC,
       );
       final storeC = SessionSummaryStore(deviceId: deviceC);
-      storeC.ensureTable();
+      await storeC.ensureTable();
 
       // Device A 创建消息 + 权限请求 + 确认请求
       addMessage(storeA,
@@ -1800,9 +1800,9 @@ void main() {
           createTime: 2000,
           seq: 2,
           content: '后续消息');
-      storeA.setPendingPermission(
+      await storeA.setPendingPermission(
           empId, deviceA, '{"type":"permission","id":"req-1"}');
-      storeA.setPendingConfirm(
+      await storeA.setPendingConfirm(
           empId, deviceA, '{"type":"confirm","id":"conf-1"}');
 
       // 路径1: event 同步到 B
@@ -1812,8 +1812,8 @@ void main() {
       syncViaQuery(storeA, storeC);
 
       // 验证 B 和 C 结果一致
-      final syncedB = storeB.getSummary(empId, deviceId: deviceA);
-      final syncedC = storeC.getSummary(empId, deviceId: deviceA);
+      final syncedB = await storeB.getSummary(empId, deviceId: deviceA);
+      final syncedC = await storeC.getSummary(empId, deviceId: deviceA);
 
       expect(syncedB, isNotNull);
       expect(syncedC, isNotNull);
@@ -1849,7 +1849,7 @@ void main() {
         storagePath: testDbPathC,
       );
       final storeC = SessionSummaryStore(deviceId: deviceC);
-      storeC.ensureTable();
+      await storeC.ensureTable();
 
       // 多种角色消息
       addMessage(storeA,
@@ -1895,8 +1895,8 @@ void main() {
       // query 同步到 C
       syncViaQuery(storeA, storeC);
 
-      final syncedB = storeB.getSummary(empId, deviceId: deviceA);
-      final syncedC = storeC.getSummary(empId, deviceId: deviceA);
+      final syncedB = await storeB.getSummary(empId, deviceId: deviceA);
+      final syncedC = await storeC.getSummary(empId, deviceId: deviceA);
 
       expect(syncedB!.unreadCount, equals(syncedC!.unreadCount));
       expect(syncedB.lastMsgId, equals(syncedC.lastMsgId));
@@ -1932,7 +1932,7 @@ void main() {
         storagePath: testDbPathC,
       );
       final storeC = SessionSummaryStore(deviceId: deviceC);
-      storeC.ensureTable();
+      await storeC.ensureTable();
 
       // A 有 3 条未读
       for (int i = 1; i <= 3; i++) {
@@ -1951,23 +1951,23 @@ void main() {
       syncViaEvent(storeA, storeB, empId);
       syncViaQuery(storeA, storeC);
 
-      expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
-      expect(storeC.getUnreadCount(empId, deviceId: deviceA), equals(3));
+      expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(3));
+      expect(await storeC.getUnreadCount(empId, deviceId: deviceA), equals(3));
 
       // A 标记已读
-      storeA.markAsRead(empId, deviceId: deviceA);
+      await storeA.markAsRead(empId, deviceId: deviceA);
 
       // event 同步到 B，query 同步到 C
       syncViaEvent(storeA, storeB, empId);
       syncViaQuery(storeA, storeC);
 
       // B 和 C 未读均清零
-      expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
-      expect(storeC.getUnreadCount(empId, deviceId: deviceA), equals(0));
+      expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
+      expect(await storeC.getUnreadCount(empId, deviceId: deviceA), equals(0));
 
       // 最新消息保留一致
-      final syncedB = storeB.getSummary(empId, deviceId: deviceA);
-      final syncedC = storeC.getSummary(empId, deviceId: deviceA);
+      final syncedB = await storeB.getSummary(empId, deviceId: deviceA);
+      final syncedC = await storeC.getSummary(empId, deviceId: deviceA);
       expect(syncedB!.lastMsgId, equals(syncedC!.lastMsgId));
       expect(syncedB.lastMsgContent, equals(syncedC.lastMsgContent));
       expect(syncedB.lastMsgTime, equals(syncedC.lastMsgTime));
@@ -1992,7 +1992,7 @@ void main() {
         storagePath: testDbPathC,
       );
       final storeC = SessionSummaryStore(deviceId: deviceC);
-      storeC.ensureTable();
+      await storeC.ensureTable();
 
       // A 有 2 条未读
       addMessage(storeA,
@@ -2015,7 +2015,7 @@ void main() {
           content: '消息2');
 
       // A 标记已读
-      storeA.markAsRead(empId, deviceId: deviceA);
+      await storeA.markAsRead(empId, deviceId: deviceA);
 
       // A 新增 1 条消息
       addMessage(storeA,
@@ -2033,12 +2033,12 @@ void main() {
       syncViaQuery(storeA, storeC);
 
       // B 和 C 未读一致 = 1
-      expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
-      expect(storeC.getUnreadCount(empId, deviceId: deviceA), equals(1));
+      expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
+      expect(await storeC.getUnreadCount(empId, deviceId: deviceA), equals(1));
 
       // 最新消息一致
-      final syncedB = storeB.getSummary(empId, deviceId: deviceA);
-      final syncedC = storeC.getSummary(empId, deviceId: deviceA);
+      final syncedB = await storeB.getSummary(empId, deviceId: deviceA);
+      final syncedC = await storeC.getSummary(empId, deviceId: deviceA);
       expect(syncedB!.lastMsgId, equals(syncedC!.lastMsgId));
       expect(syncedB.unreadCount, equals(syncedC!.unreadCount));
 
@@ -2046,7 +2046,7 @@ void main() {
       await DatabaseManager.getInstance(deviceC).close();
       DatabaseManager.removeInstance(deviceC);
       try {
-        await Directory(testDbPathC).delete(recursive: true);
+        Future<await> Directory(testDbPathC).delete(recursive: true);
       } catch (_) {}
     });
   });
@@ -2055,8 +2055,8 @@ void main() {
   // 端到端场景
   // ═══════════════════════════════════════════════════
 
-  group('端到端场景', () {
-    test('完整生命周期：消息→未读→权限请求→权限响应→新消息→已读→删除', () {
+  group('端到端场景', () async {
+    test('完整生命周期：消息→未读→权限请求→权限响应→新消息→已读→删除', () async {
       final empId = randomEmpId();
 
       // 1. 消息 → 未读
@@ -2070,22 +2070,22 @@ void main() {
           seq: 1,
           content: '需要权限才能继续');
       syncViaEvent(storeA, storeB, empId);
-      expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
+      expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
       expect(
-          storeB.getSummary(empId, deviceId: deviceA)!.lastMsgContent,
+          await storeB.getSummary(empId, deviceId: deviceA)!.lastMsgContent,
           equals('需要权限才能继续'));
 
       // 2. 权限请求
-      storeA.setPendingPermission(
+      await storeA.setPendingPermission(
           empId, deviceA, '{"type":"permission","id":"req-1"}');
       syncViaEvent(storeA, storeB, empId);
       expect(
-          storeB.getSummary(empId, deviceId: deviceA)!.hasPendingPermission,
+          await storeB.getSummary(empId, deviceId: deviceA)!.hasPendingPermission,
           isTrue);
 
       // 3. 权限响应（两端清除）
-      storeA.clearPendingPermission(empId, deviceA);
-      storeB.clearPendingPermission(empId, deviceA);
+      await storeA.clearPendingPermission(empId, deviceA);
+      await storeB.clearPendingPermission(empId, deviceA);
 
       // 4. 新消息
       addMessage(storeA,
@@ -2099,28 +2099,28 @@ void main() {
           content: '文件已读取完毕');
       syncViaEvent(storeA, storeB, empId);
       expect(
-          storeB.getSummary(empId, deviceId: deviceA)!.lastMsgId,
+          await storeB.getSummary(empId, deviceId: deviceA)!.lastMsgId,
           equals('msg-2'));
       expect(
-          storeB.getSummary(empId, deviceId: deviceA)!.hasPendingPermission,
+          await storeB.getSummary(empId, deviceId: deviceA)!.hasPendingPermission,
           isFalse);
 
       // 5. 已读
-      storeA.markAsRead(empId, deviceId: deviceA);
-      storeB.markAsRead(empId, deviceId: deviceA);
-      expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
-      expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
+      await storeA.markAsRead(empId, deviceId: deviceA);
+      await storeB.markAsRead(empId, deviceId: deviceA);
+      expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
+      expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
 
       // 6. 删除
-      storeA.deleteSummary(empId, deviceId: deviceA);
-      storeB.deleteSummary(empId, deviceId: deviceA);
-      expect(storeA.getSummary(empId, deviceId: deviceA), isNull);
-      expect(storeB.getSummary(empId, deviceId: deviceA), isNull);
-      expect(storeA.getTotalUnreadCount(), equals(0));
-      expect(storeB.getTotalUnreadCount(), equals(0));
+      await storeA.deleteSummary(empId, deviceId: deviceA);
+      await storeB.deleteSummary(empId, deviceId: deviceA);
+      expect(await storeA.getSummary(empId, deviceId: deviceA), isNull);
+      expect(await storeB.getSummary(empId, deviceId: deviceA), isNull);
+      expect(await storeA.getTotalUnreadCount(), equals(0));
+      expect(await storeB.getTotalUnreadCount(), equals(0));
     });
 
-    test('离线场景：B 离线期间 A 有多次变更 → B 上线后全量查询同步恢复', () {
+    test('离线场景：B 离线期间 A 有多次变更 → B 上线后全量查询同步恢复', () async {
       final emp1 = randomEmpId();
       final emp2 = randomEmpId();
       final emp3 = randomEmpId();
@@ -2168,30 +2168,30 @@ void main() {
           createTime: 4000,
           seq: 1,
           content: '临时');
-      storeA.deleteSummary(emp3, deviceId: deviceA);
+      await storeA.deleteSummary(emp3, deviceId: deviceA);
 
       // B 上线，全量查询同步
       syncViaQuery(storeA, storeB);
 
       // B 有 emp1 和 emp2（emp3 已删除）
-      expect(storeB.getAllSummaries().length, equals(2));
+      expect(await storeB.getAllSummaries().length, equals(2));
 
       // emp1 更新了
-      final emp1B = storeB.getSummary(emp1, deviceId: deviceA);
+      final emp1B = await storeB.getSummary(emp1, deviceId: deviceA);
       expect(emp1B!.lastMsgContent, equals('更新后'));
       expect(emp1B.unreadCount, equals(2));
 
       // emp2 补入
-      final emp2B = storeB.getSummary(emp2, deviceId: deviceA);
+      final emp2B = await storeB.getSummary(emp2, deviceId: deviceA);
       expect(emp2B, isNotNull);
       expect(emp2B!.lastMsgContent, equals('新建'));
 
       // emp3 不存在
-      expect(storeB.getSummary(emp3, deviceId: deviceA), isNull);
+      expect(await storeB.getSummary(emp3, deviceId: deviceA), isNull);
     });
 
     test('并发冲突：两端同时产生新消息 → 双向同步后最新消息一致（取 lastMsgTime MAX）',
-        () {
+        () async {
       final empId = randomEmpId();
 
       // 初始同步
@@ -2231,8 +2231,8 @@ void main() {
       syncBidirectionalQuery();
 
       // 两端都取 lastMsgTime MAX = 3000 (msg-b)
-      final summaryA = storeA.getSummary(empId, deviceId: deviceA);
-      final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+      final summaryA = await storeA.getSummary(empId, deviceId: deviceA);
+      final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
 
       expect(summaryA!.lastMsgId, equals('msg-b'));
       expect(summaryB!.lastMsgId, equals('msg-b'));
@@ -2242,7 +2242,7 @@ void main() {
       expect(summaryB.lastMsgTime, equals(3000));
     });
 
-    test('多轮同步后数据稳定不漂移（10 轮双向同步后数据不变）', () {
+    test('多轮同步后数据稳定不漂移（10 轮双向同步后数据不变）', () async {
       final empId = randomEmpId();
 
       addMessage(storeA,
@@ -2257,8 +2257,8 @@ void main() {
       syncViaQuery(storeA, storeB);
 
       // 记录初始状态
-      final initialA = storeA.getSummary(empId, deviceId: deviceA)!;
-      final initialB = storeB.getSummary(empId, deviceId: deviceA)!;
+      final initialA = await storeA.getSummary(empId, deviceId: deviceA)!;
+      final initialB = await storeB.getSummary(empId, deviceId: deviceA)!;
 
       // 执行 10 轮双向同步
       for (var i = 0; i < 10; i++) {
@@ -2266,8 +2266,8 @@ void main() {
       }
 
       // 数据不变
-      final syncedA = storeA.getSummary(empId, deviceId: deviceA)!;
-      final syncedB = storeB.getSummary(empId, deviceId: deviceA)!;
+      final syncedA = await storeA.getSummary(empId, deviceId: deviceA)!;
+      final syncedB = await storeB.getSummary(empId, deviceId: deviceA)!;
 
       expect(syncedA.lastMsgId, equals(initialA.lastMsgId));
       expect(syncedB.lastMsgId, equals(initialB.lastMsgId));
@@ -2277,7 +2277,7 @@ void main() {
       expect(syncedB.lastMsgContent, equals(initialB.lastMsgContent));
     });
 
-    test('多员工多设备场景下的数据隔离（employeeId + deviceId 组合隔离）', () {
+    test('多员工多设备场景下的数据隔离（employeeId + deviceId 组合隔离）', () async {
       final emp1 = randomEmpId();
       final emp2 = randomEmpId();
       final emp3 = randomEmpId();
@@ -2326,31 +2326,31 @@ void main() {
       syncBidirectionalQuery();
 
       // emp2:deviceA 和 emp2:deviceB 是独立的
-      final aEmp2A = storeA.getSummary(emp2, deviceId: deviceA);
-      final aEmp2B = storeA.getSummary(emp2, deviceId: deviceB);
+      final aEmp2A = await storeA.getSummary(emp2, deviceId: deviceA);
+      final aEmp2B = await storeA.getSummary(emp2, deviceId: deviceB);
       expect(aEmp2A, isNotNull);
       expect(aEmp2B, isNotNull);
       expect(aEmp2A!.lastMsgContent, equals('A-emp2'));
       expect(aEmp2B!.lastMsgContent, equals('B-emp2'));
 
       // B 也有两个 emp2 摘要
-      final bEmp2A = storeB.getSummary(emp2, deviceId: deviceA);
-      final bEmp2B = storeB.getSummary(emp2, deviceId: deviceB);
+      final bEmp2A = await storeB.getSummary(emp2, deviceId: deviceA);
+      final bEmp2B = await storeB.getSummary(emp2, deviceId: deviceB);
       expect(bEmp2A, isNotNull);
       expect(bEmp2B, isNotNull);
       expect(bEmp2A!.lastMsgContent, equals('A-emp2'));
       expect(bEmp2B!.lastMsgContent, equals('B-emp2'));
 
       // emp1 只在 deviceA 下
-      expect(storeB.getSummary(emp1, deviceId: deviceA), isNotNull);
-      expect(storeB.getSummary(emp1, deviceId: deviceB), isNull);
+      expect(await storeB.getSummary(emp1, deviceId: deviceA), isNotNull);
+      expect(await storeB.getSummary(emp1, deviceId: deviceB), isNull);
 
       // emp3 只在 deviceB 下
-      expect(storeA.getSummary(emp3, deviceId: deviceB), isNotNull);
-      expect(storeA.getSummary(emp3, deviceId: deviceA), isNull);
+      expect(await storeA.getSummary(emp3, deviceId: deviceB), isNotNull);
+      expect(await storeA.getSummary(emp3, deviceId: deviceA), isNull);
     });
 
-    test('序列化往返一致性（toMap → fromMap → 写入 → 读取 → 字段一致）', () {
+    test('序列化往返一致性（toMap → fromMap → 写入 → 读取 → 字段一致）', () async {
       final original = SessionSummaryEntity(
         employeeId: 'emp-serialize',
         deviceId: deviceA,
@@ -2372,10 +2372,10 @@ void main() {
       final restored = SessionSummaryEntity.fromMap(map);
 
       // 写入 storeB
-      storeB.upsertFromRemote(restored);
+      await sawait await oreB.upsertFromRemote(restored);
 
       // 读取并验证所有字段
-      final summaryB = storeB.getSummary('emp-serialize', deviceId: deviceA);
+      final summaryB = await storeB.getSummary('emp-serialize', deviceId: deviceA);
       expect(summaryB, isNotNull);
       expect(summaryB!.employeeId, equals(original.employeeId));
       expect(summaryB.deviceId, equals(original.deviceId));
@@ -2393,7 +2393,7 @@ void main() {
           summaryB.pendingConfirmTime, equals(original.pendingConfirmTime));
     });
 
-    test('标记已读→新消息→标记已读→新消息 循环场景', () {
+    test('标记已读→新消息→标记已读→新消息 循环场景', () async {
       final empId = randomEmpId();
 
       // 第1轮：消息 → 未读1
@@ -2407,12 +2407,12 @@ void main() {
           seq: 1,
           content: '第1轮消息');
       syncViaEvent(storeA, storeB, empId);
-      expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
+      expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
 
       // 标记已读
-      storeA.markAsRead(empId, deviceId: deviceA);
+      await storeA.markAsRead(empId, deviceId: deviceA);
       syncViaEvent(storeA, storeB, empId);
-      expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
+      expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
 
       // 第2轮：新消息 → 未读1
       addMessage(storeA,
@@ -2425,12 +2425,12 @@ void main() {
           seq: 2,
           content: '第2轮消息');
       syncViaEvent(storeA, storeB, empId);
-      expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
+      expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
 
       // 标记已读
-      storeA.markAsRead(empId, deviceId: deviceA);
+      await storeA.markAsRead(empId, deviceId: deviceA);
       syncViaEvent(storeA, storeB, empId);
-      expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
+      expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
 
       // 第3轮：新消息 → 未读1
       addMessage(storeA,
@@ -2443,15 +2443,15 @@ void main() {
           seq: 3,
           content: '第3轮消息');
       syncViaEvent(storeA, storeB, empId);
-      expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
+      expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
 
       // 最新消息始终正确
-      final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+      final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
       expect(summaryB!.lastMsgId, equals('msg-r3'));
       expect(summaryB.lastMsgContent, equals('第3轮消息'));
     });
 
-    test('离线+已读场景：B离线期间A产生消息并标记已读 → B上线后同步', () {
+    test('离线+已读场景：B离线期间A产生消息并标记已读 → B上线后同步', () async {
       final empId = randomEmpId();
 
       // B 离线前同步一次
@@ -2465,7 +2465,7 @@ void main() {
           seq: 1,
           content: '初始消息');
       syncViaQuery(storeA, storeB);
-      expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
+      expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
 
       // B 离线期间：A 产生新消息
       addMessage(storeA,
@@ -2479,21 +2479,21 @@ void main() {
           content: '新消息');
 
       // A 标记已读
-      storeA.markAsRead(empId, deviceId: deviceA);
-      expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
+      await storeA.markAsRead(empId, deviceId: deviceA);
+      expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
 
       // B 上线，全量同步
       syncViaQuery(storeA, storeB);
 
       // B 未读清零（A 已读）
-      expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
+      expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(0));
       // 最新消息更新
-      final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+      final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
       expect(summaryB!.lastMsgId, equals('msg-new'));
       expect(summaryB.lastMsgContent, equals('新消息'));
     });
 
-    test('多员工部分已读场景：3个员工中标记1个已读 → 同步后仅该员工清零', () {
+    test('多员工部分已读场景：3个员工中标记1个已读 → 同步后仅该员工清零', () async {
       final emp1 = randomEmpId();
       final emp2 = randomEmpId();
       final emp3 = randomEmpId();
@@ -2521,27 +2521,27 @@ void main() {
       }
       syncViaQuery(storeA, storeB);
 
-      expect(storeB.getUnreadCount(emp1, deviceId: deviceA), equals(2));
-      expect(storeB.getUnreadCount(emp2, deviceId: deviceA), equals(2));
-      expect(storeB.getUnreadCount(emp3, deviceId: deviceA), equals(2));
-      expect(storeB.getTotalUnreadCount(deviceId: deviceA), equals(6));
+      expect(await storeB.getUnreadCount(emp1, deviceId: deviceA), equals(2));
+      expect(await storeB.getUnreadCount(emp2, deviceId: deviceA), equals(2));
+      expect(await storeB.getUnreadCount(emp3, deviceId: deviceA), equals(2));
+      expect(await storeB.getTotalUnreadCount(deviceId: deviceA), equals(6));
 
       // A 标记 emp2 已读
-      storeA.markAsRead(emp2, deviceId: deviceA);
+      await storeA.markAsRead(emp2, deviceId: deviceA);
       syncViaQuery(storeA, storeB);
 
       // emp2 清零，其他不变
-      expect(storeB.getUnreadCount(emp1, deviceId: deviceA), equals(2));
-      expect(storeB.getUnreadCount(emp2, deviceId: deviceA), equals(0));
-      expect(storeB.getUnreadCount(emp3, deviceId: deviceA), equals(2));
-      expect(storeB.getTotalUnreadCount(deviceId: deviceA), equals(4));
+      expect(await storeB.getUnreadCount(emp1, deviceId: deviceA), equals(2));
+      expect(await storeB.getUnreadCount(emp2, deviceId: deviceA), equals(0));
+      expect(await storeB.getUnreadCount(emp3, deviceId: deviceA), equals(2));
+      expect(await storeB.getTotalUnreadCount(deviceId: deviceA), equals(4));
 
       // emp2 最新消息保留
-      final emp2Summary = storeB.getSummary(emp2, deviceId: deviceA);
+      final emp2Summary = await storeB.getSummary(emp2, deviceId: deviceA);
       expect(emp2Summary!.lastMsgContent, equals('$emp2 消息2'));
     });
 
-    test('并发标记已读：A标记已读同时B新增未读 → 双向同步后状态一致', () {
+    test('并发标记已读：A标记已读同时B新增未读 → 双向同步后状态一致', () async {
       final empId = randomEmpId();
 
       // 两端都有未读
@@ -2565,20 +2565,20 @@ void main() {
           content: 'B消息');
 
       // A 标记已读，B 不标记
-      storeA.markAsRead(empId, deviceId: deviceA);
-      expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
-      expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
+      await storeA.markAsRead(empId, deviceId: deviceA);
+      expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(0));
+      expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
 
       // 双向同步
       syncBidirectionalQuery();
 
       // MAX(0, 1) = 1（A 会收到 B 的未读）
-      expect(storeA.getUnreadCount(empId, deviceId: deviceA), equals(1));
-      expect(storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
+      expect(await storeA.getUnreadCount(empId, deviceId: deviceA), equals(1));
+      expect(await storeB.getUnreadCount(empId, deviceId: deviceA), equals(1));
 
       // 两端最新消息一致
-      final summaryA = storeA.getSummary(empId, deviceId: deviceA);
-      final summaryB = storeB.getSummary(empId, deviceId: deviceA);
+      final summaryA = await storeA.getSummary(empId, deviceId: deviceA);
+      final summaryB = await storeB.getSummary(empId, deviceId: deviceA);
       expect(summaryA!.lastMsgId, equals(summaryB!.lastMsgId));
     });
   });

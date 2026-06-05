@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import '../schemas/session_summary_schema.dart';
 import 'migration.dart';
@@ -12,18 +12,18 @@ class V9Migration extends Migration {
   int get version => 9;
 
   @override
-  void onUpgrade(Database db) {
-    SessionSummarySchema.create(db);
-    _initializeSummaries(db);
+  Future<void> onUpgrade(SqliteDatabase db) async {
+    await SessionSummarySchema.create(db);
+    await _initializeSummaries(db);
   }
 
   /// 从 messages 表聚合初始化摘要数据
-  void _initializeSummaries(Database db) {
+  Future<void> _initializeSummaries(SqliteDatabase db) async {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     // 单条 SQL 从 messages 表聚合初始化
     // 为每个 (employee_id, device_id) 计算未读数和最新消息
-    db.execute('''
+    await db.execute('''
       INSERT OR IGNORE INTO session_summary (
         employee_id, device_id, unread_count,
         last_msg_id, last_msg_role, last_msg_content,

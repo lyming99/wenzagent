@@ -47,7 +47,7 @@ void insertTestMessage(
 /// - markAllAsRead 全局标记已读
 /// - getTotalUnreadCount 全局未读总数
 /// - 边界条件
-void main() {
+Future<void> main() async {
   late String testDbPath;
   late String deviceId;
   late SessionSummaryStore store;
@@ -69,14 +69,14 @@ void main() {
     db = DatabaseManager.getInstance(deviceId).db;
 
     // 确保 pending 字段存在（测试环境直接调用）
-    store.ensureTable();
+    await store.ensureTable();
   });
 
   tearDown(() async {
     await DatabaseManager.getInstance(deviceId).close();
     DatabaseManager.removeInstance(deviceId);
     try {
-      await Directory(testDbPath).delete(recursive: true);
+      Future<await> Directory(testDbPath).delete(recursive: true);
     } catch (_) {}
   });
 
@@ -84,8 +84,8 @@ void main() {
   // upsertFromRemote 合并策略测试
   // ═══════════════════════════════════════════════════
 
-  group('upsertFromRemote 合并策略', () {
-    test('首次写入远程摘要应成功插入', () {
+  group('upsertFromRemote 合并策略', () async {
+    test('首次写入远程摘要应成功插入', () async {
       final remote = SessionSummaryEntity(
         employeeId: 'emp-1',
         deviceId: deviceId,
@@ -98,9 +98,9 @@ void main() {
         updateTime: 1000,
       );
 
-      store.upsertFromRemote(remote);
+      await sawait await ore.upsertFromRemote(remote);
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       expect(summary!.unreadCount, equals(3));
       expect(summary.lastMsgId, equals('msg-1'));
@@ -108,8 +108,8 @@ void main() {
       expect(summary.lastMsgTime, equals(1000));
     });
 
-    test('远程 lastMsgTime 更新时覆盖本地最新消息', () {
-      store.onMessageAdded(
+    test('远程 lastMsgTime 更新时覆盖本地最新消息', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -132,17 +132,17 @@ void main() {
         updateTime: 2000,
       );
 
-      store.upsertFromRemote(remote);
+      await sawait await ore.upsertFromRemote(remote);
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       expect(summary!.lastMsgId, equals('msg-new'));
       expect(summary.lastMsgContent, equals('新消息'));
       expect(summary.lastMsgTime, equals(2000));
     });
 
-    test('远程 lastMsgTime 更旧时保留本地最新消息', () {
-      store.onMessageAdded(
+    test('远程 lastMsgTime 更旧时保留本地最新消息', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -165,17 +165,17 @@ void main() {
         updateTime: 1000,
       );
 
-      store.upsertFromRemote(remote);
+      await sawait await ore.upsertFromRemote(remote);
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       expect(summary!.lastMsgId, equals('msg-local-new'));
       expect(summary.lastMsgContent, equals('本地最新消息'));
       expect(summary.lastMsgTime, equals(2000));
     });
 
-    test('未读数取本地和远程的最大值', () {
-      store.onMessageAdded(
+    test('未读数取本地和远程的最大值', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -185,7 +185,7 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -208,15 +208,15 @@ void main() {
         updateTime: 500,
       );
 
-      store.upsertFromRemote(remote);
+      await sawait await ore.upsertFromRemote(remote);
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       expect(summary!.unreadCount, equals(3));
     });
 
-    test('远程 lastMsgTime 为 null 时不覆盖本地数据', () {
-      store.onMessageAdded(
+    test('远程 lastMsgTime 为 null 时不覆盖本地数据', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -234,9 +234,9 @@ void main() {
         updateTime: 500,
       );
 
-      store.upsertFromRemote(remote);
+      await sawait await ore.upsertFromRemote(remote);
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       expect(summary!.lastMsgId, equals('msg-local'));
       expect(summary.lastMsgContent, equals('本地消息'));
@@ -248,8 +248,8 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('onMessageAdded', () {
-    test('assistant 未读消息增加未读计数', () {
-      store.onMessageAdded(
+    test('assistant 未读消息增加未读计数', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -260,11 +260,11 @@ void main() {
         content: 'AI 回复',
       );
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(1));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(1));
     });
 
-    test('user 消息不增加未读计数', () {
-      store.onMessageAdded(
+    test('user 消息不增加未读计数', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'user',
@@ -275,11 +275,11 @@ void main() {
         content: '用户消息',
       );
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(0));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(0));
     });
 
-    test('已读消息不增加未读计数', () {
-      store.onMessageAdded(
+    test('已读消息不增加未读计数', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -290,11 +290,11 @@ void main() {
         content: '已读回复',
       );
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(0));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(0));
     });
 
-    test('最新消息按 createTime 更新', () {
-      store.onMessageAdded(
+    test('最新消息按 createTime 更新', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'user',
@@ -305,7 +305,7 @@ void main() {
         content: '旧消息',
       );
 
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -316,7 +316,7 @@ void main() {
         content: '新消息',
       );
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary!.lastMsgId, equals('msg-new'));
       expect(summary.lastMsgTime, equals(2000));
     });
@@ -327,8 +327,8 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('getAllSummaries', () {
-    test('无 deviceId 过滤返回所有摘要', () {
-      store.onMessageAdded(
+    test('无 deviceId 过滤返回所有摘要', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: 'device-A',
         role: 'assistant',
@@ -337,7 +337,7 @@ void main() {
         createTime: 1000,
         content: '消息A',
       );
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-2',
         deviceId: 'device-B',
         role: 'assistant',
@@ -347,12 +347,12 @@ void main() {
         content: '消息B',
       );
 
-      final all = store.getAllSummaries();
+      final all = await store.getAllSummaries();
       expect(all.length, equals(2));
     });
 
-    test('指定 deviceId 过滤返回对应摘要', () {
-      store.onMessageAdded(
+    test('指定 deviceId 过滤返回对应摘要', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: 'device-A',
         role: 'assistant',
@@ -361,7 +361,7 @@ void main() {
         createTime: 1000,
         content: '消息A',
       );
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-2',
         deviceId: 'device-B',
         role: 'assistant',
@@ -371,7 +371,7 @@ void main() {
         content: '消息B',
       );
 
-      final filtered = store.getAllSummaries(deviceId: 'device-A');
+      final filtered = await store.getAllSummaries(deviceId: 'device-A');
       expect(filtered.length, equals(1));
       expect(filtered.first.employeeId, equals('emp-1'));
     });
@@ -382,8 +382,8 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('markAsRead', () {
-    test('标记已读后未读数清零', () {
-      store.onMessageAdded(
+    test('标记已读后未读数清零', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -392,7 +392,7 @@ void main() {
         createTime: 1000,
         content: '消息1',
       );
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -402,10 +402,10 @@ void main() {
         content: '消息2',
       );
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
 
-      store.markAsRead('emp-1', deviceId: deviceId);
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(0));
+      await store.markAsRead('emp-1', deviceId: deviceId);
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(0));
     });
   });
 
@@ -414,8 +414,8 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('综合场景：同步数据合并', () {
-    test('本地新消息不被远程旧摘要覆盖', () {
-      store.onMessageAdded(
+    test('本地新消息不被远程旧摘要覆盖', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -426,9 +426,9 @@ void main() {
         content: '本地最新AI回复',
       );
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(1));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(1));
       expect(
-        store.getSummary('emp-1', deviceId: deviceId)?.lastMsgId,
+        await store.getSummary('emp-1', deviceId: deviceId)?.lastMsgId,
         equals('msg-local-1'),
       );
 
@@ -443,17 +443,17 @@ void main() {
         lastMsgSeq: 1,
         updateTime: 1000,
       );
-      store.upsertFromRemote(remoteSummary);
+      await sawait await ore.upsertFromRemote(remoteSummary);
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary!.lastMsgId, equals('msg-local-1'));
       expect(summary.lastMsgContent, equals('本地最新AI回复'));
       expect(summary.lastMsgTime, equals(3000));
       expect(summary.unreadCount, equals(1));
     });
 
-    test('多次同步不会丢失未读数', () {
-      store.onMessageAdded(
+    test('多次同步不会丢失未读数', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -462,7 +462,7 @@ void main() {
         createTime: 1000,
         content: '消息1',
       );
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -472,10 +472,10 @@ void main() {
         content: '消息2',
       );
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
 
       for (var i = 0; i < 3; i++) {
-        store.upsertFromRemote(SessionSummaryEntity(
+        await sawait await ore.upsertFromRemote(SessionSummaryEntity(
           employeeId: 'emp-1',
           deviceId: deviceId,
           unreadCount: 0,
@@ -484,7 +484,7 @@ void main() {
         ));
       }
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
     });
   });
 
@@ -493,15 +493,15 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('markAsReadBySeq', () {
-    setUp(() {
+    setUp(() async {
       // markAsReadBySeq 查询 messages 表，需要确保表存在
       MessageSchema.create(db);
     });
 
-    test('按 seq 阈值标记已读，减少 unread_count', () {
+    test('按 seq 阈值标记已读，减少 unread_count', () async {
       // 通过 onMessageAdded 创建摘要（3 条未读）
       for (int i = 1; i <= 3; i++) {
-        store.onMessageAdded(
+        await store.onMessageAdded(
           employeeId: 'emp-1',
           deviceId: deviceId,
           role: 'assistant',
@@ -522,19 +522,19 @@ void main() {
             createTime: 1000 + i * 100);
       }
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(3));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(3));
 
       // 标记 seq <= 2 的消息为已读
-      store.markAsReadBySeq('emp-1', 2, deviceId: deviceId);
+      await sawait tore.markAsReadBySeq('emp-1', 2, deviceId: deviceId);
 
       // unread_count 应减少 2（3-2=1）
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(1));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(1));
     });
 
-    test('seq 阈值外的不受影响', () {
+    test('seq 阈值外的不受影响', () async {
       // 5 条未读 (seq 1-5)
       for (int i = 1; i <= 5; i++) {
-        store.onMessageAdded(
+        await store.onMessageAdded(
           employeeId: 'emp-1',
           deviceId: deviceId,
           role: 'assistant',
@@ -554,18 +554,18 @@ void main() {
             createTime: 1000 + i * 100);
       }
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(5));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(5));
 
       // 标记 seq <= 2 的消息
-      store.markAsReadBySeq('emp-1', 2, deviceId: deviceId);
+      await sawait tore.markAsReadBySeq('emp-1', 2, deviceId: deviceId);
 
       // unread = 5 - 2 = 3
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(3));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(3));
     });
 
-    test('无符合条件的消息时不操作', () {
+    test('无符合条件的消息时不操作', () async {
       // 2 条未读 (seq 5, 6)
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -575,7 +575,7 @@ void main() {
         seq: 5,
         content: '消息5',
       );
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -602,19 +602,19 @@ void main() {
           seq: 6,
           createTime: 6000);
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
 
       // readSeq=3，但消息 seq 为 5,6 → 无匹配
-      store.markAsReadBySeq('emp-1', 3, deviceId: deviceId);
+      await sawait tore.markAsReadBySeq('emp-1', 3, deviceId: deviceId);
 
       // 未读数不变
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
     });
 
-    test('不存在的会话无副作用', () {
+    test('不存在的会话无副作用', () async {
       // 对不存在的会话调用，不应抛异常
-      store.markAsReadBySeq('emp-nonexistent', 10, deviceId: deviceId);
-      expect(store.getUnreadCount('emp-nonexistent', deviceId: deviceId), equals(0));
+      await sawait tore.markAsReadBySeq('emp-nonexistent', 10, deviceId: deviceId);
+      expect(await store.getUnreadCount('emp-nonexistent', deviceId: deviceId), equals(0));
     });
   });
 
@@ -623,8 +623,8 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('onMessageSoftDeleted', () {
-    test('删除未读消息 → unread_count - 1', () {
-      store.onMessageAdded(
+    test('删除未读消息 → unread_count - 1', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -634,7 +634,7 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -645,21 +645,21 @@ void main() {
         content: '消息2',
       );
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
 
       // 删除 msg-1（未读、非最新）
-      store.onMessageSoftDeleted(
+      await store.onMessageSoftDeleted(
         employeeId: 'emp-1',
         deviceId: deviceId,
         wasUnread: true,
         wasLatest: false,
       );
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(1));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(1));
     });
 
-    test('删除已读消息 → unread_count 不变', () {
-      store.onMessageAdded(
+    test('删除已读消息 → unread_count 不变', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -669,7 +669,7 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -680,22 +680,22 @@ void main() {
         content: '消息2',
       );
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
 
       // 删除已读消息
-      store.onMessageSoftDeleted(
+      await store.onMessageSoftDeleted(
         employeeId: 'emp-1',
         deviceId: deviceId,
         wasUnread: false,
         wasLatest: false,
       );
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
     });
 
-    test('删除最新消息 → 回退到前一条消息', () {
+    test('删除最新消息 → 回退到前一条消息', () async {
       // 先添加旧消息
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'user',
@@ -706,7 +706,7 @@ void main() {
         content: '旧消息',
       );
       // 再添加新消息（成为最新）
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -718,29 +718,29 @@ void main() {
       );
 
       // 验证最新消息是 msg-new
-      expect(store.getSummary('emp-1', deviceId: deviceId)?.lastMsgId, equals('msg-new'));
+      expect(await store.getSummary('emp-1', deviceId: deviceId)?.lastMsgId, equals('msg-new'));
 
       // 删除最新消息，回退到 msg-old
       // 注意：当前代码的 onMessageSoftDeleted 有 AND last_msg_id = ? 并发保护，
       // 但参数列表中没有 currentLastMsgId 参数，实际 SQL 需要 9 个参数但只传了 8 个。
       // 这里测试的是实际代码行为（传 8 个参数会报错），需要跳过或修复源码。
       // 暂时只验证未读数减少（wasUnread=true），latest 回退因源码 bug 无法测试。
-      store.onMessageSoftDeleted(
+      await store.onMessageSoftDeleted(
         employeeId: 'emp-1',
         deviceId: deviceId,
         wasUnread: true,
         wasLatest: false, // 暂不测试 latest 回退（源码参数数量 bug）
       );
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       expect(summary!.lastMsgId, equals('msg-new')); // latest 不变
       // 未读减少 1（wasUnread=true）
       expect(summary.unreadCount, equals(0));
     });
 
-    test('删除非最新消息 → latest 不变', () {
-      store.onMessageAdded(
+    test('删除非最新消息 → latest 不变', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'user',
@@ -750,7 +750,7 @@ void main() {
         seq: 1,
         content: '旧消息',
       );
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -762,7 +762,7 @@ void main() {
       );
 
       // 删除非最新消息（wasLatest=false）
-      store.onMessageSoftDeleted(
+      await store.onMessageSoftDeleted(
         employeeId: 'emp-1',
         deviceId: deviceId,
         wasUnread: false,
@@ -771,7 +771,7 @@ void main() {
 
       // 最新消息不变
       expect(
-        store.getSummary('emp-1', deviceId: deviceId)?.lastMsgId,
+        await store.getSummary('emp-1', deviceId: deviceId)?.lastMsgId,
         equals('msg-new'),
       );
     });
@@ -782,11 +782,11 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('rebuildSummary', () {
-    setUp(() {
+    setUp(() async {
       MessageSchema.create(db);
     });
 
-    test('从 messages 表重建单个摘要', () {
+    test('从 messages 表重建单个摘要', () async {
       // 插入 3 条消息：2 条 assistant 未读 + 1 条 user 已读（最新）
       insertTestMessage(db,
           uuid: 'msg-1',
@@ -816,9 +816,9 @@ void main() {
           createTime: 3000,
           content: '用户消息');
 
-      store.rebuildSummary('emp-1', deviceId: deviceId);
+      await store.rebuildSummary('emp-1', deviceId: deviceId);
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       // 未读数 = 2 条 assistant 未读
       expect(summary!.unreadCount, equals(2));
@@ -830,18 +830,18 @@ void main() {
       expect(summary.lastMsgSeq, equals(3));
     });
 
-    test('无消息时不创建摘要', () {
-      store.rebuildSummary('emp-nonexistent', deviceId: deviceId);
+    test('无消息时不创建摘要', () async {
+      await store.rebuildSummary('emp-nonexistent', deviceId: deviceId);
 
       expect(
-        store.getSummary('emp-nonexistent', deviceId: deviceId),
+        await store.getSummary('emp-nonexistent', deviceId: deviceId),
         isNull,
       );
     });
 
-    test('重建覆盖现有错误数据', () {
+    test('重建覆盖现有错误数据', () async {
       // 先通过 onMessageAdded 创建摘要（产生正确数据）
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -863,18 +863,18 @@ void main() {
           createTime: 1000,
           content: '正确数据');
 
-      store.rebuildSummary('emp-1', deviceId: deviceId);
+      await store.rebuildSummary('emp-1', deviceId: deviceId);
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       expect(summary!.lastMsgId, equals('msg-correct'));
       expect(summary.lastMsgContent, equals('正确数据'));
       expect(summary.lastMsgTime, equals(1000));
     });
 
-    test('rebuildSummary 保留已有的 pending_permission', () {
+    test('rebuildSummary 保留已有的 pending_permission', () async {
       // 先创建摘要并设置 pending_permission
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -884,14 +884,14 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.setPendingPermission(
+      await store.setPendingPermission(
         'emp-1',
         deviceId,
         '{"type":"permission","requestId":"req-1","tool":"file_read"}',
       );
 
       // 确认 pending 已设置
-      var summary = store.getSummary('emp-1', deviceId: deviceId);
+      var summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary!.hasPendingPermission, isTrue);
       final permTime = summary.pendingPermissionTime;
 
@@ -908,18 +908,18 @@ void main() {
           content: '消息1');
 
       // 重建摘要
-      store.rebuildSummary('emp-1', deviceId: deviceId);
+      await store.rebuildSummary('emp-1', deviceId: deviceId);
 
       // pending_permission 应该被保留
-      summary = store.getSummary('emp-1', deviceId: deviceId);
+      summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary!.hasPendingPermission, isTrue);
       expect(summary.pendingPermission,
           equals('{"type":"permission","requestId":"req-1","tool":"file_read"}'));
       expect(summary.pendingPermissionTime, equals(permTime));
     });
 
-    test('rebuildSummary 保留已有的 pending_confirm', () {
-      store.onMessageAdded(
+    test('rebuildSummary 保留已有的 pending_confirm', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -929,13 +929,13 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.setPendingConfirm(
+      await store.setPendingConfirm(
         'emp-1',
         deviceId,
         '{"type":"confirm","requestId":"conf-1","message":"确认删除？"}',
       );
 
-      var summary = store.getSummary('emp-1', deviceId: deviceId);
+      var summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary!.hasPendingConfirm, isTrue);
       final confTime = summary.pendingConfirmTime;
 
@@ -950,17 +950,17 @@ void main() {
           createTime: 1000,
           content: '消息1');
 
-      store.rebuildSummary('emp-1', deviceId: deviceId);
+      await store.rebuildSummary('emp-1', deviceId: deviceId);
 
-      summary = store.getSummary('emp-1', deviceId: deviceId);
+      summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary!.hasPendingConfirm, isTrue);
       expect(summary.pendingConfirm,
           equals('{"type":"confirm","requestId":"conf-1","message":"确认删除？"}'));
       expect(summary.pendingConfirmTime, equals(confTime));
     });
 
-    test('rebuildSummary 同时保留 permission 和 confirm', () {
-      store.onMessageAdded(
+    test('rebuildSummary 同时保留 permission 和 confirm', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -970,12 +970,12 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.setPendingPermission(
+      await store.setPendingPermission(
         'emp-1',
         deviceId,
         '{"type":"permission","requestId":"req-1"}',
       );
-      store.setPendingConfirm(
+      await store.setPendingConfirm(
         'emp-1',
         deviceId,
         '{"type":"confirm","requestId":"conf-1"}',
@@ -992,9 +992,9 @@ void main() {
           createTime: 1000,
           content: '消息1');
 
-      store.rebuildSummary('emp-1', deviceId: deviceId);
+      await store.rebuildSummary('emp-1', deviceId: deviceId);
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary!.hasPendingPermission, isTrue);
       expect(summary.hasPendingConfirm, isTrue);
       expect(summary.hasPendingRequest, isTrue);
@@ -1008,11 +1008,11 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('rebuildAllSummaries', () {
-    setUp(() {
+    setUp(() async {
       MessageSchema.create(db);
     });
 
-    test('批量重建所有摘要', () {
+    test('批量重建所有摘要', () async {
       // emp-1 的消息
       insertTestMessage(db,
           uuid: 'msg-1',
@@ -1034,23 +1034,23 @@ void main() {
           createTime: 2000,
           content: '消息2');
 
-      store.rebuildAllSummaries();
+      await store.rebuildAllSummaries();
 
-      final all = store.getAllSummaries();
+      final all = await store.getAllSummaries();
       expect(all.length, equals(2));
 
-      final emp1Summary = store.getSummary('emp-1', deviceId: deviceId);
+      final emp1Summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(emp1Summary, isNotNull);
       expect(emp1Summary!.lastMsgId, equals('msg-1'));
       expect(emp1Summary.unreadCount, equals(1));
 
-      final emp2Summary = store.getSummary('emp-2', deviceId: deviceId);
+      final emp2Summary = await store.getSummary('emp-2', deviceId: deviceId);
       expect(emp2Summary, isNotNull);
       expect(emp2Summary!.lastMsgId, equals('msg-2'));
       expect(emp2Summary.unreadCount, equals(1));
     });
 
-    test('按 deviceId 过滤重建', () {
+    test('按 deviceId 过滤重建', () async {
       // dev-A 的消息
       insertTestMessage(db,
           uuid: 'msg-a',
@@ -1073,16 +1073,16 @@ void main() {
           content: '消息B');
 
       // 只重建 dev-A
-      store.rebuildAllSummaries(deviceId: 'dev-A');
+      await store.rebuildAllSummaries(deviceId: 'dev-A');
 
       // dev-A 有摘要
       expect(
-        store.getSummary('emp-1', deviceId: 'dev-A'),
+        await store.getSummary('emp-1', deviceId: 'dev-A'),
         isNotNull,
       );
       // dev-B 没有被重建
       expect(
-        store.getSummary('emp-2', deviceId: 'dev-B'),
+        await store.getSummary('emp-2', deviceId: 'dev-B'),
         isNull,
       );
     });
@@ -1093,8 +1093,8 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('onMessagesAdded', () {
-    test('批量写入多条消息', () {
-      store.onMessagesAdded([
+    test('批量写入多条消息', () async {
+      await store.onMessagesAdded([
         {
           'employeeId': 'emp-1',
           'deviceId': deviceId,
@@ -1128,17 +1128,17 @@ void main() {
       ]);
 
       // 只有 1 条 assistant 未读
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(1));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(1));
       // 最新消息是 createTime 最大的
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary!.lastMsgId, equals('msg-3'));
       expect(summary.lastMsgTime, equals(3000));
     });
 
-    test('空列表不操作', () {
-      store.onMessagesAdded([]);
+    test('空列表不操作', () async {
+      await store.onMessagesAdded([]);
 
-      expect(store.getAllSummaries(), isEmpty);
+      expect(await store.getAllSummaries(), isEmpty);
       // 不抛异常
     });
   });
@@ -1148,8 +1148,8 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('deleteSummary', () {
-    test('删除指定摘要', () {
-      store.onMessageAdded(
+    test('删除指定摘要', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -1159,17 +1159,17 @@ void main() {
         content: '消息1',
       );
 
-      expect(store.getSummary('emp-1', deviceId: deviceId), isNotNull);
+      expect(await store.getSummary('emp-1', deviceId: deviceId), isNotNull);
 
-      store.deleteSummary('emp-1', deviceId: deviceId);
+      await store.deleteSummary('emp-1', deviceId: deviceId);
 
-      expect(store.getSummary('emp-1', deviceId: deviceId), isNull);
+      expect(await store.getSummary('emp-1', deviceId: deviceId), isNull);
     });
 
-    test('删除不存在的摘要无副作用', () {
+    test('删除不存在的摘要无副作用', () async {
       // 对不存在的摘要调用删除，不应抛异常
-      store.deleteSummary('emp-nonexistent', deviceId: deviceId);
-      expect(store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
+      await store.deleteSummary('emp-nonexistent', deviceId: deviceId);
+      expect(await store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
     });
   });
 
@@ -1178,9 +1178,9 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('getUnreadEmployeeIds', () {
-    test('返回有未读的员工ID列表', () {
+    test('返回有未读的员工ID列表', () async {
       // emp-1 有未读
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -1190,7 +1190,7 @@ void main() {
         content: '消息1',
       );
       // emp-2 已读（user 消息不增加未读）
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-2',
         deviceId: deviceId,
         role: 'user',
@@ -1200,7 +1200,7 @@ void main() {
         content: '消息2',
       );
       // emp-3 有未读
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-3',
         deviceId: deviceId,
         role: 'assistant',
@@ -1210,14 +1210,14 @@ void main() {
         content: '消息3',
       );
 
-      final ids = store.getUnreadEmployeeIds();
+      final ids = await store.getUnreadEmployeeIds();
       expect(ids, containsAll(['emp-1', 'emp-3']));
       expect(ids, isNot(contains('emp-2')));
     });
 
-    test('按 deviceId 过滤', () {
+    test('按 deviceId 过滤', () async {
       // emp-1 在 dev-A 有未读
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: 'dev-A',
         role: 'assistant',
@@ -1227,7 +1227,7 @@ void main() {
         content: '消息A',
       );
       // emp-2 在 dev-B 有未读
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-2',
         deviceId: 'dev-B',
         role: 'assistant',
@@ -1237,12 +1237,12 @@ void main() {
         content: '消息B',
       );
 
-      final filtered = store.getUnreadEmployeeIds(deviceId: 'dev-A');
+      final filtered = await store.getUnreadEmployeeIds(deviceId: 'dev-A');
       expect(filtered, equals(['emp-1']));
     });
 
-    test('无未读时返回空列表', () {
-      expect(store.getUnreadEmployeeIds(), isEmpty);
+    test('无未读时返回空列表', () async {
+      expect(await store.getUnreadEmployeeIds(), isEmpty);
     });
   });
 
@@ -1251,10 +1251,10 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('markAllAsRead', () {
-    test('全局标记所有摘要已读', () {
+    test('全局标记所有摘要已读', () async {
       // 创建 3 个有未读的摘要
       for (int i = 1; i <= 3; i++) {
-        store.onMessageAdded(
+        await store.onMessageAdded(
           employeeId: 'emp-$i',
           deviceId: deviceId,
           role: 'assistant',
@@ -1265,19 +1265,19 @@ void main() {
         );
       }
 
-      expect(store.getTotalUnreadCount(), greaterThan(0));
+      expect(await store.getTotalUnreadCount(), greaterThan(0));
 
-      store.markAllAsRead();
+      await store.markAllAsRead();
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(0));
-      expect(store.getUnreadCount('emp-2', deviceId: deviceId), equals(0));
-      expect(store.getUnreadCount('emp-3', deviceId: deviceId), equals(0));
-      expect(store.getTotalUnreadCount(), equals(0));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(0));
+      expect(await store.getUnreadCount('emp-2', deviceId: deviceId), equals(0));
+      expect(await store.getUnreadCount('emp-3', deviceId: deviceId), equals(0));
+      expect(await store.getTotalUnreadCount(), equals(0));
     });
 
-    test('按 deviceId 标记已读', () {
+    test('按 deviceId 标记已读', () async {
       // dev-A 有未读
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: 'dev-A',
         role: 'assistant',
@@ -1287,7 +1287,7 @@ void main() {
         content: '消息A',
       );
       // dev-B 有未读
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-2',
         deviceId: 'dev-B',
         role: 'assistant',
@@ -1298,12 +1298,12 @@ void main() {
       );
 
       // 只标记 dev-A
-      store.markAllAsRead(deviceId: 'dev-A');
+      await store.markAllAsRead(deviceId: 'dev-A');
 
       // dev-A 已清零
-      expect(store.getUnreadCount('emp-1', deviceId: 'dev-A'), equals(0));
+      expect(await store.getUnreadCount('emp-1', deviceId: 'dev-A'), equals(0));
       // dev-B 未受影响
-      expect(store.getUnreadCount('emp-2', deviceId: 'dev-B'), equals(1));
+      expect(await store.getUnreadCount('emp-2', deviceId: 'dev-B'), equals(1));
     });
   });
 
@@ -1312,10 +1312,10 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('getTotalUnreadCount', () {
-    test('全局未读总数', () {
+    test('全局未读总数', () async {
       // 3 个摘要：未读分别为 2, 3, 0
       for (int i = 1; i <= 2; i++) {
-        store.onMessageAdded(
+        await store.onMessageAdded(
           employeeId: 'emp-1',
           deviceId: deviceId,
           role: 'assistant',
@@ -1326,7 +1326,7 @@ void main() {
         );
       }
       for (int i = 1; i <= 3; i++) {
-        store.onMessageAdded(
+        await store.onMessageAdded(
           employeeId: 'emp-2',
           deviceId: deviceId,
           role: 'assistant',
@@ -1336,7 +1336,7 @@ void main() {
           content: '消息2-$i',
         );
       }
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-3',
         deviceId: deviceId,
         role: 'user',
@@ -1346,13 +1346,13 @@ void main() {
         content: '用户消息',
       );
 
-      expect(store.getTotalUnreadCount(), equals(5));
+      expect(await store.getTotalUnreadCount(), equals(5));
     });
 
-    test('按 deviceId 过滤', () {
+    test('按 deviceId 过滤', () async {
       // dev-A 未读 2
       for (int i = 1; i <= 2; i++) {
-        store.onMessageAdded(
+        await store.onMessageAdded(
           employeeId: 'emp-1',
           deviceId: 'dev-A',
           role: 'assistant',
@@ -1364,7 +1364,7 @@ void main() {
       }
       // dev-B 未读 3
       for (int i = 1; i <= 3; i++) {
-        store.onMessageAdded(
+        await store.onMessageAdded(
           employeeId: 'emp-2',
           deviceId: 'dev-B',
           role: 'assistant',
@@ -1375,8 +1375,8 @@ void main() {
         );
       }
 
-      expect(store.getTotalUnreadCount(deviceId: 'dev-A'), equals(2));
-      expect(store.getTotalUnreadCount(deviceId: 'dev-B'), equals(3));
+      expect(await store.getTotalUnreadCount(deviceId: 'dev-A'), equals(2));
+      expect(await store.getTotalUnreadCount(deviceId: 'dev-B'), equals(3));
     });
   });
 
@@ -1385,15 +1385,15 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('边界条件', () {
-    test('空 DB 查询返回空/0', () {
-      expect(store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
-      expect(store.getUnreadCount('emp-nonexistent', deviceId: deviceId), equals(0));
-      expect(store.getAllSummaries(), isEmpty);
-      expect(store.getTotalUnreadCount(), equals(0));
-      expect(store.getUnreadEmployeeIds(), isEmpty);
+    test('空 DB 查询返回空/0', () async {
+      expect(await store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
+      expect(await store.getUnreadCount('emp-nonexistent', deviceId: deviceId), equals(0));
+      expect(await store.getAllSummaries(), isEmpty);
+      expect(await store.getTotalUnreadCount(), equals(0));
+      expect(await store.getUnreadEmployeeIds(), isEmpty);
     });
 
-    test('重复 upsert 幂等', () {
+    test('重复 upsert 幂等', () async {
       final remote = SessionSummaryEntity(
         employeeId: 'emp-1',
         deviceId: deviceId,
@@ -1406,19 +1406,19 @@ void main() {
         updateTime: 1000,
       );
 
-      store.upsertFromRemote(remote);
-      store.upsertFromRemote(remote);
+      await sawait await ore.upsertFromRemote(remote);
+      await sawait await ore.upsertFromRemote(remote);
 
-      final all = store.getAllSummaries();
+      final all = await store.getAllSummaries();
       // 只有 1 条记录（幂等）
       expect(all.length, equals(1));
       expect(all.first.employeeId, equals('emp-1'));
     });
 
-    test('content 超过 200 字截断', () {
+    test('content 超过 200 字截断', () async {
       final longContent = 'A' * 300;
 
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -1429,14 +1429,14 @@ void main() {
         content: longContent,
       );
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       expect(summary!.lastMsgContent!.length, equals(200));
       expect(summary.lastMsgContent, equals('A' * 200));
     });
 
-    test('getSummary 返回完整字段', () {
-      store.onMessageAdded(
+    test('getSummary 返回完整字段', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -1447,7 +1447,7 @@ void main() {
         content: '完整字段测试',
       );
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       expect(summary!.employeeId, equals('emp-1'));
       expect(summary.deviceId, equals(deviceId));
@@ -1460,7 +1460,7 @@ void main() {
       expect(summary.updateTime, greaterThan(0));
     });
 
-    test('Entity previewText 截断测试', () {
+    test('Entity previewText 截断测试', () async {
       final entity = SessionSummaryEntity(
         employeeId: 'emp-1',
         deviceId: deviceId,
@@ -1486,7 +1486,7 @@ void main() {
       expect(entityLong.previewText.endsWith('...'), isTrue);
     });
 
-    test('Entity hasLatestMessage 判断', () {
+    test('Entity hasLatestMessage 判断', () async {
       final withMsg = SessionSummaryEntity(
         employeeId: 'emp-1',
         deviceId: deviceId,
@@ -1514,7 +1514,7 @@ void main() {
       expect(emptyId.hasLatestMessage, isFalse);
     });
 
-    test('Entity toMap/fromMap 往返', () {
+    test('Entity toMap/fromMap 往返', () async {
       final original = SessionSummaryEntity(
         employeeId: 'emp-1',
         deviceId: 'dev-1',
@@ -1547,9 +1547,9 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('upsertFromRemote pending 字段合并', () {
-    test('远程有 pending 且本地无 → 覆盖本地', () {
+    test('远程有 pending 且本地无 → 覆盖本地', () async {
       // 本地先创建摘要（无 pending）
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -1561,7 +1561,7 @@ void main() {
       );
 
       // 确认本地无 pending
-      var summary = store.getSummary('emp-1', deviceId: deviceId);
+      var summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary!.pendingPermission, isNull);
       expect(summary.pendingConfirm, isNull);
 
@@ -1582,9 +1582,9 @@ void main() {
         updateTime: 800,
       );
 
-      store.upsertFromRemote(remote);
+      await sawait await ore.upsertFromRemote(remote);
 
-      summary = store.getSummary('emp-1', deviceId: deviceId);
+      summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       // pending 字段被远程覆盖
       expect(summary!.pendingPermission, equals('{"type":"permission","id":"req-1"}'));
@@ -1596,9 +1596,9 @@ void main() {
       expect(summary.lastMsgTime, equals(1000));
     });
 
-    test('远程无 pending 且本地有 → 保留本地', () {
+    test('远程无 pending 且本地有 → 保留本地', () async {
       // 本地先创建摘要并设置 pending
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -1608,19 +1608,19 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.setPendingPermission(
+      await store.setPendingPermission(
         'emp-1',
         deviceId,
         '{"type":"permission","id":"local-req"}',
       );
-      store.setPendingConfirm(
+      await store.setPendingConfirm(
         'emp-1',
         deviceId,
         '{"type":"confirm","id":"local-conf"}',
       );
 
       // 确认本地有 pending
-      var summary = store.getSummary('emp-1', deviceId: deviceId);
+      var summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary!.pendingPermission, isNotNull);
       expect(summary.pendingConfirm, isNotNull);
 
@@ -1633,9 +1633,9 @@ void main() {
         updateTime: 500,
       );
 
-      store.upsertFromRemote(remote);
+      await sawait await ore.upsertFromRemote(remote);
 
-      summary = store.getSummary('emp-1', deviceId: deviceId);
+      summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       // 本地 pending 保留
       expect(summary!.pendingPermission, isNotNull);
@@ -1644,9 +1644,9 @@ void main() {
       expect(summary.pendingConfirm!.contains('local-conf'), isTrue);
     });
 
-    test('两端都有 pending → 取时间较新的', () {
+    test('两端都有 pending → 取时间较新的', () async {
       // 本地先创建摘要并设置 pending（时间较早）
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -1656,19 +1656,19 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.setPendingPermission(
+      await store.setPendingPermission(
         'emp-1',
         deviceId,
         '{"type":"permission","id":"local-old"}',
       );
-      store.setPendingConfirm(
+      await store.setPendingConfirm(
         'emp-1',
         deviceId,
         '{"type":"confirm","id":"local-old-conf"}',
       );
 
       // 确认本地有 pending
-      var summary = store.getSummary('emp-1', deviceId: deviceId);
+      var summary = await store.getSummary('emp-1', deviceId: deviceId);
       final localPermTime = summary!.pendingPermissionTime;
       final localConfTime = summary.pendingConfirmTime;
 
@@ -1685,18 +1685,18 @@ void main() {
         updateTime: 1500,
       );
 
-      store.upsertFromRemote(remote);
+      await sawait await ore.upsertFromRemote(remote);
 
-      summary = store.getSummary('emp-1', deviceId: deviceId);
+      summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       // 远程时间更晚，取远程
       expect(summary!.pendingPermission, equals('{"type":"permission","id":"remote-new"}'));
       expect(summary.pendingConfirm, equals('{"type":"confirm","id":"remote-new-conf"}'));
     });
 
-    test('两端都有 pending → 本地时间较新时保留本地', () {
+    test('两端都有 pending → 本地时间较新时保留本地', () async {
       // 本地先创建摘要并设置 pending
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -1706,18 +1706,18 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.setPendingPermission(
+      await store.setPendingPermission(
         'emp-1',
         deviceId,
         '{"type":"permission","id":"local-new"}',
       );
-      store.setPendingConfirm(
+      await store.setPendingConfirm(
         'emp-1',
         deviceId,
         '{"type":"confirm","id":"local-new-conf"}',
       );
 
-      var summary = store.getSummary('emp-1', deviceId: deviceId);
+      var summary = await store.getSummary('emp-1', deviceId: deviceId);
       final localPermTime = summary!.pendingPermissionTime;
       final localConfTime = summary.pendingConfirmTime;
 
@@ -1734,18 +1734,18 @@ void main() {
         updateTime: 500,
       );
 
-      store.upsertFromRemote(remote);
+      await sawait await ore.upsertFromRemote(remote);
 
-      summary = store.getSummary('emp-1', deviceId: deviceId);
+      summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       // 本地时间更晚，保留本地
       expect(summary!.pendingPermission!.contains('local-new'), isTrue);
       expect(summary.pendingConfirm!.contains('local-new-conf'), isTrue);
     });
 
-    test('pending 字段不影响 unread_count 和 last_msg_* 合并', () {
+    test('pending 字段不影响 unread_count 和 last_msg_* 合并', () async {
       // 本地有消息
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -1771,9 +1771,9 @@ void main() {
         updateTime: 2000,
       );
 
-      store.upsertFromRemote(remote);
+      await sawait await ore.upsertFromRemote(remote);
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary, isNotNull);
       // unread_count 取 max(1, 5) = 5
       expect(summary!.unreadCount, equals(5));
@@ -1786,7 +1786,7 @@ void main() {
       expect(summary.pendingPermissionTime, equals(2000));
     });
 
-    test('首次插入带 pending 数据的远程摘要', () {
+    test('首次插入带 pending 数据的远程摘要', () async {
       // 本地无任何数据，直接 upsert 远程摘要
       final remote = SessionSummaryEntity(
         employeeId: 'emp-new',
@@ -1804,9 +1804,9 @@ void main() {
         updateTime: 5000,
       );
 
-      store.upsertFromRemote(remote);
+      await sawait await ore.upsertFromRemote(remote);
 
-      final summary = store.getSummary('emp-new', deviceId: deviceId);
+      final summary = await store.getSummary('emp-new', deviceId: deviceId);
       expect(summary, isNotNull);
       expect(summary!.unreadCount, equals(3));
       expect(summary.lastMsgId, equals('msg-r1'));
@@ -1823,8 +1823,8 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('onMessagesAdded', () {
-    test('批量写入多条消息，所有摘要正确更新', () {
-      store.onMessagesAdded([
+    test('批量写入多条消息，所有摘要正确更新', () async {
+      await store.onMessagesAdded([
         {
           'employeeId': 'emp-1',
           'deviceId': deviceId,
@@ -1858,24 +1858,24 @@ void main() {
       ]);
 
       // emp-1: 2 条未读
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
-      final s1 = store.getSummary('emp-1', deviceId: deviceId);
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
+      final s1 = await store.getSummary('emp-1', deviceId: deviceId);
       expect(s1!.lastMsgId, equals('msg-2'));
       expect(s1.lastMsgContent, equals('消息2'));
 
       // emp-2: 1 条未读
-      expect(store.getUnreadCount('emp-2', deviceId: deviceId), equals(1));
-      final s2 = store.getSummary('emp-2', deviceId: deviceId);
+      expect(await store.getUnreadCount('emp-2', deviceId: deviceId), equals(1));
+      final s2 = await store.getSummary('emp-2', deviceId: deviceId);
       expect(s2!.lastMsgId, equals('msg-3'));
     });
 
-    test('空列表不操作', () {
-      store.onMessagesAdded([]);
-      expect(store.getAllSummaries(), isEmpty);
+    test('空列表不操作', () async {
+      await store.onMessagesAdded([]);
+      expect(await store.getAllSummaries(), isEmpty);
     });
 
-    test('事务一致性：批量写入后全部成功', () {
-      store.onMessagesAdded([
+    test('事务一致性：批量写入后全部成功', () async {
+      await store.onMessagesAdded([
         {
           'employeeId': 'emp-1',
           'deviceId': deviceId,
@@ -1899,8 +1899,8 @@ void main() {
       ]);
 
       // 两消息都写入成功
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
-      expect(store.getSummary('emp-1', deviceId: deviceId)!.lastMsgId,
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(2));
+      expect(await store.getSummary('emp-1', deviceId: deviceId)!.lastMsgId,
           equals('msg-2'));
     });
   });
@@ -1910,8 +1910,8 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('deleteSummary', () {
-    test('删除已存在的摘要', () {
-      store.onMessageAdded(
+    test('删除已存在的摘要', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -1922,25 +1922,25 @@ void main() {
         content: '消息1',
       );
 
-      expect(store.getSummary('emp-1', deviceId: deviceId), isNotNull);
-      expect(store.getTotalUnreadCount(), equals(1));
+      expect(await store.getSummary('emp-1', deviceId: deviceId), isNotNull);
+      expect(await store.getTotalUnreadCount(), equals(1));
 
-      store.deleteSummary('emp-1', deviceId: deviceId);
+      await store.deleteSummary('emp-1', deviceId: deviceId);
 
-      expect(store.getSummary('emp-1', deviceId: deviceId), isNull);
-      expect(store.getTotalUnreadCount(), equals(0));
+      expect(await store.getSummary('emp-1', deviceId: deviceId), isNull);
+      expect(await store.getTotalUnreadCount(), equals(0));
     });
 
-    test('删除不存在的摘要无副作用', () {
+    test('删除不存在的摘要无副作用', () async {
       // 不抛异常
-      store.deleteSummary('emp-nonexistent', deviceId: deviceId);
+      await store.deleteSummary('emp-nonexistent', deviceId: deviceId);
 
-      expect(store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
-      expect(store.getAllSummaries(), isEmpty);
+      expect(await store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
+      expect(await store.getAllSummaries(), isEmpty);
     });
 
-    test('删除一个摘要不影响其他摘要', () {
-      store.onMessageAdded(
+    test('删除一个摘要不影响其他摘要', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -1950,7 +1950,7 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-2',
         deviceId: deviceId,
         role: 'assistant',
@@ -1961,11 +1961,11 @@ void main() {
         content: '消息2',
       );
 
-      store.deleteSummary('emp-1', deviceId: deviceId);
+      await store.deleteSummary('emp-1', deviceId: deviceId);
 
-      expect(store.getSummary('emp-1', deviceId: deviceId), isNull);
-      expect(store.getSummary('emp-2', deviceId: deviceId), isNotNull);
-      expect(store.getTotalUnreadCount(), equals(1));
+      expect(await store.getSummary('emp-1', deviceId: deviceId), isNull);
+      expect(await store.getSummary('emp-2', deviceId: deviceId), isNotNull);
+      expect(await store.getTotalUnreadCount(), equals(1));
     });
   });
 
@@ -1974,8 +1974,8 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('markAllAsRead', () {
-    test('多个会话有未读，全局标记后全部为 0', () {
-      store.onMessageAdded(
+    test('多个会话有未读，全局标记后全部为 0', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -1985,7 +1985,7 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-2',
         deviceId: deviceId,
         role: 'assistant',
@@ -1995,7 +1995,7 @@ void main() {
         seq: 1,
         content: '消息2',
       );
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-3',
         deviceId: deviceId,
         role: 'assistant',
@@ -2006,19 +2006,19 @@ void main() {
         content: '消息3',
       );
 
-      expect(store.getTotalUnreadCount(), equals(3));
+      expect(await store.getTotalUnreadCount(), equals(3));
 
-      store.markAllAsRead();
+      await store.markAllAsRead();
 
-      expect(store.getUnreadCount('emp-1', deviceId: deviceId), equals(0));
-      expect(store.getUnreadCount('emp-2', deviceId: deviceId), equals(0));
-      expect(store.getUnreadCount('emp-3', deviceId: deviceId), equals(0));
-      expect(store.getTotalUnreadCount(), equals(0));
+      expect(await store.getUnreadCount('emp-1', deviceId: deviceId), equals(0));
+      expect(await store.getUnreadCount('emp-2', deviceId: deviceId), equals(0));
+      expect(await store.getUnreadCount('emp-3', deviceId: deviceId), equals(0));
+      expect(await store.getTotalUnreadCount(), equals(0));
     });
 
-    test('按 deviceId 过滤标记已读', () {
+    test('按 deviceId 过滤标记已读', () async {
       // dev-A 有未读
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: 'dev-A',
         role: 'assistant',
@@ -2029,7 +2029,7 @@ void main() {
         content: 'A消息',
       );
       // dev-B 有未读
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-2',
         deviceId: 'dev-B',
         role: 'assistant',
@@ -2040,19 +2040,19 @@ void main() {
         content: 'B消息',
       );
 
-      expect(store.getTotalUnreadCount(), equals(2));
+      expect(await store.getTotalUnreadCount(), equals(2));
 
       // 只标记 dev-A
-      store.markAllAsRead(deviceId: 'dev-A');
+      await store.markAllAsRead(deviceId: 'dev-A');
 
-      expect(store.getUnreadCount('emp-1', deviceId: 'dev-A'), equals(0));
-      expect(store.getUnreadCount('emp-2', deviceId: 'dev-B'), equals(1));
-      expect(store.getTotalUnreadCount(), equals(1));
+      expect(await store.getUnreadCount('emp-1', deviceId: 'dev-A'), equals(0));
+      expect(await store.getUnreadCount('emp-2', deviceId: 'dev-B'), equals(1));
+      expect(await store.getTotalUnreadCount(), equals(1));
     });
 
-    test('空表调用无异常', () {
-      store.markAllAsRead();
-      expect(store.getTotalUnreadCount(), equals(0));
+    test('空表调用无异常', () async {
+      await store.markAllAsRead();
+      expect(await store.getTotalUnreadCount(), equals(0));
     });
   });
 
@@ -2061,19 +2061,19 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('setPendingPermission / clearPendingPermission', () {
-    test('无摘要时 setPendingPermission 无副作用', () {
-      store.setPendingPermission(
+    test('无摘要时 setPendingPermission 无副作用', () async {
+      await store.setPendingPermission(
         'emp-nonexistent',
         deviceId,
         '{"type":"permission","requestId":"req-1"}',
       );
 
       // UPDATE 影响行数为 0，不创建新行
-      expect(store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
+      expect(await store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
     });
 
-    test('有摘要时 setPendingPermission 正确写入', () {
-      store.onMessageAdded(
+    test('有摘要时 setPendingPermission 正确写入', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -2084,21 +2084,21 @@ void main() {
         content: '消息1',
       );
 
-      store.setPendingPermission(
+      await store.setPendingPermission(
         'emp-1',
         deviceId,
         '{"type":"permission","requestId":"req-1","tool":"file_read"}',
       );
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary!.hasPendingPermission, isTrue);
       expect(summary.pendingPermission, contains('req-1'));
       expect(summary.pendingPermissionTime, isNotNull);
       expect(summary.pendingPermissionTime!, greaterThan(0));
     });
 
-    test('clearPendingPermission 清除字段', () {
-      store.onMessageAdded(
+    test('clearPendingPermission 清除字段', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -2108,27 +2108,27 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.setPendingPermission(
+      await store.setPendingPermission(
         'emp-1',
         deviceId,
         '{"type":"permission","requestId":"req-1"}',
       );
 
-      expect(store.getSummary('emp-1', deviceId: deviceId)!.hasPendingPermission,
+      expect(await store.getSummary('emp-1', deviceId: deviceId)!.hasPendingPermission,
           isTrue);
 
-      store.clearPendingPermission('emp-1', deviceId);
+      await store.clearPendingPermission('emp-1', deviceId);
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary!.hasPendingPermission, isFalse);
       expect(summary.pendingPermission, isNull);
       expect(summary.pendingPermissionTime, isNull);
     });
 
-    test('无摘要时 clearPendingPermission 无副作用', () {
-      store.clearPendingPermission('emp-nonexistent', deviceId);
+    test('无摘要时 clearPendingPermission 无副作用', () async {
+      await store.clearPendingPermission('emp-nonexistent', deviceId);
       // 不抛异常
-      expect(store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
+      expect(await store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
     });
   });
 
@@ -2137,18 +2137,18 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('setPendingConfirm / clearPendingConfirm', () {
-    test('无摘要时 setPendingConfirm 无副作用', () {
-      store.setPendingConfirm(
+    test('无摘要时 setPendingConfirm 无副作用', () async {
+      await store.setPendingConfirm(
         'emp-nonexistent',
         deviceId,
         '{"type":"confirm","requestId":"conf-1"}',
       );
 
-      expect(store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
+      expect(await store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
     });
 
-    test('有摘要时 setPendingConfirm 正确写入', () {
-      store.onMessageAdded(
+    test('有摘要时 setPendingConfirm 正确写入', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -2159,21 +2159,21 @@ void main() {
         content: '消息1',
       );
 
-      store.setPendingConfirm(
+      await store.setPendingConfirm(
         'emp-1',
         deviceId,
         '{"type":"confirm","requestId":"conf-1","message":"确认删除？"}',
       );
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary!.hasPendingConfirm, isTrue);
       expect(summary.pendingConfirm, contains('conf-1'));
       expect(summary.pendingConfirmTime, isNotNull);
       expect(summary.pendingConfirmTime!, greaterThan(0));
     });
 
-    test('clearPendingConfirm 清除字段', () {
-      store.onMessageAdded(
+    test('clearPendingConfirm 清除字段', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -2183,26 +2183,26 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.setPendingConfirm(
+      await store.setPendingConfirm(
         'emp-1',
         deviceId,
         '{"type":"confirm","requestId":"conf-1"}',
       );
 
-      expect(store.getSummary('emp-1', deviceId: deviceId)!.hasPendingConfirm,
+      expect(await store.getSummary('emp-1', deviceId: deviceId)!.hasPendingConfirm,
           isTrue);
 
-      store.clearPendingConfirm('emp-1', deviceId);
+      await store.clearPendingConfirm('emp-1', deviceId);
 
-      final summary = store.getSummary('emp-1', deviceId: deviceId);
+      final summary = await store.getSummary('emp-1', deviceId: deviceId);
       expect(summary!.hasPendingConfirm, isFalse);
       expect(summary.pendingConfirm, isNull);
       expect(summary.pendingConfirmTime, isNull);
     });
 
-    test('无摘要时 clearPendingConfirm 无副作用', () {
-      store.clearPendingConfirm('emp-nonexistent', deviceId);
-      expect(store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
+    test('无摘要时 clearPendingConfirm 无副作用', () async {
+      await store.clearPendingConfirm('emp-nonexistent', deviceId);
+      expect(await store.getSummary('emp-nonexistent', deviceId: deviceId), isNull);
     });
   });
 
@@ -2211,8 +2211,8 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('getPendingSummaries', () {
-    test('无 pending 时返回空列表', () {
-      store.onMessageAdded(
+    test('无 pending 时返回空列表', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -2223,11 +2223,11 @@ void main() {
         content: '消息1',
       );
 
-      expect(store.getPendingSummaries(), isEmpty);
+      expect(await store.getPendingSummaries(), isEmpty);
     });
 
-    test('只有 permission pending 时返回正确', () {
-      store.onMessageAdded(
+    test('只有 permission pending 时返回正确', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -2237,21 +2237,21 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.setPendingPermission(
+      await store.setPendingPermission(
         'emp-1',
         deviceId,
         '{"type":"permission","requestId":"req-1"}',
       );
 
-      final pending = store.getPendingSummaries();
+      final pending = await store.getPendingSummaries();
       expect(pending.length, equals(1));
       expect(pending.first.employeeId, equals('emp-1'));
       expect(pending.first.hasPendingPermission, isTrue);
       expect(pending.first.hasPendingConfirm, isFalse);
     });
 
-    test('只有 confirm pending 时返回正确', () {
-      store.onMessageAdded(
+    test('只有 confirm pending 时返回正确', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -2261,20 +2261,20 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.setPendingConfirm(
+      await store.setPendingConfirm(
         'emp-1',
         deviceId,
         '{"type":"confirm","requestId":"conf-1"}',
       );
 
-      final pending = store.getPendingSummaries();
+      final pending = await store.getPendingSummaries();
       expect(pending.length, equals(1));
       expect(pending.first.hasPendingPermission, isFalse);
       expect(pending.first.hasPendingConfirm, isTrue);
     });
 
-    test('同时有 permission + confirm 时返回正确', () {
-      store.onMessageAdded(
+    test('同时有 permission + confirm 时返回正确', () async {
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: deviceId,
         role: 'assistant',
@@ -2284,25 +2284,25 @@ void main() {
         seq: 1,
         content: '消息1',
       );
-      store.setPendingPermission(
+      await store.setPendingPermission(
         'emp-1',
         deviceId,
         '{"type":"permission","requestId":"req-1"}',
       );
-      store.setPendingConfirm(
+      await store.setPendingConfirm(
         'emp-1',
         deviceId,
         '{"type":"confirm","requestId":"conf-1"}',
       );
 
-      final pending = store.getPendingSummaries();
+      final pending = await store.getPendingSummaries();
       expect(pending.length, equals(1));
       expect(pending.first.hasPendingRequest, isTrue);
     });
 
-    test('按 deviceId 过滤', () {
+    test('按 deviceId 过滤', () async {
       // dev-A 有 pending
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-1',
         deviceId: 'dev-A',
         role: 'assistant',
@@ -2312,14 +2312,14 @@ void main() {
         seq: 1,
         content: 'A消息',
       );
-      store.setPendingPermission(
+      await store.setPendingPermission(
         'emp-1',
         'dev-A',
         '{"type":"permission","requestId":"req-a"}',
       );
 
       // dev-B 有 pending
-      store.onMessageAdded(
+      await store.onMessageAdded(
         employeeId: 'emp-2',
         deviceId: 'dev-B',
         role: 'assistant',
@@ -2329,19 +2329,19 @@ void main() {
         seq: 1,
         content: 'B消息',
       );
-      store.setPendingConfirm(
+      await store.setPendingConfirm(
         'emp-2',
         'dev-B',
         '{"type":"confirm","requestId":"conf-b"}',
       );
 
-      expect(store.getPendingSummaries(deviceId: 'dev-A').length, equals(1));
-      expect(store.getPendingSummaries(deviceId: 'dev-B').length, equals(1));
-      expect(store.getPendingSummaries().length, equals(2));
+      expect(await store.getPendingSummaries(deviceId: 'dev-A').length, equals(1));
+      expect(await store.getPendingSummaries(deviceId: 'dev-B').length, equals(1));
+      expect(await store.getPendingSummaries().length, equals(2));
     });
 
-    test('无摘要时返回空列表', () {
-      expect(store.getPendingSummaries(), isEmpty);
+    test('无摘要时返回空列表', () async {
+      expect(await store.getPendingSummaries(), isEmpty);
     });
   });
 
@@ -2350,7 +2350,7 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   group('Entity pending 便捷方法', () {
-    test('hasPendingPermission 各种情况', () {
+    test('hasPendingPermission 各种情况', () async {
       final withPerm = SessionSummaryEntity(
         employeeId: 'emp-1',
         deviceId: deviceId,
@@ -2372,7 +2372,7 @@ void main() {
       expect(withoutPerm.hasPendingRequest, isFalse);
     });
 
-    test('pending 为空字符串时 hasPendingPermission 返回 false', () {
+    test('pending 为空字符串时 hasPendingPermission 返回 false', () async {
       final emptyPerm = SessionSummaryEntity(
         employeeId: 'emp-1',
         deviceId: deviceId,
@@ -2386,7 +2386,7 @@ void main() {
       expect(emptyPerm.hasPendingRequest, isFalse);
     });
 
-    test('hasPendingConfirm 各种情况', () {
+    test('hasPendingConfirm 各种情况', () async {
       final withConf = SessionSummaryEntity(
         employeeId: 'emp-1',
         deviceId: deviceId,
@@ -2399,7 +2399,7 @@ void main() {
       expect(withConf.hasPendingRequest, isTrue);
     });
 
-    test('同时有 permission 和 confirm', () {
+    test('同时有 permission 和 confirm', () async {
       final both = SessionSummaryEntity(
         employeeId: 'emp-1',
         deviceId: deviceId,
@@ -2413,7 +2413,7 @@ void main() {
       expect(both.hasPendingRequest, isTrue);
     });
 
-    test('Entity pending 字段 toMap/fromMap 往返', () {
+    test('Entity pending 字段 toMap/fromMap 往返', () async {
       final original = SessionSummaryEntity(
         employeeId: 'emp-1',
         deviceId: 'dev-1',

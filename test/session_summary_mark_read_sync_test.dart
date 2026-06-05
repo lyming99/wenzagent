@@ -53,8 +53,8 @@ void main() {
     storeA = SessionSummaryStore(deviceId: deviceA);
     storeB = SessionSummaryStore(deviceId: deviceB);
 
-    storeA.ensureTable();
-    storeB.ensureTable();
+    await storeA.ensureTable();
+    await storeB.ensureTable();
   });
 
   tearDown(() async {
@@ -73,20 +73,20 @@ void main() {
   // ═══════════════════════════════════════════════════
 
   /// 模拟 syncSessionSummariesFromDevices：将 storeB 的摘要同步到 storeA
-  void syncBToA(String employeeId, {String? sourceDeviceId}) {
+  Future<void> syncBToA(String employeeId, {String? sourceDeviceId}) async {
     final did = sourceDeviceId ?? deviceB;
-    final summary = storeB.getSummary(employeeId, deviceId: did);
+    final summary = await storeB.getSummary(employeeId, deviceId: did);
     if (summary != null) {
-      storeA.upsertFromRemote(summary);
+      await storeA.upsertFromRemote(summary);
     }
   }
 
   /// 模拟 syncSessionSummariesFromDevices：将 storeA 的摘要同步到 storeB
-  void syncAToB(String employeeId, {String? sourceDeviceId}) {
+  Future<void> syncAToB(String employeeId, {String? sourceDeviceId}) async {
     final did = sourceDeviceId ?? deviceA;
-    final summary = storeA.getSummary(employeeId, deviceId: did);
+    final summary = await storeA.getSummary(employeeId, deviceId: did);
     if (summary != null) {
-      storeB.upsertFromRemote(summary);
+      await storeB.upsertFromRemote(summary);
     }
   }
 

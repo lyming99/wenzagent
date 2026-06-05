@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import 'migration.dart';
 
@@ -13,9 +13,9 @@ class V12Migration extends Migration {
   int get version => 12;
 
   @override
-  void onUpgrade(Database db) {
+  Future<void> onUpgrade(SqliteDatabase db) async {
     // 原始 spec_groups 表（v13 中将被删除）
-    db.execute('''
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS spec_groups (
         id           TEXT PRIMARY KEY,
         employee_id  TEXT NOT NULL,
@@ -26,13 +26,13 @@ class V12Migration extends Migration {
         update_time  INTEGER NOT NULL
       );
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_spec_groups_employee
         ON spec_groups(employee_id);
     ''');
 
     // 原始 spec_items 表（v13 中将去掉 group_id 列）
-    db.execute('''
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS spec_items (
         id           TEXT PRIMARY KEY,
         employee_id  TEXT NOT NULL,
@@ -48,11 +48,11 @@ class V12Migration extends Migration {
         update_time  INTEGER NOT NULL
       );
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_spec_items_employee
         ON spec_items(employee_id);
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_spec_items_group
         ON spec_items(group_id);
     ''');

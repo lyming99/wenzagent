@@ -1,9 +1,9 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 /// messages 表 schema
 class MessageSchema {
-  static void create(Database db) {
-    db.execute('''
+  static Future<void> create(SqliteDatabase db) async {
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS messages (
         uuid              TEXT PRIMARY KEY,
         employee_id       TEXT NOT NULL,
@@ -28,18 +28,18 @@ class MessageSchema {
         seq               INTEGER NOT NULL
       );
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_messages_employee
         ON messages(employee_id, device_id, create_time);
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_messages_seq
         ON messages(seq);
     ''');
 
     // 迁移：为已有数据库增加 metadata 列
     try {
-      db.execute('ALTER TABLE messages ADD COLUMN metadata TEXT');
+      await db.execute('ALTER TABLE messages ADD COLUMN metadata TEXT');
     } catch (_) {
       // 列已存在，忽略
     }

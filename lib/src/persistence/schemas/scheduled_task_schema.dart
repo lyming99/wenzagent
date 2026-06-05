@@ -1,9 +1,9 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 /// scheduled_tasks 表 schema
 class ScheduledTaskSchema {
-  static void create(Database db) {
-    db.execute('''
+  static Future<void> create(SqliteDatabase db) async {
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS scheduled_tasks (
         uuid                     TEXT PRIMARY KEY,
         employee_id              TEXT,
@@ -30,7 +30,7 @@ class ScheduledTaskSchema {
         created_by_device_id     TEXT
       );
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_employee
         ON scheduled_tasks(employee_id);
     ''');

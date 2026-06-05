@@ -563,7 +563,7 @@ class AgentProxy {
   Future<Map<String, dynamic>?> getSessionSummary() async {
     if (isLocalMode && _localAgent != null) {
       final summaryStore = SessionSummaryStore(deviceId: deviceId);
-      final summary = summaryStore.getSummary(employeeId, deviceId: deviceId);
+      final summary = await summaryStore.getSummary(employeeId, deviceId: deviceId);
       return summary?.toMap();
     }
     return _remoteOps!.getSessionSummary();

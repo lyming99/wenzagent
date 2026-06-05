@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import '../../utils/logger.dart';
 import '../database_manager.dart';
@@ -15,7 +15,7 @@ class SkillStore {
   SkillStore({String? deviceId, DatabaseManager? dbManager})
       : _dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
 
-  Database get _db {
+  SqliteDatabase get _db {
     if (!_dbManager.isInitialized) {
       throw StateError(
         '$runtimeType: DatabaseManager 未初始化，请先调用 initialize()。',
@@ -25,7 +25,7 @@ class SkillStore {
   }
 
   /// 从数据库行解码为实体
-  AiEmployeeSkillEntity _rowToEntity(Row row) {
+  AiEmployeeSkillEntity _rowToEntity(Map<String, Object?> row) {
     try {
       // 安全读取 global_skill_id 列（兼容旧版数据库）
       dynamic globalSkillId;
@@ -68,7 +68,7 @@ class SkillStore {
 
   /// 获取员工的技能列表（只按 employeeId，不按 deviceId）
   Future<List<AiEmployeeSkillEntity>> findByEmployee(String employeeId) async {
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT * FROM skills WHERE employee_id = ? AND deleted = 0 ORDER BY sort_order ASC',
       [employeeId],
     );
@@ -77,7 +77,7 @@ class SkillStore {
 
   /// 查找单个技能（只按 uuid，不按 deviceId）
   Future<AiEmployeeSkillEntity?> find(String uuid) async {
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT * FROM skills WHERE uuid = ? AND deleted = 0',
       [uuid],
     );
@@ -91,8 +91,8 @@ class SkillStore {
   bool? _hasNewColumns;
 
   /// 检查 skills 表是否包含指定列
-  bool _hasColumn(String columnName) {
-    final result = _db.select(
+  Future<bool> _hasColumn(String columnName) async {
+    final result = await _db.getAll(
       "SELECT name FROM pragma_table_info('skills') WHERE name = ?",
       [columnName],
     );
@@ -109,10 +109,10 @@ class SkillStore {
     );
     try {
       // 检查新列是否存在（兼容旧版数据库）
-      _hasNewColumns ??= _hasColumn('global_skill_id') && _hasColumn('origin_name');
+      _hasNewColumns ??= await _hasColumn('global_skill_id') && await _hasColumn('origin_name');
 
       if (_hasNewColumns!) {
-        _db.execute('''
+        await _db.execute('''
           INSERT OR REPLACE INTO skills (
             uuid, employee_id, device_id, name, description, skill_type,
             config, global_skill_id, origin_name, enabled, sort_order, deleted, delete_time, create_time, update_time
@@ -137,7 +137,7 @@ class SkillStore {
       } else {
         // 旧版数据库：不包含 global_skill_id 或 origin_name 列
         log.warn('save: skills 表缺少新列，使用兼容模式写入');
-        _db.execute('''
+        await _db.execute('''
           INSERT OR REPLACE INTO skills (
             uuid, employee_id, device_id, name, description, skill_type,
             config, enabled, sort_order, deleted, delete_time, create_time, update_time
@@ -168,7 +168,7 @@ class SkillStore {
   Future<void> delete(String uuid) async {
     Logger('SkillStore').debug('delete(soft): uuid=$uuid');
     try {
-      _db.execute(
+      await _db.execute(
         'UPDATE skills SET deleted = 1, delete_time = ? WHERE uuid = ?',
         [DateTime.now().millisecondsSinceEpoch, uuid],
       );
@@ -182,7 +182,7 @@ class SkillStore {
   Future<void> hardDelete(String uuid) async {
     Logger('SkillStore').debug('hardDelete: uuid=$uuid');
     try {
-      _db.execute('DELETE FROM skills WHERE uuid = ?', [uuid]);
+      await _db.execute('DELETE FROM skills WHERE uuid = ?', [uuid]);
     } catch (e, st) {
       Logger('SkillStore').error('hardDelete 失败: uuid=$uuid', e, st);
       rethrow;
@@ -193,7 +193,7 @@ class SkillStore {
   Future<void> deleteByEmployee(String employeeId) async {
     Logger('SkillStore').debug('deleteByEmployee: employeeId=$employeeId');
     try {
-      _db.execute(
+      await _db.execute(
         'UPDATE skills SET deleted = 1, delete_time = ? WHERE employee_id = ?',
         [DateTime.now().millisecondsSinceEpoch, employeeId],
       );
@@ -205,7 +205,7 @@ class SkillStore {
 
   /// 获取技能数量（只按 employeeId）
   Future<int> count(String employeeId) async {
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT COUNT(*) as cnt FROM skills WHERE employee_id = ? AND deleted = 0',
       [employeeId],
     );
@@ -214,7 +214,7 @@ class SkillStore {
 
   /// 查找单个技能（包含已删除的，用于同步合并场景）
   Future<AiEmployeeSkillEntity?> findIncludingDeleted(String uuid) async {
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT * FROM skills WHERE uuid = ?',
       [uuid],
     );
@@ -226,7 +226,7 @@ class SkillStore {
 
   /// 获取所有技能（包含已删除的，用于同步拉取）
   Future<List<AiEmployeeSkillEntity>> findAll() async {
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT * FROM skills ORDER BY sort_order ASC',
     );
     return resultSet.map(_rowToEntity).toList();

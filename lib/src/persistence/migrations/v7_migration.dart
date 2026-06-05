@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import 'migration.dart';
 
@@ -11,8 +11,12 @@ class V7Migration extends Migration {
   int get version => 7;
 
   /// 检查表中是否存在指定列
-  bool _columnExists(Database db, String table, String column) {
-    final result = db.select('''
+  Future<bool> _columnExists(
+    SqliteDatabase db,
+    String table,
+    String column,
+  ) async {
+    final result = await db.getAll('''
       SELECT count(*) as cnt FROM pragma_table_info('$table')
         WHERE name = '$column'
     ''');
@@ -20,19 +24,19 @@ class V7Migration extends Migration {
   }
 
   @override
-  void onUpgrade(Database db) {
+  Future<void> onUpgrade(SqliteDatabase db) async {
     // messages 表增加 device_id 列（如果不存在）
-    if (!_columnExists(db, 'messages', 'device_id')) {
-      db.execute('ALTER TABLE messages ADD COLUMN device_id TEXT DEFAULT \'\'');
+    if (!await _columnExists(db, 'messages', 'device_id')) {
+      await db.execute('ALTER TABLE messages ADD COLUMN device_id TEXT DEFAULT \'\'');
     }
 
     // 重建索引（加上 device_id 列便于按设备统计）
-    db.execute('DROP INDEX IF EXISTS idx_messages_employee');
-    db.execute('''
+    await db.execute('DROP INDEX IF EXISTS idx_messages_employee');
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_messages_employee
         ON messages(employee_id, create_time);
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_messages_device
         ON messages(employee_id, device_id, create_time);
     ''');

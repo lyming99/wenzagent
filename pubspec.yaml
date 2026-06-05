@@ -26,8 +26,10 @@ dependencies:
   path: ^1.9.0
   yaml: ^3.1.2
   meta: ^1.12.0
-  # SQLite for local storage (纯 Dart FFI，异步不阻塞)
-  sqlite3: ^2.4.6
+  # SQLite for local storage (纯 Dart FFI)
+  sqlite3: ^3.2.0
+  # High-performance async interface for SQLite
+  sqlite_async: ^0.14.2
   # LLM unified interface
   llm_dart:
     path: D:/project/GitHub/llm_dart

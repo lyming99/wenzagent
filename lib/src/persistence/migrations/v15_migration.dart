@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import 'migration.dart';
 
@@ -14,8 +14,12 @@ class V15Migration extends Migration {
   int get version => 15;
 
   /// 检查表中是否存在指定列
-  bool _columnExists(Database db, String table, String column) {
-    final result = db.select('''
+  Future<bool> _columnExists(
+    SqliteDatabase db,
+    String table,
+    String column,
+  ) async {
+    final result = await db.getAll('''
       SELECT count(*) as cnt FROM pragma_table_info('$table')
         WHERE name = '$column'
     ''');
@@ -23,9 +27,9 @@ class V15Migration extends Migration {
   }
 
   @override
-  void onUpgrade(Database db) {
-    if (!_columnExists(db, 'messages', 'metadata')) {
-      db.execute('ALTER TABLE messages ADD COLUMN metadata TEXT');
+  Future<void> onUpgrade(SqliteDatabase db) async {
+    if (!await _columnExists(db, 'messages', 'metadata')) {
+      await db.execute('ALTER TABLE messages ADD COLUMN metadata TEXT');
     }
   }
 }

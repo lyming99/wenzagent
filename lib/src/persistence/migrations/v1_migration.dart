@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import '../schemas/employee_schema.dart';
 import '../schemas/session_schema.dart';
@@ -14,12 +14,12 @@ class V1Migration extends Migration {
   int get version => 1;
 
   @override
-  void onUpgrade(Database db) {
-    EmployeeSchema.create(db);
-    SessionSchema.create(db);
-    MessageSchema.create(db);
-    SkillSchema.create(db);
-    DeviceConfigSchema.create(db);
-    ScheduledTaskSchema.create(db);
+  Future<void> onUpgrade(SqliteDatabase db) async {
+    await EmployeeSchema.create(db);
+    await SessionSchema.create(db);
+    await MessageSchema.create(db);
+    await SkillSchema.create(db);
+    await DeviceConfigSchema.create(db);
+    await ScheduledTaskSchema.create(db);
   }
 }

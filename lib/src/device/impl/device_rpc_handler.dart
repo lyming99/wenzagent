@@ -247,7 +247,7 @@ class DeviceRpcHandler {
     rpcServer.register(AgentRpcConfig.methodGetSessionSummary, (params) async {
       final request = GetSessionSummaryRequest.fromMap(params);
       final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-      final summary = summaryStore.getSummary(request.employeeId, deviceId: _deviceId);
+      final summary = await summaryStore.getSummary(request.employeeId, deviceId: _deviceId);
       return summary?.toMap() ?? {};
     });
 
@@ -1361,7 +1361,7 @@ class DeviceRpcHandler {
     // 获取所有会话摘要（仅返回本机 deviceId 的数据）
     rpcServer.register(HostRpcConfig.methodGetSessionSummaries, (params) async {
       final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-      final summaries = summaryStore.getAllSummaries(deviceId: _deviceId);
+      final summaries = await summaryStore.getAllSummaries(deviceId: _deviceId);
       return {'summaries': summaries.map((s) => s.toMap()).toList()};
     });
 
@@ -1507,7 +1507,7 @@ class DeviceRpcHandler {
         // 合并项目主表
         if (itemMap.containsKey('project')) {
           final project = ProjectEntity.fromMap(itemMap['project'] as Map<String, dynamic>);
-          if (projectStore.upsertFromRemote(project)) {
+          if (await projectStore.upsertFromRemote(project)) {
             count++;
           }
         }
@@ -1517,7 +1517,7 @@ class DeviceRpcHandler {
             .map((m) => ProjectModuleEntity.fromMap(m as Map<String, dynamic>))
             .toList();
         for (final module in modules) {
-          if (projectStore.upsertModuleFromRemote(module)) {
+          if (await projectStore.upsertModuleFromRemote(module)) {
             count++;
           }
         }
@@ -1527,7 +1527,7 @@ class DeviceRpcHandler {
             .map((s) => ProjectSkillEntity.fromMap(s as Map<String, dynamic>))
             .toList();
         for (final skill in skills) {
-          if (projectStore.upsertSkillFromRemote(skill)) {
+          if (await projectStore.upsertSkillFromRemote(skill)) {
             count++;
           }
         }
@@ -1537,7 +1537,7 @@ class DeviceRpcHandler {
             .map((i) => ProjectIssueEntity.fromMap(i as Map<String, dynamic>))
             .toList();
         for (final issue in issues) {
-          if (projectStore.upsertIssueFromRemote(issue)) {
+          if (await projectStore.upsertIssueFromRemote(issue)) {
             count++;
           }
         }

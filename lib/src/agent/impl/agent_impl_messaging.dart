@@ -302,17 +302,17 @@ mixin _AgentImplMessaging on _AgentImplBase {
   @override
   Future<int> getMaxSeq({required String employeeId}) async {
     final store = MessageStore(deviceId: deviceId);
-    return store.getMaxSeqForEmployeeAll(employeeId, deviceId: deviceId);
+    return await store.getMaxSeqForEmployeeAll(employeeId, deviceId: deviceId);
   }
 
   @override
   Future<int> getMinSeq({required String employeeId}) async {
     final store = MessageStore(deviceId: deviceId);
-    final minSeq = store.getMinSeqForEmployee(employeeId, deviceId: deviceId);
+    final minSeq = await store.getMinSeqForEmployee(employeeId, deviceId: deviceId);
     if (minSeq > 0) return minSeq;
     // 无未删除消息时回退到 clear_seq
     final watermarkStore = SyncWatermarkStore(deviceId: deviceId);
-    return watermarkStore.getClearSeq(employeeId, deviceId: deviceId) ?? 0;
+    return await watermarkStore.getClearSeq(employeeId, deviceId: deviceId) ?? 0;
   }
 
   @override
@@ -329,7 +329,7 @@ mixin _AgentImplMessaging on _AgentImplBase {
       // 持久化到 DB：逐条标记指定消息为已读
       final store = MessageStore(deviceId: deviceId);
       for (final messageId in ids) {
-        store.markAsReadByUuid(messageId);
+        await store.markAsReadByUuid(messageId);
         _messageReadStatus[messageId] ??= {};
         _messageReadStatus[messageId]![deviceId??''] = DateTime.now();
       }
@@ -337,7 +337,7 @@ mixin _AgentImplMessaging on _AgentImplBase {
     } else {
       // 持久化到 DB：批量标记该员工所有消息为已读
       final store = MessageStore(deviceId: deviceId);
-      store.markAsReadByEmployee(employeeId, deviceId: deviceId);
+      await store.markAsReadByEmployee(employeeId, deviceId: deviceId);
 
       // 更新内存缓存
       final allMessages = await _chatAdapter.getSessionMessages(employeeId);
@@ -372,11 +372,11 @@ mixin _AgentImplMessaging on _AgentImplBase {
 
     // 1. 持久化到 DB：批量标记 seq <= readSeq 的 assistant 未读消息为已读
     final store = MessageStore(deviceId: deviceId);
-    final affected = store.markAsReadBySeq(employeeId, readSeq, deviceId: deviceId);
+    final affected = await store.markAsReadBySeq(employeeId, readSeq, deviceId: deviceId);
 
     // 2. 更新内存缓存：从 DB 已读结果同步，避免全量加载消息
     final now = DateTime.now();
-    final readStatusMap = store.getReadStatusMap(employeeId, deviceId: deviceId);
+    final readStatusMap = await store.getReadStatusMap(employeeId, deviceId: deviceId);
     for (final entry in readStatusMap.entries) {
       if (entry.value) {
         _messageReadStatus[entry.key] ??= {};
@@ -409,7 +409,7 @@ mixin _AgentImplMessaging on _AgentImplBase {
   }) async {
     // 优先从 DB 读取已读状态（持久化数据，进程重启后仍有效）
     final store = MessageStore(deviceId: deviceId);
-    final dbReadStatus = store.getReadStatusMap(employeeId, deviceId: deviceId);
+    final dbReadStatus = await store.getReadStatusMap(employeeId, deviceId: deviceId);
 
     // 合并内存缓存（内存中可能有尚未落盘的实时数据）
     final readStatus = <String, bool>{};

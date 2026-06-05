@@ -83,19 +83,19 @@ void main() {
   ///
   /// 这与 DataSyncManager._doSyncSessionSummariesFromDevices 的真实行为一致：
   /// 从远程设备拉取所有摘要，逐条 upsertFromRemote。
-  void syncAllBToA() {
-    final summaries = storeB.getAllSummaries();
+  Future<void> syncAllBToA() async {
+    final summaries = await storeB.getAllSummaries();
     for (final summary in summaries) {
-      storeA.upsertFromRemote(summary);
+      await storeA.upsertFromRemote(summary);
     }
   }
 
   /// 模拟 syncSessionSummariesFromDevices：
   /// 将 storeA 中所有摘要同步到 storeB
-  void syncAllAToB() {
-    final summaries = storeA.getAllSummaries();
+  Future<void> syncAllAToB() async {
+    final summaries = await storeA.getAllSummaries();
     for (final summary in summaries) {
-      storeB.upsertFromRemote(summary);
+      await storeB.upsertFromRemote(summary);
     }
   }
 

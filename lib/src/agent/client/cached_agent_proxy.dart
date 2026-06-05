@@ -838,7 +838,7 @@ class CachedAgentProxy extends _CachedAgentProxyBase
       _pendingPermissionRequests.clear();
       _pendingConfirmRequests.clear();
       // 在删除消息前获取 maxSeq，用于设置水位线
-      final maxSeq = _messageStore.getMaxSeq(_deviceId, _employeeId);
+      final maxSeq = await _messageStore.getMaxSeq(_deviceId, _employeeId);
       // 使用正确的 deviceId 删除消息
       await _messageStore.deleteMessages(_deviceId, _employeeId);
       // 重置水位线为清空前 maxSeq，确保后续增量同步不会拉回已清空的消息

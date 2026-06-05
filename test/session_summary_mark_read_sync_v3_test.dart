@@ -56,8 +56,8 @@ void main() {
     storeA = SessionSummaryStore(deviceId: deviceA);
     storeB = SessionSummaryStore(deviceId: deviceB);
 
-    storeA.ensureTable();
-    storeB.ensureTable();
+    await storeA.ensureTable();
+    await storeB.ensureTable();
   });
 
   tearDown(() async {
@@ -81,18 +81,18 @@ void main() {
   /// 这与 DataSyncManager 的真实行为一致：
   /// 1. 从远程设备拉取所有摘要
   /// 2. 逐条 upsertFromRemote（保留远程摘要的原始 deviceId）
-  void syncAllBToA() {
-    final summaries = storeB.getAllSummaries();
+  Future<void> syncAllBToA() async {
+    final summaries = await storeB.getAllSummaries();
     for (final summary in summaries) {
-      storeA.upsertFromRemote(summary);
+      await storeA.upsertFromRemote(summary);
     }
   }
 
   /// 将 storeA 中所有摘要同步到 storeB
-  void syncAllAToB() {
-    final summaries = storeA.getAllSummaries();
+  Future<void> syncAllAToB() async {
+    final summaries = await storeA.getAllSummaries();
     for (final summary in summaries) {
-      storeB.upsertFromRemote(summary);
+      await storeB.upsertFromRemote(summary);
     }
   }
 
@@ -169,7 +169,7 @@ void main() {
       );
     });
 
-    test('场景2：远程旧摘要（updateTime 更小）同步后不应覆盖本地已读状态', () {
+    test('场景2：远程旧摘要（updateTime 更小）同步后不应覆盖本地已读状态', () async {
       // ---- 步骤1: Device A 产生 2 条未读 ----
       storeA.onMessageAdded(
         employeeId: 'emp-1',
@@ -200,8 +200,8 @@ void main() {
       expect(storeA.getUnreadCount('emp-1', deviceId: deviceA), equals(0));
 
       // ---- 步骤4: 验证 Device B 的摘要 updateTime 更旧 ----
-      final summaryA = storeA.getSummary('emp-1', deviceId: deviceA)!;
-      final summaryB = storeB.getSummary('emp-1', deviceId: deviceA)!;
+      final summaryA = (await storeA.getSummary('emp-1', deviceId: deviceA))!;
+      final summaryB = (await storeB.getSummary('emp-1', deviceId: deviceA))!;
       expect(summaryA.updateTime, greaterThan(summaryB.updateTime),
           reason: '本地已读摘要的 updateTime 应大于远程旧摘要');
 
@@ -444,7 +444,7 @@ void main() {
       );
     });
 
-    test('场景8：直接构造远程旧摘要（updateTime 更小），同步后不应恢复已读', () {
+    test('场景8：直接构造远程旧摘要（updateTime 更小），同步后不应恢复已读', () async {
       // ---- 步骤1: Device A 有 3 条未读 ----
       for (int i = 1; i <= 3; i++) {
         storeA.onMessageAdded(
@@ -462,13 +462,13 @@ void main() {
 
       // ---- 步骤2: 记录当前摘要的 updateTime ----
       final summaryBeforeRead =
-          storeA.getSummary('emp-1', deviceId: deviceA)!;
+          (await storeA.getSummary('emp-1', deviceId: deviceA))!;
 
       // ---- 步骤3: Device A 标记已读 ----
       storeA.markAsRead('emp-1', deviceId: deviceA);
       expect(storeA.getUnreadCount('emp-1', deviceId: deviceA), equals(0));
 
-      final summaryAfterRead = storeA.getSummary('emp-1', deviceId: deviceA)!;
+      final summaryAfterRead = (await storeA.getSummary('emp-1', deviceId: deviceA))!;
       expect(summaryAfterRead.updateTime,
           greaterThan(summaryBeforeRead.updateTime));
 
@@ -499,7 +499,7 @@ void main() {
       );
     });
 
-    test('场景9：多设备场景——3台设备，A标记已读后从B、C同步都不应恢复', () {
+    test('场景9：多设备场景——3台设备，A标记已读后从B、C同步都不应恢复', () async {
       // 创建第三台设备的数据库
       final testDbPathC =
           '${Directory.systemTemp.path}/wenzagent_mark_read_sync_v3_test_${_testCounter}/device_c';
@@ -529,9 +529,9 @@ void main() {
         // ---- 步骤2: A → B → C 全链路同步 ----
         syncAllAToB();
         // B → C（B 中有 A 的摘要，同步到 C）
-        final summariesB = storeB.getAllSummaries();
+        final summariesB = await storeB.getAllSummaries();
         for (final s in summariesB) {
-          storeC.upsertFromRemote(s);
+          await storeC.upsertFromRemote(s);
         }
 
         expect(storeA.getUnreadCount('emp-1', deviceId: deviceA), equals(3));
@@ -555,9 +555,9 @@ void main() {
         );
 
         // ---- 步骤6: Device A 从 C 同步 ----
-        final summariesC = storeC.getAllSummaries();
+        final summariesC = await storeC.getAllSummaries();
         for (final s in summariesC) {
-          storeA.upsertFromRemote(s);
+          await storeA.upsertFromRemote(s);
         }
         expect(
           storeA.getUnreadCount('emp-1', deviceId: deviceA),

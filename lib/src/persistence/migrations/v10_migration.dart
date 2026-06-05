@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import 'migration.dart';
 
@@ -13,9 +13,9 @@ class V10Migration extends Migration {
   int get version => 10;
 
   @override
-  void onUpgrade(Database db) {
+  Future<void> onUpgrade(SqliteDatabase db) async {
     // 原始 todo_groups 表（v13 中将被迁移为 todo_topics）
-    db.execute('''
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS todo_groups (
         id           TEXT PRIMARY KEY,
         employee_id  TEXT NOT NULL,
@@ -26,13 +26,13 @@ class V10Migration extends Migration {
         update_time  INTEGER NOT NULL
       );
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_todo_groups_employee
         ON todo_groups(employee_id);
     ''');
 
     // 原始 todo_items 表（v13 中将被迁移为 todo_task_items）
-    db.execute('''
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS todo_items (
         id           TEXT PRIMARY KEY,
         employee_id  TEXT NOT NULL,
@@ -46,11 +46,11 @@ class V10Migration extends Migration {
         completed_at INTEGER
       );
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_todo_items_employee
         ON todo_items(employee_id);
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_todo_items_group
         ON todo_items(group_id);
     ''');

@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import '../database_manager.dart';
 import '../entities/todo_topic_entity.dart';
@@ -13,7 +13,7 @@ class TodoStore {
   TodoStore({String? deviceId, DatabaseManager? dbManager})
       : _dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
 
-  Database get _db {
+  SqliteDatabase get _db {
     if (!_dbManager.isInitialized) {
       throw StateError(
         '$runtimeType: DatabaseManager 未初始化，请先调用 initialize()。',
@@ -24,7 +24,7 @@ class TodoStore {
 
   // ===== TodoTopic 操作 =====
 
-  TodoTopicEntity _rowToTopic(Row row) {
+  TodoTopicEntity _rowToTopic(Map<String, Object?> row) {
     return TodoTopicEntity.fromMap({
       'id': row['id'],
       'employeeId': row['employee_id'],
@@ -40,8 +40,8 @@ class TodoStore {
   }
 
   /// 查询当前待办主题（有子项正在进行）
-  List<TodoTopicEntity> findCurrentTopics(String employeeId) {
-    final resultSet = _db.select(
+  Future<List<TodoTopicEntity>> findCurrentTopics(String employeeId) async {
+    final resultSet = await _db.getAll(
       "SELECT * FROM todo_topics WHERE employee_id = ? AND deleted = 0 AND status = 'in_progress' ORDER BY sort_order ASC, create_time ASC",
       [employeeId],
     );
@@ -49,8 +49,8 @@ class TodoStore {
   }
 
   /// 查询待处理待办主题（pending，不含 in_progress）
-  List<TodoTopicEntity> findPendingTopics(String employeeId) {
-    final resultSet = _db.select(
+  Future<List<TodoTopicEntity>> findPendingTopics(String employeeId) async {
+    final resultSet = await _db.getAll(
       "SELECT * FROM todo_topics WHERE employee_id = ? AND deleted = 0 AND status = 'pending' ORDER BY sort_order ASC, create_time ASC",
       [employeeId],
     );
@@ -58,8 +58,8 @@ class TodoStore {
   }
 
   /// 查询所有待办主题
-  List<TodoTopicEntity> findAllTopics(String employeeId) {
-    final resultSet = _db.select(
+  Future<List<TodoTopicEntity>> findAllTopics(String employeeId) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM todo_topics WHERE employee_id = ? AND deleted = 0 ORDER BY sort_order ASC, create_time ASC',
       [employeeId],
     );
@@ -67,8 +67,8 @@ class TodoStore {
   }
 
   /// 查询所有待办主题（含已删除）
-  List<TodoTopicEntity> findAllTopicsIncludingDeleted(String employeeId) {
-    final resultSet = _db.select(
+  Future<List<TodoTopicEntity>> findAllTopicsIncludingDeleted(String employeeId) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM todo_topics WHERE employee_id = ? ORDER BY sort_order ASC, create_time ASC',
       [employeeId],
     );
@@ -76,8 +76,8 @@ class TodoStore {
   }
 
   /// 查询已完成主题
-  List<TodoTopicEntity> findCompletedTopics(String employeeId, {int limit = 50}) {
-    final resultSet = _db.select(
+  Future<List<TodoTopicEntity>> findCompletedTopics(String employeeId, {int limit = 50}) async {
+    final resultSet = await _db.getAll(
       "SELECT * FROM todo_topics WHERE employee_id = ? AND deleted = 0 AND status = 'completed' ORDER BY completed_at DESC LIMIT ?",
       [employeeId, limit],
     );
@@ -85,8 +85,8 @@ class TodoStore {
   }
 
   /// 按 ID 查询单个主题
-  TodoTopicEntity? findTopicById(String id) {
-    final resultSet = _db.select(
+  Future<TodoTopicEntity?> findTopicById(String id) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM todo_topics WHERE id = ? AND deleted = 0',
       [id],
     );
@@ -97,8 +97,8 @@ class TodoStore {
   }
 
   /// 保存主题
-  void saveTopic(TodoTopicEntity topic) {
-    _db.execute('''
+  Future<void> saveTopic(TodoTopicEntity topic) async {
+    await _db.execute('''
       INSERT OR REPLACE INTO todo_topics (
         id, employee_id, title, description, status,
         sort_order, deleted, create_time, update_time, completed_at
@@ -118,20 +118,20 @@ class TodoStore {
   }
 
   /// 更新主题内容
-  void updateTopicContent(String id, {String? title, String? description}) {
+  Future<void> updateTopicContent(String id, {String? title, String? description}) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (title != null && description != null) {
-      _db.execute(
+      await _db.execute(
         'UPDATE todo_topics SET title = ?, description = ?, update_time = ? WHERE id = ?',
         [title, description, now, id],
       );
     } else if (title != null) {
-      _db.execute(
+      await _db.execute(
         'UPDATE todo_topics SET title = ?, update_time = ? WHERE id = ?',
         [title, now, id],
       );
     } else if (description != null) {
-      _db.execute(
+      await _db.execute(
         'UPDATE todo_topics SET description = ?, update_time = ? WHERE id = ?',
         [description, now, id],
       );
@@ -139,36 +139,36 @@ class TodoStore {
   }
 
   /// 软删除主题（同时软删除所有子项）
-  void softDeleteTopic(String id) {
+  Future<void> softDeleteTopic(String id) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    _db.execute(
+    await _db.execute(
       'UPDATE todo_task_items SET deleted = 1, update_time = ? WHERE topic_id = ?',
       [now, id],
     );
-    _db.execute(
+    await _db.execute(
       'UPDATE todo_topics SET deleted = 1, update_time = ? WHERE id = ?',
       [now, id],
     );
   }
 
   /// 批量硬删除已完成主题
-  void deleteCompletedTopics(String employeeId) {
+  Future<void> deleteCompletedTopics(String employeeId) async {
     // 先删除已完成主题下的子项
-    _db.execute('''
+    await _db.execute('''
       DELETE FROM todo_task_items WHERE topic_id IN (
         SELECT id FROM todo_topics WHERE employee_id = ? AND status = 'completed'
       )
     ''', [employeeId]);
     // 再删除已完成主题
-    _db.execute(
+    await _db.execute(
       "DELETE FROM todo_topics WHERE employee_id = ? AND status = 'completed'",
       [employeeId],
     );
   }
 
   /// 推导主题状态（根据子项状态）
-  void recalculateTopicStatus(String topicId) {
-    final resultSet = _db.select(
+  Future<void> recalculateTopicStatus(String topicId) async {
+    final resultSet = await _db.getAll(
       'SELECT status, COUNT(*) as cnt FROM todo_task_items WHERE topic_id = ? AND deleted = 0 GROUP BY status',
       [topicId],
     );
@@ -189,22 +189,22 @@ class TodoStore {
 
     if (totalCount == 0) {
       // 无子项，保持 pending
-      _db.execute(
+      await _db.execute(
         "UPDATE todo_topics SET status = 'pending', completed_at = NULL, update_time = ? WHERE id = ?",
         [now, topicId],
       );
     } else if (hasInProgress) {
-      _db.execute(
+      await _db.execute(
         "UPDATE todo_topics SET status = 'in_progress', update_time = ? WHERE id = ?",
         [now, topicId],
       );
     } else if (completedCount == totalCount) {
-      _db.execute(
+      await _db.execute(
         "UPDATE todo_topics SET status = 'completed', completed_at = ?, update_time = ? WHERE id = ?",
         [now, now, topicId],
       );
     } else {
-      _db.execute(
+      await _db.execute(
         "UPDATE todo_topics SET status = 'pending', completed_at = NULL, update_time = ? WHERE id = ?",
         [now, topicId],
       );
@@ -212,8 +212,8 @@ class TodoStore {
   }
 
   /// 按 ID 查询单个主题（含已删除）
-  TodoTopicEntity? findTopicByIdIncludingDeleted(String id) {
-    final resultSet = _db.select(
+  Future<TodoTopicEntity?> findTopicByIdIncludingDeleted(String id) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM todo_topics WHERE id = ?',
       [id],
     );
@@ -224,8 +224,8 @@ class TodoStore {
   }
 
   /// 按 ID 查询单个任务子项（含已删除）
-  TodoTaskItemEntity? findTaskItemByIdIncludingDeleted(String id) {
-    final resultSet = _db.select(
+  Future<TodoTaskItemEntity?> findTaskItemByIdIncludingDeleted(String id) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM todo_task_items WHERE id = ?',
       [id],
     );
@@ -236,8 +236,8 @@ class TodoStore {
   }
 
   /// 按状态统计主题数量
-  Map<String, int> countTopicsByStatus(String employeeId) {
-    final resultSet = _db.select(
+  Future<Map<String, int>> countTopicsByStatus(String employeeId) async {
+    final resultSet = await _db.getAll(
       'SELECT status, COUNT(*) as cnt FROM todo_topics WHERE employee_id = ? AND deleted = 0 GROUP BY status',
       [employeeId],
     );
@@ -255,8 +255,8 @@ class TodoStore {
   }
 
   /// 统计所有非删除 topic 的总数量（含已完成）
-  int countAllTopics(String employeeId) {
-    final resultSet = _db.select(
+  Future<int> countAllTopics(String employeeId) async {
+    final resultSet = await _db.getAll(
       'SELECT COUNT(*) as cnt FROM todo_topics WHERE employee_id = ? AND deleted = 0',
       [employeeId],
     );
@@ -265,7 +265,7 @@ class TodoStore {
 
   // ===== TodoTaskItem 操作 =====
 
-  TodoTaskItemEntity _rowToTaskItem(Row row) {
+  TodoTaskItemEntity _rowToTaskItem(Map<String, Object?> row) {
     return TodoTaskItemEntity.fromMap({
       'id': row['id'],
       'employeeId': row['employee_id'],
@@ -282,8 +282,8 @@ class TodoStore {
   }
 
   /// 查询主题下的所有任务子项
-  List<TodoTaskItemEntity> findTaskItemsByTopic(String topicId) {
-    final resultSet = _db.select(
+  Future<List<TodoTaskItemEntity>> findTaskItemsByTopic(String topicId) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM todo_task_items WHERE topic_id = ? AND deleted = 0 ORDER BY sort_order ASC, create_time ASC',
       [topicId],
     );
@@ -291,8 +291,8 @@ class TodoStore {
   }
 
   /// 按 ID 查询单个任务子项
-  TodoTaskItemEntity? findTaskItemById(String id) {
-    final resultSet = _db.select(
+  Future<TodoTaskItemEntity?> findTaskItemById(String id) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM todo_task_items WHERE id = ? AND deleted = 0',
       [id],
     );
@@ -303,8 +303,8 @@ class TodoStore {
   }
 
   /// 保存任务子项
-  void saveTaskItem(TodoTaskItemEntity item) {
-    _db.execute('''
+  Future<void> saveTaskItem(TodoTaskItemEntity item) async {
+    await _db.execute('''
       INSERT OR REPLACE INTO todo_task_items (
         id, employee_id, topic_id, title, content, status,
         sort_order, deleted, create_time, update_time, completed_at
@@ -325,20 +325,20 @@ class TodoStore {
   }
 
   /// 更新任务子项内容
-  void updateTaskItemContent(String id, {String? title, String? content}) {
+  Future<void> updateTaskItemContent(String id, {String? title, String? content}) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (title != null && content != null) {
-      _db.execute(
+      await _db.execute(
         'UPDATE todo_task_items SET title = ?, content = ?, update_time = ? WHERE id = ?',
         [title, content, now, id],
       );
     } else if (title != null) {
-      _db.execute(
+      await _db.execute(
         'UPDATE todo_task_items SET title = ?, update_time = ? WHERE id = ?',
         [title, now, id],
       );
     } else if (content != null) {
-      _db.execute(
+      await _db.execute(
         'UPDATE todo_task_items SET content = ?, update_time = ? WHERE id = ?',
         [content, now, id],
       );
@@ -346,15 +346,15 @@ class TodoStore {
   }
 
   /// 更新任务子项状态，completed 时同时设置 completedAt
-  void updateTaskItemStatus(String id, String status) {
+  Future<void> updateTaskItemStatus(String id, String status) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (status == 'completed') {
-      _db.execute(
+      await _db.execute(
         'UPDATE todo_task_items SET status = ?, completed_at = ?, update_time = ? WHERE id = ?',
         [status, now, now, id],
       );
     } else {
-      _db.execute(
+      await _db.execute(
         'UPDATE todo_task_items SET status = ?, completed_at = NULL, update_time = ? WHERE id = ?',
         [status, now, id],
       );
@@ -362,23 +362,23 @@ class TodoStore {
   }
 
   /// 软删除任务子项
-  void softDeleteTaskItem(String id) {
-    _db.execute(
+  Future<void> softDeleteTaskItem(String id) async {
+    await _db.execute(
       'UPDATE todo_task_items SET deleted = 1, update_time = ? WHERE id = ?',
       [DateTime.now().millisecondsSinceEpoch, id],
     );
   }
 
   /// 更新主题状态
-  void updateTopicStatus(String id, String status) {
+  Future<void> updateTopicStatus(String id, String status) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (status == 'completed') {
-      _db.execute(
+      await _db.execute(
         "UPDATE todo_topics SET status = ?, completed_at = ?, update_time = ? WHERE id = ?",
         [status, now, now, id],
       );
     } else {
-      _db.execute(
+      await _db.execute(
         "UPDATE todo_topics SET status = ?, completed_at = NULL, update_time = ? WHERE id = ?",
         [status, now, id],
       );
@@ -386,21 +386,16 @@ class TodoStore {
   }
 
   /// 批量更新主题排序（事务）
-  void reorderTopics(List<String> topicIds) {
-    _db.execute('BEGIN TRANSACTION');
-    try {
+  Future<void> reorderTopics(List<String> topicIds) async {
+    await _db.writeTransaction((tx) async {
       final now = DateTime.now().millisecondsSinceEpoch;
       for (int i = 0; i < topicIds.length; i++) {
-        _db.execute(
+        await tx.execute(
           'UPDATE todo_topics SET sort_order = ?, update_time = ? WHERE id = ?',
           [i, now, topicIds[i]],
         );
       }
-      _db.execute('COMMIT');
-    } catch (e) {
-      _db.execute('ROLLBACK');
-      rethrow;
-    }
+    });
   }
 
   // ===== 远程同步 merge 方法 =====
@@ -413,11 +408,11 @@ class TodoStore {
   /// - 软删除合并：取 deleted=1 的一方（双方都删除则保留较新的）
   ///
   /// 返回 true 表示数据有变化（新增或更新）
-  bool upsertTopicFromRemote(TodoTopicEntity remote) {
-    final existing = findTopicByIdIncludingDeleted(remote.id);
+  Future<bool> upsertTopicFromRemote(TodoTopicEntity remote) async {
+    final existing = await findTopicByIdIncludingDeleted(remote.id);
     if (existing == null) {
       // 本地不存在 → 直接插入
-      saveTopic(remote);
+      await saveTopic(remote);
       return true;
     }
 
@@ -439,7 +434,7 @@ class TodoStore {
 
     if (shouldUpdateData || shouldUpdateDelete) {
       final base = shouldUpdateData ? remote : existing;
-      saveTopic(base.copyWith(deleted: mergedDeleted));
+      await saveTopic(base.copyWith(deleted: mergedDeleted));
       return true;
     }
     return false;
@@ -448,11 +443,11 @@ class TodoStore {
   /// 从远程数据 merge 写入单个 TodoTaskItem
   ///
   /// 合并策略同 [upsertTopicFromRemote]
-  bool upsertTaskItemFromRemote(TodoTaskItemEntity remote) {
-    final existing = findTaskItemByIdIncludingDeleted(remote.id);
+  Future<bool> upsertTaskItemFromRemote(TodoTaskItemEntity remote) async {
+    final existing = await findTaskItemByIdIncludingDeleted(remote.id);
     if (existing == null) {
       // 本地不存在 → 直接插入
-      saveTaskItem(remote);
+      await saveTaskItem(remote);
       return true;
     }
 
@@ -474,7 +469,7 @@ class TodoStore {
 
     if (shouldUpdateData || shouldUpdateDelete) {
       final base = shouldUpdateData ? remote : existing;
-      saveTaskItem(base.copyWith(deleted: mergedDeleted));
+      await saveTaskItem(base.copyWith(deleted: mergedDeleted));
       return true;
     }
     return false;
@@ -483,10 +478,10 @@ class TodoStore {
   /// 从远程数据 merge 写入多个 TodoTopic（批量）
   ///
   /// 返回有变化的条数
-  int upsertAllTopicsFromRemote(List<TodoTopicEntity> items) {
+  Future<int> upsertAllTopicsFromRemote(List<TodoTopicEntity> items) async {
     int changedCount = 0;
     for (final item in items) {
-      if (upsertTopicFromRemote(item)) {
+      if (await upsertTopicFromRemote(item)) {
         changedCount++;
       }
     }
@@ -496,10 +491,10 @@ class TodoStore {
   /// 从远程数据 merge 写入多个 TodoTaskItem（批量）
   ///
   /// 返回有变化的条数
-  int upsertAllTaskItemsFromRemote(List<TodoTaskItemEntity> items) {
+  Future<int> upsertAllTaskItemsFromRemote(List<TodoTaskItemEntity> items) async {
     int changedCount = 0;
     for (final item in items) {
-      if (upsertTaskItemFromRemote(item)) {
+      if (await upsertTaskItemFromRemote(item)) {
         changedCount++;
       }
     }
@@ -507,20 +502,15 @@ class TodoStore {
   }
 
   /// 批量更新任务子项排序（事务）
-  void reorderTaskItems(List<String> taskItemIds) {
-    _db.execute('BEGIN TRANSACTION');
-    try {
+  Future<void> reorderTaskItems(List<String> taskItemIds) async {
+    await _db.writeTransaction((tx) async {
       final now = DateTime.now().millisecondsSinceEpoch;
       for (int i = 0; i < taskItemIds.length; i++) {
-        _db.execute(
+        await tx.execute(
           'UPDATE todo_task_items SET sort_order = ?, update_time = ? WHERE id = ?',
           [i, now, taskItemIds[i]],
         );
       }
-      _db.execute('COMMIT');
-    } catch (e) {
-      _db.execute('ROLLBACK');
-      rethrow;
-    }
+    });
   }
 }

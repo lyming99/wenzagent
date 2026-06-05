@@ -164,7 +164,7 @@ void main() {
       expect(localMessages.first.content, equals('Hello from remote'));
 
       // 验证水位线已更新
-      final lastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final lastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       expect(lastSeq, equals(1));
     });
 
@@ -187,7 +187,7 @@ void main() {
       expect(localMessages.length, equals(3));
 
       // 验证水位线
-      final lastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final lastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       expect(lastSeq, equals(3));
 
       // 验证消息顺序（按创建时间升序）
@@ -278,7 +278,7 @@ void main() {
       expect(localMsg!.deleted, isTrue);
 
       // 验证水位线已更新（软删除会分配新 seq）
-      final lastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final lastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       expect(lastSeq, greaterThan(1));
     });
 
@@ -355,10 +355,10 @@ void main() {
       //   1. localLastSeq = serviceB.getLastSeq(deviceB, employeeId) → 0
       //   2. remoteLastSeq = storeA.getMaxSeqForEmployeeAll(employeeId) → 3
       //   3. batch = storeA.getMessagesAfterSeq(employeeId, 0) → [msg1, msg2, msg3]
-      final localLastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final localLastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       expect(localLastSeq, equals(0));
 
-      final remoteLastSeq = storeA.getMaxSeqForEmployeeAll(
+      final remoteLastSeq = await storeA.getMaxSeqForEmployeeAll(
         employeeId, deviceId: deviceA,
       );
       expect(remoteLastSeq, equals(3));
@@ -379,7 +379,7 @@ void main() {
       expect(localMessages.length, equals(3));
 
       // 验证水位线更新
-      final newLastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final newLastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       expect(newLastSeq, equals(3));
     });
 
@@ -405,7 +405,7 @@ void main() {
       }
 
       // 增量同步
-      final localLastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final localLastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       expect(localLastSeq, equals(2));
 
       final newMessages = await storeA.getMessagesAfterSeq(
@@ -423,7 +423,7 @@ void main() {
       expect(localMessages.length, equals(5));
 
       // 验证水位线
-      final newLastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final newLastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       expect(newLastSeq, equals(5));
     });
 
@@ -449,7 +449,7 @@ void main() {
       }
 
       // 增量同步
-      final localLastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final localLastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       expect(localLastSeq, equals(3));
 
       final newMessages = await storeA.getMessagesAfterSeq(
@@ -506,7 +506,7 @@ void main() {
       expect(localMessages.any((m) => m.id == 'msg-2'), isFalse);
 
       // 验证水位线（hardDelete 不更新水位线，水位线保持 addMessage 时的值）
-      final lastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final lastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       expect(lastSeq, greaterThanOrEqualTo(3));
     });
 
@@ -563,15 +563,15 @@ void main() {
 
       // 设置水位线为 10
       watermarkA.updateLastSeq(employeeId, 10, deviceId: deviceA);
-      expect(watermarkA.getLastSeq(employeeId, deviceId: deviceA), equals(10));
+      expect(await watermarkA.getLastSeq(employeeId, deviceId: deviceA), equals(10));
 
       // 尝试更新为 5（应被 MAX 语义拒绝，保持 10）
       watermarkA.updateLastSeq(employeeId, 5, deviceId: deviceA);
-      expect(watermarkA.getLastSeq(employeeId, deviceId: deviceA), equals(10));
+      expect(await watermarkA.getLastSeq(employeeId, deviceId: deviceA), equals(10));
 
       // 更新为 15（应成功）
       watermarkA.updateLastSeq(employeeId, 15, deviceId: deviceA);
-      expect(watermarkA.getLastSeq(employeeId, deviceId: deviceA), equals(15));
+      expect(await watermarkA.getLastSeq(employeeId, deviceId: deviceA), equals(15));
     });
 
     test('resetLastSeq 强制重置水位线（enforceMax=false 不受 MAX 语义限制）', () async {
@@ -579,16 +579,16 @@ void main() {
 
       // 设置水位线为 100
       watermarkA.updateLastSeq(employeeId, 100, deviceId: deviceA);
-      expect(watermarkA.getLastSeq(employeeId, deviceId: deviceA), equals(100));
+      expect(await watermarkA.getLastSeq(employeeId, deviceId: deviceA), equals(100));
 
       // 强制重置为 0（需要 enforceMax: false）
       watermarkA.resetLastSeq(employeeId, 0, deviceId: deviceA, enforceMax: false);
-      expect(watermarkA.getLastSeq(employeeId, deviceId: deviceA), equals(0));
+      expect(await watermarkA.getLastSeq(employeeId, deviceId: deviceA), equals(0));
 
       // 重置为 50（小于之前的 100，但 resetLastSeq enforceMax:false 允许）
       watermarkA.updateLastSeq(employeeId, 100, deviceId: deviceA);
       watermarkA.resetLastSeq(employeeId, 50, deviceId: deviceA, enforceMax: false);
-      expect(watermarkA.getLastSeq(employeeId, deviceId: deviceA), equals(50));
+      expect(await watermarkA.getLastSeq(employeeId, deviceId: deviceA), equals(50));
     });
 
     test('MessageStoreService 层的 resetLastSeq 正确传递', () async {
@@ -599,11 +599,11 @@ void main() {
         employeeId: employeeId, deviceId: deviceB, seq: 5,
       );
       await serviceB.addMessage(deviceB, msg);
-      expect(serviceB.getLastSeq(deviceB, employeeId), equals(5));
+      expect(await serviceB.getLastSeq(deviceB, employeeId), equals(5));
 
       // 通过 service 层重置（需要 enforceMax: false 才能降低）
       serviceB.resetLastSeq(deviceB, employeeId, 0, enforceMax: false);
-      expect(serviceB.getLastSeq(deviceB, employeeId), equals(0));
+      expect(await serviceB.getLastSeq(deviceB, employeeId), equals(0));
     });
 
     test('addMessage 自动更新水位线（updateWatermark=true）', () async {
@@ -615,7 +615,7 @@ void main() {
       );
       await serviceB.addMessage(deviceB, localMsg);
 
-      final lastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final lastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       expect(lastSeq, greaterThan(0));
 
       // seq>0 的远程消息，保留原始 seq
@@ -624,7 +624,7 @@ void main() {
       );
       await serviceB.addMessage(deviceB, remoteMsg);
 
-      final newLastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final newLastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       expect(newLastSeq, greaterThanOrEqualTo(100));
     });
 
@@ -638,7 +638,7 @@ void main() {
       await serviceB.addMessage(deviceB, localMsg, updateWatermark: false);
 
       // 水位线应仍为 0
-      final lastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final lastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       expect(lastSeq, equals(0));
     });
   });
@@ -694,7 +694,7 @@ void main() {
       expect(
         (await serviceB.getMessages(deviceB, employeeId)).length, equals(5),
       );
-      expect(serviceB.getLastSeq(deviceB, employeeId), equals(5));
+      expect(await serviceB.getLastSeq(deviceB, employeeId), equals(5));
 
       // 服务端设置 clearSeq=3（seq < 3 的消息应被删除）
       watermarkB.setClearSeq(employeeId, 3, deviceId: deviceB);
@@ -704,14 +704,15 @@ void main() {
       expect(clearSeq, equals(3));
 
       // 直接通过 MessageStore 硬删除（避免 deleteMessagesBeforeSeq 触发 rebuildSummary）
-      final deletedCount = storeB.deleteBeforeSeq(employeeId, clearSeq!, deviceId: deviceB);
+      final clearSeqValue = await watermarkB.getClearSeq(employeeId, deviceId: deviceB);
+      final deletedCount = storeB.deleteBeforeSeq(employeeId, clearSeqValue!, deviceId: deviceB);
       expect(deletedCount, equals(2)); // seq=1, seq=2 被删除
 
       // 重置水位线（clearSeq=3 < current lastSeq=5，enforceMax 默认 true 不会降低）
       // 这里 clearSeq 用于清理旧消息，水位线应保持不变（仍为5）
-      serviceB.resetLastSeq(deviceB, employeeId, clearSeq);
+      serviceB.resetLastSeq(deviceB, employeeId, clearSeqValue);
       // enforceMax=true 时，clearSeq=3 < lastSeq=5，水位线保持 5
-      expect(serviceB.getLastSeq(deviceB, employeeId), equals(5));
+      expect(await serviceB.getLastSeq(deviceB, employeeId), equals(5));
 
       // 清除 clearSeq 标记
       watermarkB.clearClearSeq(employeeId, deviceId: deviceB);
@@ -791,10 +792,10 @@ void main() {
       expect(originalMsgs.every((m) => m.deleted), isTrue);
 
       // 验证水位线已更新
-      final maxSeq = storeA.getMaxSeqForEmployeeAll(
+      final maxSeq = await storeA.getMaxSeqForEmployeeAll(
         employeeId, deviceId: deviceA,
       );
-      final lastSeq = watermarkA.getLastSeq(employeeId, deviceId: deviceA);
+      final lastSeq = await watermarkA.getLastSeq(employeeId, deviceId: deviceA);
       expect(lastSeq, equals(maxSeq));
     });
 
@@ -859,7 +860,7 @@ void main() {
       }
 
       // --- 路径2：增量拉取（拉取剩余消息） ---
-      final localLastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final localLastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       expect(localLastSeq, equals(2));
 
       final newMessages = await storeA.getMessagesAfterSeq(
@@ -874,7 +875,7 @@ void main() {
       // 验证最终一致性
       final localMessages = await serviceB.getMessages(deviceB, employeeId);
       expect(localMessages.length, equals(5));
-      expect(serviceB.getLastSeq(deviceB, employeeId), equals(5));
+      expect(await serviceB.getLastSeq(deviceB, employeeId), equals(5));
     });
 
     test('并发写入后水位线不回退', () async {
@@ -950,7 +951,7 @@ void main() {
       // 清空消息（直接用 storeB 避免触发 rebuildSummary）
       await storeB.deleteBySession(deviceB, employeeId);
       // 清空后水位线应保持为 maxSeq，而不是归0
-      final maxSeqBeforeClear = serviceB.getLastSeq(deviceB, employeeId);
+      final maxSeqBeforeClear = await serviceB.getLastSeq(deviceB, employeeId);
       serviceB.resetLastSeq(deviceB, employeeId, maxSeqBeforeClear);
 
       // 新消息的 seq 应大于清空前（getNextSeq 取 MAX(messages, watermark, clearSeq)）
@@ -1026,7 +1027,7 @@ void main() {
       expect(localMessages.length, equals(2));
 
       // === 阶段4: 后台增量拉取确保一致性 ===
-      final localLastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final localLastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       final newMessages = await storeA.getMessagesAfterSeq(
         employeeId, localLastSeq, deviceId: deviceB,
       );
@@ -1050,7 +1051,7 @@ void main() {
       expect(
         (await serviceB.getMessages(deviceB, employeeId)).length, equals(5),
       );
-      expect(serviceB.getLastSeq(deviceB, employeeId), equals(5));
+      expect(await serviceB.getLastSeq(deviceB, employeeId), equals(5));
 
       // 2. 服务端清空会话
       await storeA.softDeleteBySessionForSync(employeeId, deviceId: deviceA);
@@ -1063,7 +1064,7 @@ void main() {
       expect(
         (await serviceB.getMessages(deviceB, employeeId)).length, equals(0),
       );
-      expect(serviceB.getLastSeq(deviceB, employeeId), equals(5));
+      expect(await serviceB.getLastSeq(deviceB, employeeId), equals(5));
 
       // 4. 服务端写入新消息（seq 继续递增）
       final newMsg = createRemoteMessage(
@@ -1113,7 +1114,7 @@ void main() {
       }
 
       // 3. 客户端"上线"，执行增量同步
-      final localLastSeq = serviceB.getLastSeq(deviceB, employeeId);
+      final localLastSeq = await serviceB.getLastSeq(deviceB, employeeId);
       expect(localLastSeq, equals(1));
 
       final newMessages = await storeA.getMessagesAfterSeq(
@@ -1129,7 +1130,7 @@ void main() {
       // 验证
       final localMessages = await serviceB.getMessages(deviceB, employeeId);
       expect(localMessages.length, equals(4));
-      expect(serviceB.getLastSeq(deviceB, employeeId), equals(4));
+      expect(await serviceB.getLastSeq(deviceB, employeeId), equals(4));
     });
   });
 

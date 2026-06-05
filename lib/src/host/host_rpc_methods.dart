@@ -359,7 +359,7 @@ void registerHostRpcMethods({
   // 获取所有会话摘要
   rpcServer.register(HostRpcConfig.methodGetSessionSummaries, (params) async {
     final summaryStore = SessionSummaryStore(deviceId: deviceId);
-    final summaries = summaryStore.getAllSummaries();
+    final summaries = await summaryStore.getAllSummaries();
     return {'summaries': summaries.map((s) => s.toMap()).toList()};
   });
 
@@ -371,7 +371,7 @@ void registerHostRpcMethods({
         .toList();
     int count = 0;
     for (final summary in summaries) {
-      summaryStore.upsertFromRemote(summary);
+      await summaryStore.upsertFromRemote(summary);
       count++;
     }
     return {'count': count};
@@ -383,7 +383,7 @@ void registerHostRpcMethods({
   rpcServer.register(HostRpcConfig.methodGetSpecs, (params) async {
     final employeeId = params['employeeId'] as String;
     final specStore = SpecStore(deviceId: deviceId);
-    final specs = specStore.findAllByEmployee(employeeId);
+    final specs = await specStore.findAllByEmployee(employeeId);
     return {'specs': specs.map((s) => s.toMap()).toList()};
   });
 
@@ -395,7 +395,7 @@ void registerHostRpcMethods({
         .toList();
     int count = 0;
     for (final spec in specs) {
-      if (specStore.upsertFromRemote(spec)) {
+      if (await specStore.upsertFromRemote(spec)) {
         count++;
       }
     }
@@ -408,10 +408,10 @@ void registerHostRpcMethods({
   rpcServer.register(HostRpcConfig.methodGetTodos, (params) async {
     final employeeId = params['employeeId'] as String;
     final todoStore = TodoStore(deviceId: deviceId);
-    final topics = todoStore.findAllTopicsIncludingDeleted(employeeId);
+    final topics = await todoStore.findAllTopicsIncludingDeleted(employeeId);
     final taskItems = <Map<String, dynamic>>[];
     for (final topic in topics) {
-      final items = todoStore.findTaskItemsByTopic(topic.id);
+      final items = await todoStore.findTaskItemsByTopic(topic.id);
       taskItems.addAll(items.map((i) => i.toMap()).toList());
     }
     return {
@@ -431,12 +431,12 @@ void registerHostRpcMethods({
         .toList();
     int count = 0;
     for (final topic in topics) {
-      if (todoStore.upsertTopicFromRemote(topic)) {
+      if (await todoStore.upsertTopicFromRemote(topic)) {
         count++;
       }
     }
     for (final item in taskItems) {
-      if (todoStore.upsertTaskItemFromRemote(item)) {
+      if (await todoStore.upsertTaskItemFromRemote(item)) {
         count++;
       }
     }
@@ -583,7 +583,7 @@ void registerHostRpcMethods({
       // 合并项目主表
       if (itemMap.containsKey('project')) {
         final project = ProjectEntity.fromMap(itemMap['project'] as Map<String, dynamic>);
-        if (projectManager.upsertProjectFromRemote(project)) {
+        if (await projectManager.upsertProjectFromRemote(project)) {
           count++;
         }
       }
@@ -593,7 +593,7 @@ void registerHostRpcMethods({
           .map((m) => ProjectModuleEntity.fromMap(m as Map<String, dynamic>))
           .toList();
       for (final module in modules) {
-        if (projectManager.upsertModuleFromRemote(module)) {
+        if (await projectManager.upsertModuleFromRemote(module)) {
           count++;
         }
       }
@@ -603,7 +603,7 @@ void registerHostRpcMethods({
           .map((s) => ProjectSkillEntity.fromMap(s as Map<String, dynamic>))
           .toList();
       for (final skill in skills) {
-        if (projectManager.upsertSkillFromRemote(skill)) {
+        if (await projectManager.upsertSkillFromRemote(skill)) {
           count++;
         }
       }
@@ -613,7 +613,7 @@ void registerHostRpcMethods({
           .map((i) => ProjectIssueEntity.fromMap(i as Map<String, dynamic>))
           .toList();
       for (final issue in issues) {
-        if (projectManager.upsertIssueFromRemote(issue)) {
+        if (await projectManager.upsertIssueFromRemote(issue)) {
           count++;
         }
       }

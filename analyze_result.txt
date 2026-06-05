@@ -1,0 +1,137 @@
+Analyzing lib...
+
+  error - src\agent\client\cached_proxy_message_sync.dart:249:22 - The await expression can only be used in an async function. Try marking the function body with either 'async' or 'async*'. - await_in_wrong_context
+  error - src\agent\client\cached_proxy_message_sync.dart:352:17 - The operator '>' isn't defined for the type 'Future<int>'. Try defining the operator '>'. - undefined_operator
+  error - src\agent\client\cached_proxy_message_sync.dart:391:30 - A value of type 'num' can't be assigned to a variable of type 'int'. Try changing the type of the variable, or casting the right-hand type to 'int'. - invalid_assignment
+  error - src\agent\client\cached_proxy_message_sync.dart:391:30 - The argument type 'Future<int>' can't be assigned to the parameter type 'num'.  - argument_type_not_assignable
+  error - src\agent\client\cached_proxy_message_sync.dart:398:22 - The operator '>' isn't defined for the type 'Future<int>'. Try defining the operator '>'. - undefined_operator
+  error - src\agent\impl\agent_impl.dart:1091:16 - The method 'map' isn't defined for the type 'Object'. Try correcting the name to the name of an existing method, or defining a method named 'map'. - undefined_method
+  error - src\agent\impl\agent_impl.dart:1098:16 - The method 'map' isn't defined for the type 'Object'. Try correcting the name to the name of an existing method, or defining a method named 'map'. - undefined_method
+  error - src\device\impl\device_agent_manager_events.dart:221:23 - The await expression can only be used in an async function. Try marking the function body with either 'async' or 'async*'. - await_in_wrong_context
+  error - src\device\impl\device_agent_manager_events.dart:251:21 - The await expression can only be used in an async function. Try marking the function body with either 'async' or 'async*'. - await_in_wrong_context
+  error - src\device\impl\device_notification_manager.dart:240:32 - The await expression can only be used in an async function. Try marking the function body with either 'async' or 'async*'. - await_in_wrong_context
+  error - src\device\impl\device_notification_manager.dart:379:21 - The await expression can only be used in an async function. Try marking the function body with either 'async' or 'async*'. - await_in_wrong_context
+  error - src\service\message_store_service.dart:403:17 - The operator '>' isn't defined for the type 'Future<int>'. Try defining the operator '>'. - undefined_operator
+  error - src\service\message_store_service.dart:406:12 - A value of type 'Future<int>' can't be returned from the method 'deleteMessagesBeforeSeq' because it has a return type of 'int'. - return_of_invalid_type
+  error - src\service\message_store_service.dart:411:12 - A value of type 'Future<int>' can't be returned from the method 'getMaxSeq' because it has a return type of 'int'. - return_of_invalid_type
+  error - src\service\message_store_service.dart:430:12 - A value of type 'Future<int>' can't be returned from the method 'getUnreadCount' because it has a return type of 'int'. - return_of_invalid_type
+  error - src\service\message_store_service.dart:435:12 - A value of type 'Future<int>' can't be returned from the method 'getTotalUnreadCount' because it has a return type of 'int'. - return_of_invalid_type
+  error - src\service\message_store_service.dart:440:12 - A value of type 'Future<SessionSummaryEntity?>' can't be returned from the method 'getLatestMessageSummary' because it has a return type of 'SessionSummaryEntity?'. - return_of_invalid_type
+  error - src\service\message_store_service.dart:445:12 - A value of type 'Future<List<SessionSummaryEntity>>' can't be returned from the method 'getAllSummaries' because it has a return type of 'List<SessionSummaryEntity>'. - return_of_invalid_type
+  error - src\service\message_store_service.dart:453:12 - A value of type 'Future<int>' can't be returned from the method 'markAsReadInDb' because it has a return type of 'int'. - return_of_invalid_type
+  error - src\service\message_store_service.dart:463:52 - The argument type 'Future<int>' can't be assigned to the parameter type 'int'.  - argument_type_not_assignable
+  error - src\service\message_store_service.dart:464:12 - A value of type 'Future<int>' can't be returned from the method 'markAsReadBySeqInDb' because it has a return type of 'int'. - return_of_invalid_type
+  error - src\service\message_store_service.dart:469:12 - A value of type 'Future<List<String>>' can't be returned from the method 'getUnreadMessageIds' because it has a return type of 'List<String>'. - return_of_invalid_type
+  error - src\service\message_store_service.dart:474:12 - A value of type 'Future<List<String>>' can't be returned from the method 'getStaleLocalToolCallMessages' because it has a return type of 'List<String>'. - return_of_invalid_type
+  error - src\service\message_store_service.dart:486:12 - A value of type 'Future<int>' can't be returned from the method 'getLastSeq' because it has a return type of 'int'. - return_of_invalid_type
+warning - src\agent\client\agent_proxy.dart:964:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:972:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:980:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:988:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:996:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1006:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1014:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1022:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1030:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1038:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1046:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1054:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1062:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1070:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1078:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1088:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1096:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1104:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1114:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1122:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1130:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1138:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\agent_proxy.dart:1146:25 - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator. - unnecessary_non_null_assertion
+warning - src\agent\client\cached_agent_proxy.dart:2:8 - Unused import: 'dart:convert'. Try removing the import directive. - unused_import
+warning - src\agent\client\cached_agent_proxy.dart:15:8 - Unused import: '../../service/session_manager.dart'. Try removing the import directive. - unused_import
+warning - src\agent\client\cached_agent_proxy.dart:60:18 - The declaration '_cacheState' isn't referenced. Try removing the declaration of '_cacheState'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:62:7 - The declaration '_cacheState' isn't referenced. Try removing the declaration of '_cacheState'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:64:36 - The declaration '_cacheStateController' isn't referenced. Try removing the declaration of '_cacheStateController'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:66:44 - The declaration '_messagesController' isn't referenced. Try removing the declaration of '_messagesController'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:69:17 - The declaration '_lastSyncTime' isn't referenced. Try removing the declaration of '_lastSyncTime'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:71:7 - The declaration '_lastSyncTime' isn't referenced. Try removing the declaration of '_lastSyncTime'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:75:24 - The declaration '_initCompleter' isn't referenced. Try removing the declaration of '_initCompleter'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:77:7 - The declaration '_initCompleter' isn't referenced. Try removing the declaration of '_initCompleter'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:83:14 - The declaration '_notifyDebounceTimer' isn't referenced. Try removing the declaration of '_notifyDebounceTimer'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:85:7 - The declaration '_notifyDebounceTimer' isn't referenced. Try removing the declaration of '_notifyDebounceTimer'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:95:39 - The declaration '_eventSubscription' isn't referenced. Try removing the declaration of '_eventSubscription'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:97:7 - The declaration '_eventSubscription' isn't referenced. Try removing the declaration of '_eventSubscription'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:99:47 - The declaration '_stateSubscription' isn't referenced. Try removing the declaration of '_stateSubscription'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:101:7 - The declaration '_stateSubscription' isn't referenced. Try removing the declaration of '_stateSubscription'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:106:7 - The declaration '_isDisposed' isn't referenced. Try removing the declaration of '_isDisposed'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:145:10 - A value for optional parameter 'updateWatermark' isn't ever given. Try removing the unused parameter. - unused_element_parameter
+warning - src\agent\client\cached_agent_proxy.dart:148:8 - The declaration '_updateCacheState' isn't referenced. Try removing the declaration of '_updateCacheState'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:150:16 - The declaration '_saveMessageToDatabase' isn't referenced. Try removing the declaration of '_saveMessageToDatabase'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:152:10 - A value for optional parameter 'updateWatermark' isn't ever given. Try removing the unused parameter. - unused_element_parameter
+warning - src\agent\client\cached_agent_proxy.dart:155:12 - The declaration '_getMessageUpdateTime' isn't referenced. Try removing the declaration of '_getMessageUpdateTime'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:157:10 - The declaration '_generateMessageId' isn't referenced. Try removing the declaration of '_generateMessageId'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:166:16 - The declaration '_saveToolCallMessageToDb' isn't referenced. Try removing the declaration of '_saveToolCallMessageToDb'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:168:16 - The declaration '_updateToolCallMessageInDb' isn't referenced. Try removing the declaration of '_updateToolCallMessageInDb'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:182:16 - The declaration '_cleanupSupersededLocalToolCalls' isn't referenced. Try removing the declaration of '_cleanupSupersededLocalToolCalls'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:186:8 - The declaration '_cleanupStaleToolCallMessages' isn't referenced. Try removing the declaration of '_cleanupStaleToolCallMessages'. - unused_element
+warning - src\agent\client\cached_agent_proxy.dart:188:16 - The declaration '_syncRemoteStateAndPermission' isn't referenced. Try removing the declaration of '_syncRemoteStateAndPermission'. - unused_element
+warning - src\agent\impl\agent_impl.dart:2:8 - Unused import: 'dart:convert'. Try removing the import directive. - unused_import
+warning - src\agent\impl\agent_impl.dart:32:7 - The declaration '_processor' isn't referenced. Try removing the declaration of '_processor'. - unused_element
+warning - src\agent\impl\agent_impl.dart:47:7 - The declaration '_status' isn't referenced. Try removing the declaration of '_status'. - unused_element
+warning - src\agent\impl\agent_impl.dart:48:11 - The declaration '_refCount' isn't referenced. Try removing the declaration of '_refCount'. - unused_element
+warning - src\agent\impl\agent_impl.dart:49:7 - The declaration '_refCount' isn't referenced. Try removing the declaration of '_refCount'. - unused_element
+warning - src\agent\impl\agent_impl.dart:50:16 - The declaration '_lastActiveTime' isn't referenced. Try removing the declaration of '_lastActiveTime'. - unused_element
+warning - src\agent\impl\agent_impl.dart:51:7 - The declaration '_lastActiveTime' isn't referenced. Try removing the declaration of '_lastActiveTime'. - unused_element
+warning - src\agent\impl\agent_impl.dart:52:24 - The declaration '_lockCompleter' isn't referenced. Try removing the declaration of '_lockCompleter'. - unused_element
+warning - src\agent\impl\agent_impl.dart:53:7 - The declaration '_lockCompleter' isn't referenced. Try removing the declaration of '_lockCompleter'. - unused_element
+warning - src\agent\impl\agent_impl.dart:55:7 - The declaration '_warmupCompleter' isn't referenced. Try removing the declaration of '_warmupCompleter'. - unused_element
+warning - src\agent\impl\agent_impl.dart:58:29 - The declaration '_fileOperationTracker' isn't referenced. Try removing the declaration of '_fileOperationTracker'. - unused_element
+warning - src\agent\impl\agent_impl.dart:59:7 - The declaration '_fileOperationTracker' isn't referenced. Try removing the declaration of '_fileOperationTracker'. - unused_element
+warning - src\agent\impl\agent_impl.dart:60:26 - The declaration '_tokenUsageTracker' isn't referenced. Try removing the declaration of '_tokenUsageTracker'. - unused_element
+warning - src\agent\impl\agent_impl.dart:61:7 - The declaration '_tokenUsageTracker' isn't referenced. Try removing the declaration of '_tokenUsageTracker'. - unused_element
+warning - src\agent\impl\agent_impl.dart:62:41 - The declaration '_toolCallArguments' isn't referenced. Try removing the declaration of '_toolCallArguments'. - unused_element
+warning - src\agent\impl\agent_impl.dart:71:13 - A value for optional parameter 'error' isn't ever given. Try removing the unused parameter. - unused_element_parameter
+warning - src\agent\impl\agent_impl.dart:328:24 - The operand can't be 'null', so the condition is always 'false'. Try removing the condition, an enclosing condition, or the whole conditional statement. - unnecessary_null_comparison
+warning - src\agent\impl\agent_impl.dart:328:33 - Dead code. Try removing the code, or fixing the code before it so that it can be reached. - dead_code
+warning - src\agent\impl\agent_impl.dart:1114:22 - The operand can't be 'null', so the condition is always 'false'. Try removing the condition, an enclosing condition, or the whole conditional statement. - unnecessary_null_comparison
+warning - src\agent\impl\agent_impl.dart:1114:31 - Dead code. Try removing the code, or fixing the code before it so that it can be reached. - dead_code
+warning - src\agent\impl\agent_impl.dart:1385:23 - Unnecessary cast. Try removing the cast. - unnecessary_cast
+warning - src\agent\impl\agent_impl_messaging.dart:334:48 - Dead code. Try removing the code, or fixing the code before it so that it can be reached. - dead_code
+warning - src\agent\impl\agent_impl_messaging.dart:334:50 - The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand. - dead_null_aware_expression
+warning - src\agent\tool\command_splitter.dart:35:16 - The value of the field '_singleAmpersandIsOperator' isn't used. Try removing the field, or using it. - unused_field
+warning - src\device\impl\device_notification_manager.dart:23:30 - The value of the field '_employeeManager' isn't used. Try removing the field, or using it. - unused_field
+warning - src\device\impl\device_notification_manager.dart:24:29 - The value of the field '_sessionManager' isn't used. Try removing the field, or using it. - unused_field
+warning - src\device\impl\device_rpc_handler.dart:175:92 - Dead code. Try removing the code, or fixing the code before it so that it can be reached. - dead_code
+warning - src\device\impl\device_rpc_handler.dart:175:95 - The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand. - dead_null_aware_expression
+warning - src\device\impl\employee_online_tracker.dart:20:33 - The value of the field '_agentManager' isn't used. Try removing the field, or using it. - unused_field
+warning - src\persistence\database_manager.dart:76:11 - The value of the field '_dbPath' isn't used. Try removing the field, or using it. - unused_field
+warning - src\service\compression_meta_store.dart:12:16 - The value of the field '_log' isn't used. Try removing the field, or using it. - unused_field
+warning - src\service\compression_meta_store.dart:14:23 - The declaration '_dbManager' isn't referenced. Try removing the declaration of '_dbManager'. - unused_element
+warning - src\service\skill_manager.dart:2:8 - Unused import: 'dart:convert'. Try removing the import directive. - unused_import
+warning - src\service\skill_manager.dart:82:17 - The value of the field '_deviceId' isn't used. Try removing the field, or using it. - unused_field
+warning - src\service\sub_agent_executor.dart:72:20 - The value of the field '_maxSummaryLength' isn't used. Try removing the field, or using it. - unused_field
+   info - src\agent\adapter\llm_chat_adapter.dart:170:39 - The member 'onTokenUsage' overrides an inherited member but isn't annotated with '@override'. Try adding the '@override' annotation. - annotate_overrides
+   info - src\agent\adapter\sub_agent_llm_chat_adapter.dart:76:39 - The member 'onTokenUsage' overrides an inherited member but isn't annotated with '@override'. Try adding the '@override' annotation. - annotate_overrides
+   info - src\agent\client\cached_agent_proxy.dart:12:8 - The import of '../../shared/chat_message.dart' is unnecessary because all of the used elements are also provided by the import of '../../persistence/persistence.dart'. Try removing the import directive. - unnecessary_import
+   info - src\agent\client\cached_proxy_message_sync.dart:7:16 - Angle brackets will be interpreted as HTML. Try using backticks around the content with angle brackets, or try replacing `<` with `&lt;` and `>` with `&gt;`. - unintended_html_in_doc_comment
+   info - src\agent\client\cached_proxy_message_sync.dart:60:32 - Uses 'await' on an instance of 'int', which is not a subtype of 'Future'. Try removing the 'await' or changing the expression. - await_only_futures
+   info - src\agent\client\cached_proxy_message_sync.dart:79:28 - Uses 'await' on an instance of 'int', which is not a subtype of 'Future'. Try removing the 'await' or changing the expression. - await_only_futures
+   info - src\agent\client\cached_proxy_message_sync.dart:109:33 - Uses 'await' on an instance of 'int', which is not a subtype of 'Future'. Try removing the 'await' or changing the expression. - await_only_futures
+   info - src\agent\client\cached_proxy_message_sync.dart:249:22 - Uses 'await' on an instance of 'List<String>', which is not a subtype of 'Future'. Try removing the 'await' or changing the expression. - await_only_futures
+   info - src\agent\entity\agent_event.dart:99:34 - Angle brackets will be interpreted as HTML. Try using backticks around the content with angle brackets, or try replacing `<` with `&lt;` and `>` with `&gt;`. - unintended_html_in_doc_comment
+   info - src\agent\impl\agent_impl.dart:10:8 - The import of '../../device/device_client.dart' is unnecessary because all of the used elements are also provided by the import of 'package:wenzagent/wenzagent.dart'. Try removing the import directive. - unnecessary_import
+   info - src\agent\impl\agent_impl.dart:19:8 - The import of '../tool/builtin_tool_provider.dart' is unnecessary because all of the used elements are also provided by the import of 'package:wenzagent/wenzagent.dart'. Try removing the import directive. - unnecessary_import
+   info - src\agent\impl\agent_impl.dart:26:14 - The member 'employeeId' overrides an inherited member but isn't annotated with '@override'. Try adding the '@override' annotation. - annotate_overrides
+   info - src\agent\tool\builtin\command_session_pool.dart:64:16 - The private field _stdoutBuffer could be 'final'. Try making the field 'final'. - prefer_final_fields
+   info - src\agent\tool\builtin\command_session_pool.dart:67:16 - The private field _stderrBuffer could be 'final'. Try making the field 'final'. - prefer_final_fields
+   info - src\agent\tool\builtin\spec_manage_tool.dart:278:7 - Use the null-aware marker '?' rather than a null check via an 'if'. Try using '?'. - use_null_aware_elements
+   info - src\agent\tool\builtin\todo_manage_tool.dart:374:7 - Use the null-aware marker '?' rather than a null check via an 'if'. Try using '?'. - use_null_aware_elements
+   info - src\persistence\store_merge_util.dart:4:1 - Dangling library doc comment. Add a 'library' directive after the library comment. - dangling_library_doc_comments
+   info - src\persistence\stores\message_store.dart:455:13 - Angle brackets will be interpreted as HTML. Try using backticks around the content with angle brackets, or try replacing `<` with `&lt;` and `>` with `&gt;`. - unintended_html_in_doc_comment
+   info - src\service\employee_config_service.dart:5:8 - The import of '../persistence/entities/mcp_server_config.dart' is unnecessary because all of the used elements are also provided by the import of '../persistence/persistence.dart'. Try removing the import directive. - unnecessary_import
+   info - src\service\employee_config_service.dart:6:8 - The import of '../persistence/entities/skill_entity.dart' is unnecessary because all of the used elements are also provided by the import of '../persistence/persistence.dart'. Try removing the import directive. - unnecessary_import
+   info - src\service\skill_manager.dart:7:8 - The import of '../persistence/entities/mcp_server_config.dart' is unnecessary because all of the used elements are also provided by the import of '../persistence/persistence.dart'. Try removing the import directive. - unnecessary_import
+   info - src\shared\chat_message.dart:467:9 - Use the null-aware marker '?' rather than a null check via an 'if'. Try using '?'. - use_null_aware_elements
+   info - src\shared\message_sequence_report.dart:3:1 - Dangling library doc comment. Add a 'library' directive after the library comment. - dangling_library_doc_comments
+
+133 issues found.

@@ -247,7 +247,7 @@ class DataSyncManager {
     if (!_connectionManager.isConnected) return;
     try {
       final specStore = SpecStore(deviceId: _deviceId);
-      final specs = specStore.findAllByEmployee(employeeId);
+      final specs = await specStore.findAllByEmployee(employeeId);
       if (specs.isEmpty) return;
       final devices = await _deviceRegistry.getOnlineDevices();
       for (final device in devices) {
@@ -274,11 +274,11 @@ class DataSyncManager {
     if (!_connectionManager.isConnected) return;
     try {
       final todoStore = TodoStore(deviceId: _deviceId);
-      final topics = todoStore.findAllTopics(employeeId);
+      final topics = await todoStore.findAllTopics(employeeId);
       if (topics.isEmpty) return;
       final taskItems = <Map<String, dynamic>>[];
       for (final topic in topics) {
-        final items = todoStore.findTaskItemsByTopic(topic.id);
+        final items = await todoStore.findTaskItemsByTopic(topic.id);
         taskItems.addAll(items.map((i) => i.toMap()).toList());
       }
       final devices = await _deviceRegistry.getOnlineDevices();
@@ -619,7 +619,7 @@ class DataSyncManager {
                 .map((s) => SpecItemEntity.fromMap(s as Map<String, dynamic>))
                 .toList();
             if (specs.isNotEmpty) {
-              specStore.upsertAllFromRemote(specs);
+              await specStore.upsertAllFromRemote(specs);
             }
           } catch (e) {
             _log.debug('syncSpecs for employee ${employee.uuid} from device ${device.id} failed: $e');
@@ -654,8 +654,8 @@ class DataSyncManager {
                 .map((i) => TodoTaskItemEntity.fromMap(i as Map<String, dynamic>))
                 .toList();
             if (topics.isNotEmpty || taskItems.isNotEmpty) {
-              todoStore.upsertAllTopicsFromRemote(topics);
-              todoStore.upsertAllTaskItemsFromRemote(taskItems);
+              await todoStore.upsertAllTopicsFromRemote(topics);
+              await todoStore.upsertAllTaskItemsFromRemote(taskItems);
             }
           } catch (e) {
             _log.debug('syncTodos for employee ${employee.uuid} from device ${device.id} failed: $e');
@@ -921,7 +921,7 @@ class DataSyncManager {
             final remote = ProjectEntity.fromMap(
               itemMap['project'] as Map<String, dynamic>,
             );
-            final changed = projectStore.upsertFromRemote(remote);
+            final changed = await projectStore.upsertFromRemote(remote);
             if (changed) {
               changedIds.add(remote.uuid);
             }
@@ -930,19 +930,19 @@ class DataSyncManager {
           // 合并模块
           for (final m in (itemMap['modules'] as List? ?? [])) {
             final remote = ProjectModuleEntity.fromMap(m as Map<String, dynamic>);
-            projectStore.upsertModuleFromRemote(remote);
+            await projectStore.upsertModuleFromRemote(remote);
           }
 
           // 合并技能
           for (final s in (itemMap['skills'] as List? ?? [])) {
             final remote = ProjectSkillEntity.fromMap(s as Map<String, dynamic>);
-            projectStore.upsertSkillFromRemote(remote);
+            await projectStore.upsertSkillFromRemote(remote);
           }
 
           // 合并工单
           for (final i in (itemMap['issues'] as List? ?? [])) {
             final remote = ProjectIssueEntity.fromMap(i as Map<String, dynamic>);
-            projectStore.upsertIssueFromRemote(remote);
+            await projectStore.upsertIssueFromRemote(remote);
           }
         }
         _log.debug('syncProjects from device ${device.id} success.');

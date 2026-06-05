@@ -1,12 +1,12 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 /// session_summary 表 schema
 ///
 /// 会话摘要表，作为未读计数和最新消息的权威数据源。
 /// 通过 UPSERT 原子操作维护，O(1) 读写。
 class SessionSummarySchema {
-  static void create(Database db) {
-    db.execute('''
+  static Future<void> create(SqliteDatabase db) async {
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS session_summary (
         employee_id      TEXT    NOT NULL,
         device_id        TEXT    NOT NULL DEFAULT '',
@@ -22,13 +22,13 @@ class SessionSummarySchema {
     ''');
 
     // 全局未读查询优化：只扫描有未读的行
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_summary_unread
         ON session_summary(unread_count) WHERE unread_count > 0
     ''');
 
     // 会话列表排序优化：按最新消息时间倒序
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_summary_last_msg_time
         ON session_summary(last_msg_time DESC)
     ''');
@@ -42,40 +42,40 @@ class SessionSummarySchema {
   ///
   /// 在 CREATE TABLE 之后调用，处理表已存在但缺少 pending 列的情况。
   /// ALTER TABLE ADD COLUMN 对已存在的列是安全的（SQLite 会忽略）。
-  static void ensurePendingColumns(Database db) {
+  static Future<void> ensurePendingColumns(SqliteDatabase db) async {
     // 检查 pending_permission 列是否已存在
-    final columns = db.select(
+    final columns = await db.getAll(
       "PRAGMA table_info(session_summary)",
     );
     final columnNames = columns.map((row) => row['name'] as String).toSet();
 
     if (!columnNames.contains('pending_permission')) {
-      db.execute(
+      await db.execute(
         'ALTER TABLE session_summary ADD COLUMN pending_permission TEXT',
       );
     }
     if (!columnNames.contains('pending_confirm')) {
-      db.execute(
+      await db.execute(
         'ALTER TABLE session_summary ADD COLUMN pending_confirm TEXT',
       );
     }
     if (!columnNames.contains('pending_permission_time')) {
-      db.execute(
+      await db.execute(
         'ALTER TABLE session_summary ADD COLUMN pending_permission_time INTEGER',
       );
     }
     if (!columnNames.contains('pending_confirm_time')) {
-      db.execute(
+      await db.execute(
         'ALTER TABLE session_summary ADD COLUMN pending_confirm_time INTEGER',
       );
     }
 
     // 查询有 pending 请求的摘要优化索引
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_summary_pending_permission
         ON session_summary(pending_permission) WHERE pending_permission IS NOT NULL
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_summary_pending_confirm
         ON session_summary(pending_confirm) WHERE pending_confirm IS NOT NULL
     ''');

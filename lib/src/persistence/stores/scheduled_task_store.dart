@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import '../database_manager.dart';
 import '../entities/scheduled_task_entity.dart';
@@ -12,7 +12,7 @@ class ScheduledTaskStore {
   ScheduledTaskStore({String? deviceId, DatabaseManager? dbManager})
       : _dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
 
-  Database get _db {
+  SqliteDatabase get _db {
     if (!_dbManager.isInitialized) {
       throw StateError(
         '$runtimeType: DatabaseManager 未初始化，请先调用 initialize()。',
@@ -22,7 +22,7 @@ class ScheduledTaskStore {
   }
 
   /// 从数据库行解码为实体
-  AiScheduledTaskEntity _rowToEntity(Row row) {
+  AiScheduledTaskEntity _rowToEntity(Map<String, Object?> row) {
     return AiScheduledTaskEntity.fromMap({
       'uuid': row['uuid'],
       'employeeId': row['employee_id'],
@@ -52,7 +52,7 @@ class ScheduledTaskStore {
 
   /// 获取所有未删除的任务
   Future<List<AiScheduledTaskEntity>> findAll() async {
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT * FROM scheduled_tasks WHERE deleted = 0 ORDER BY sort_order ASC',
     );
     return resultSet.map(_rowToEntity).toList();
@@ -61,7 +61,7 @@ class ScheduledTaskStore {
   /// 获取指定员工的任务
   Future<List<AiScheduledTaskEntity>> findByEmployee(
       String employeeId) async {
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT * FROM scheduled_tasks WHERE employee_id = ? AND deleted = 0 ORDER BY sort_order ASC',
       [employeeId],
     );
@@ -70,7 +70,7 @@ class ScheduledTaskStore {
 
   /// 查找单个任务
   Future<AiScheduledTaskEntity?> find(String uuid) async {
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT * FROM scheduled_tasks WHERE uuid = ?',
       [uuid],
     );
@@ -82,7 +82,7 @@ class ScheduledTaskStore {
 
   /// 保存任务（INSERT OR REPLACE）
   Future<void> save(AiScheduledTaskEntity entity) async {
-    _db.execute('''
+    await _db.execute('''
       INSERT OR REPLACE INTO scheduled_tasks (
         uuid, employee_id, name, description,
         schedule_type, schedule_expression, repeat_type,
@@ -122,7 +122,7 @@ class ScheduledTaskStore {
   /// 删除任务（软删除）
   Future<void> delete(String uuid) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    _db.execute(
+    await _db.execute(
       'UPDATE scheduled_tasks SET deleted = 1, enabled = 0, update_time = ? WHERE uuid = ?',
       [now, uuid],
     );
@@ -130,7 +130,7 @@ class ScheduledTaskStore {
 
   /// 硬删除
   Future<void> hardDelete(String uuid) async {
-    _db.execute(
+    await _db.execute(
       'DELETE FROM scheduled_tasks WHERE uuid = ?',
       [uuid],
     );
@@ -139,7 +139,7 @@ class ScheduledTaskStore {
   /// 删除员工的所有任务（软删除）
   Future<void> deleteByEmployee(String employeeId) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    _db.execute(
+    await _db.execute(
       'UPDATE scheduled_tasks SET deleted = 1, enabled = 0, update_time = ? WHERE employee_id = ?',
       [now, employeeId],
     );
@@ -148,7 +148,7 @@ class ScheduledTaskStore {
   /// 获取需要执行的任务
   Future<List<AiScheduledTaskEntity>> findDueTasks() async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       '''SELECT * FROM scheduled_tasks
          WHERE deleted = 0
            AND enabled = 1

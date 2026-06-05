@@ -57,7 +57,7 @@ mixin _CachedProxyMessageSync on _CachedAgentProxyBase {
       try {
         final remoteClearSeq = await _proxy.getClearSeq();
         if (remoteClearSeq > 0) {
-          final deletedCount = _messageStore.deleteMessagesBeforeSeq(
+          final deletedCount = await _messageStore.deleteMessagesBeforeSeq(
             _deviceId, _employeeId, remoteClearSeq,
           );
           if (deletedCount > 0) {
@@ -76,7 +76,7 @@ mixin _CachedProxyMessageSync on _CachedAgentProxyBase {
       }
 
       // 2. 查询本地消息 localLastSeq
-      final localLastSeq = _messageStore.getLastSeq(_deviceId, _employeeId);
+      final localLastSeq = await _messageStore.getLastSeq(_deviceId, _employeeId);
 
       // 3. 查询服务端 lastSeq
       int remoteLastSeq = -1;
@@ -106,7 +106,7 @@ mixin _CachedProxyMessageSync on _CachedAgentProxyBase {
       }
 
       // 5. 增量拉取：远程有更新的消息时，拉取 seq > effectiveLocalSeq 的消息
-      final effectiveLocalSeq = _messageStore.getLastSeq(_deviceId, _employeeId);
+      final effectiveLocalSeq = await _messageStore.getLastSeq(_deviceId, _employeeId);
       if (remoteLastSeq > effectiveLocalSeq) {
         const batchSize = 20;
         const maxBatches = 50; // 最多拉取 50 批（约 1000 条），防止单次同步无限循环
@@ -243,10 +243,10 @@ mixin _CachedProxyMessageSync on _CachedAgentProxyBase {
   /// 这些残留的 `local_toolcall_*` 消息会一直处于 processing 状态。
   /// 在每次同步完成后，将这些消息标记为 failed（无结果）。
   @override
-  void _cleanupStaleToolCallMessages() {
+  Future<void> _cleanupStaleToolCallMessages() async {
     if (_proxy.isLocalMode) return;
 
-    final staleIds = _messageStore.getStaleLocalToolCallMessages(_deviceId, _employeeId);
+    final staleIds = await _messageStore.getStaleLocalToolCallMessages(_deviceId, _employeeId);
     if (staleIds.isEmpty) return;
 
     for (final uuid in staleIds) {
@@ -348,7 +348,7 @@ mixin _CachedProxyMessageSync on _CachedAgentProxyBase {
       final specItems = allSpecMaps
           .map((s) => SpecItemEntity.fromMap(s))
           .toList();
-      final count = specStore.upsertAllFromRemote(specItems);
+      final count = await specStore.upsertAllFromRemote(specItems);
       if (count > 0) {
         _CachedAgentProxyBase._log.info('远程 Spec 同步完成: merge 写入 $count 条');
       }
@@ -377,7 +377,7 @@ mixin _CachedProxyMessageSync on _CachedAgentProxyBase {
       final topicItems = allTopicMaps
           .map((t) => TodoTopicEntity.fromMap(t))
           .toList();
-      final topicCount = todoStore.upsertAllTopicsFromRemote(topicItems);
+      final topicCount = await todoStore.upsertAllTopicsFromRemote(topicItems);
 
       // 2. 对每个 topic 获取 taskItems
       int taskItemCount = 0;
@@ -388,7 +388,7 @@ mixin _CachedProxyMessageSync on _CachedAgentProxyBase {
             final taskItems = taskItemMaps
                 .map((t) => TodoTaskItemEntity.fromMap(t))
                 .toList();
-            taskItemCount += todoStore.upsertAllTaskItemsFromRemote(taskItems);
+            taskItemCount += await todoStore.upsertAllTaskItemsFromRemote(taskItems);
           }
         } catch (e) {
           _CachedAgentProxyBase._log.debug('同步远程 Todo TaskItems 失败 (topic=${topic.id}): $e');

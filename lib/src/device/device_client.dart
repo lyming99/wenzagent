@@ -1407,36 +1407,36 @@ class DeviceClient {
   // ===== 会话摘要查询 =====
 
   /// 获取所有会话摘要列表（含最新消息 + 未读 + pending 状态）
-  List<SessionSummaryEntity> getSessionSummaries({String? deviceId}) {
+  Future<List<SessionSummaryEntity>> getSessionSummaries({String? deviceId}) async {
     final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-    return summaryStore.getAllSummaries(deviceId: deviceId ?? _deviceId);
+    return await summaryStore.getAllSummaries(deviceId: deviceId ?? _deviceId);
   }
 
   /// 获取单个会话摘要
-  SessionSummaryEntity? getSessionSummary({
+  Future<SessionSummaryEntity?> getSessionSummary({
     required String employeeId,
     String? deviceId,
-  }) {
+  }) async {
     final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-    return summaryStore.getSummary(employeeId, deviceId: deviceId ?? _deviceId);
+    return await summaryStore.getSummary(employeeId, deviceId: deviceId ?? _deviceId);
   }
 
   /// 获取所有有 pending 请求的会话
-  List<SessionSummaryEntity> getPendingSessions() {
+  Future<List<SessionSummaryEntity>> getPendingSessions() async {
     final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-    return summaryStore.getPendingSummaries();
+    return await summaryStore.getPendingSummaries();
   }
 
   /// 获取有未读消息的会话列表
-  List<SessionSummaryEntity> getUnreadSessions({String? deviceId}) {
+  Future<List<SessionSummaryEntity>> getUnreadSessions({String? deviceId}) async {
     final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-    final ids = summaryStore.getUnreadEmployeeIds(
+    final ids = await summaryStore.getUnreadEmployeeIds(
       deviceId: deviceId ?? _deviceId,
     );
     if (ids.isEmpty) return [];
     final summaries = <SessionSummaryEntity>[];
     for (final id in ids) {
-      final s = summaryStore.getSummary(id, deviceId: deviceId ?? _deviceId);
+      final s = await summaryStore.getSummary(id, deviceId: deviceId ?? _deviceId);
       if (s != null) summaries.add(s);
     }
     return summaries;
@@ -1462,7 +1462,7 @@ class DeviceClient {
     final deviceId = targetDeviceId ?? _deviceId;
     if (deviceId == _deviceId) {
       // 本地设备：通过 notificationManager 统一处理 DB + memory + broadcast + agent
-      _notificationManager.markAllMessagesAsRead(
+      await _notificationManager.markAllMessagesAsRead(
         employeeId: employeeId,
         targetDeviceId: deviceId,
       );
@@ -1475,7 +1475,7 @@ class DeviceClient {
     }
   }
 
-  void markAllMessagesAsReadGlobal() =>
+  Future<void> markAllMessagesAsReadGlobal() =>
       _notificationManager.markAllMessagesAsReadGlobal();
 
   Future<void> syncReadStatusFromAgent({required String employeeId}) =>

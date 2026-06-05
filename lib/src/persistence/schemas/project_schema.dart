@@ -1,10 +1,10 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 /// wenz_projects / wenz_project_modules / wenz_project_skills / wenz_project_issues 表 schema
 class ProjectSchema {
-  static void create(Database db) {
+  static Future<void> create(SqliteDatabase db) async {
     // 项目表
-    db.execute('''
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS wenz_projects (
         uuid         TEXT PRIMARY KEY,
         user_id      INTEGER,
@@ -24,7 +24,7 @@ class ProjectSchema {
     ''');
 
     // 项目模块表
-    db.execute('''
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS wenz_project_modules (
         uuid         TEXT PRIMARY KEY,
         project_uuid TEXT NOT NULL,
@@ -41,13 +41,13 @@ class ProjectSchema {
         update_time  INTEGER NOT NULL
       );
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_project_modules_project
         ON wenz_project_modules(project_uuid);
     ''');
 
     // 项目技能表
-    db.execute('''
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS wenz_project_skills (
         uuid          TEXT PRIMARY KEY,
         project_uuid  TEXT NOT NULL,
@@ -68,13 +68,13 @@ class ProjectSchema {
         update_time   INTEGER NOT NULL
       );
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_project_skills_project
         ON wenz_project_skills(project_uuid);
     ''');
 
     // 项目工单表
-    db.execute('''
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS wenz_project_issues (
         uuid         TEXT PRIMARY KEY,
         project_uuid TEXT NOT NULL,
@@ -93,7 +93,7 @@ class ProjectSchema {
         update_time  INTEGER NOT NULL
       );
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_project_issues_project
         ON wenz_project_issues(project_uuid);
     ''');

@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 /// 数据库迁移基类
 ///
@@ -11,5 +11,5 @@ abstract class Migration {
   /// 执行升级 SQL
   ///
   /// [db] 数据库连接
-  void onUpgrade(Database db);
+  Future<void> onUpgrade(SqliteDatabase db);
 }

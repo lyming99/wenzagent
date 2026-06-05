@@ -45,7 +45,7 @@ void main() {
   // 1. StoreMergeUtil 测试
   // ═══════════════════════════════════════════════════════════════
   group('StoreMergeUtil.mergeDeleteState', () {
-    test('双方都无 deleteTime → 未删除', () {
+    test('双方都无 deleteTime → 未删除', () async {
       final result = StoreMergeUtil.mergeDeleteState(
         localDeleteTime: null,
         localDeleted: 0,
@@ -56,7 +56,7 @@ void main() {
       expect(result.mergedDeleteTime, isNull);
     });
 
-    test('本地 null，远程有 deleteTime → 采用远程', () {
+    test('本地 null，远程有 deleteTime → 采用远程', () async {
       final dt = DateTime(2024, 6, 1);
       final result = StoreMergeUtil.mergeDeleteState(
         localDeleteTime: null,
@@ -68,7 +68,7 @@ void main() {
       expect(result.mergedDeleteTime, dt);
     });
 
-    test('远程 null，本地有 deleteTime → 采用本地', () {
+    test('远程 null，本地有 deleteTime → 采用本地', () async {
       final dt = DateTime(2024, 6, 1);
       final result = StoreMergeUtil.mergeDeleteState(
         localDeleteTime: dt,
@@ -80,7 +80,7 @@ void main() {
       expect(result.mergedDeleteTime, dt);
     });
 
-    test('双方都有 deleteTime，本地更新 → 取本地', () {
+    test('双方都有 deleteTime，本地更新 → 取本地', () async {
       final localDt = DateTime(2024, 6, 2);
       final remoteDt = DateTime(2024, 6, 1);
       final result = StoreMergeUtil.mergeDeleteState(
@@ -93,7 +93,7 @@ void main() {
       expect(result.mergedDeleteTime, localDt);
     });
 
-    test('双方都有 deleteTime，远程更新 → 取远程', () {
+    test('双方都有 deleteTime，远程更新 → 取远程', () async {
       final localDt = DateTime(2024, 6, 1);
       final remoteDt = DateTime(2024, 6, 2);
       final result = StoreMergeUtil.mergeDeleteState(
@@ -106,7 +106,7 @@ void main() {
       expect(result.mergedDeleteTime, remoteDt);
     });
 
-    test('远程复活（deleted=0, deleteTime=null）且 updateTime 更新 → 允许复活', () {
+    test('远程复活（deleted=0, deleteTime=null）且 updateTime 更新 → 允许复活', () async {
       final result = StoreMergeUtil.mergeDeleteState(
         localDeleteTime: DateTime(2024, 6, 1),
         localDeleted: 1,
@@ -119,7 +119,7 @@ void main() {
       expect(result.mergedDeleteTime, isNull);
     });
 
-    test('远程复活但 updateTime 更旧 → 保持本地删除', () {
+    test('远程复活但 updateTime 更旧 → 保持本地删除', () async {
       final localDt = DateTime(2024, 6, 2);
       final result = StoreMergeUtil.mergeDeleteState(
         localDeleteTime: localDt,
@@ -133,7 +133,7 @@ void main() {
       expect(result.mergedDeleteTime, localDt);
     });
 
-    test('本地复活且 updateTime 更新 → 保持本地复活', () {
+    test('本地复活且 updateTime 更新 → 保持本地复活', () async {
       final remoteDt = DateTime(2024, 6, 1);
       final result = StoreMergeUtil.mergeDeleteState(
         localDeleteTime: null,
@@ -147,7 +147,7 @@ void main() {
       expect(result.mergedDeleteTime, isNull);
     });
 
-    test('updateTime 相等不满足复活条件 → 走原有逻辑', () {
+    test('updateTime 相等不满足复活条件 → 走原有逻辑', () async {
       final localDt = DateTime(2024, 6, 1);
       final ts = DateTime(2024, 6, 2);
       final result = StoreMergeUtil.mergeDeleteState(
@@ -163,7 +163,7 @@ void main() {
       expect(result.mergedDeleteTime, localDt);
     });
 
-    test('不传 updateTime → 走原有逻辑', () {
+    test('不传 updateTime → 走原有逻辑', () async {
       final localDt = DateTime(2024, 6, 1);
       final result = StoreMergeUtil.mergeDeleteState(
         localDeleteTime: localDt,
@@ -177,7 +177,7 @@ void main() {
   });
 
   group('StoreMergeUtil.shouldUpdateData', () {
-    test('远程 updateTime 更新 → 需要更新', () {
+    test('远程 updateTime 更新 → 需要更新', () async {
       expect(
         StoreMergeUtil.shouldUpdateData(
           DateTime(2024, 6, 1),
@@ -187,7 +187,7 @@ void main() {
       );
     });
 
-    test('远程 updateTime 更旧 → 不需要更新', () {
+    test('远程 updateTime 更旧 → 不需要更新', () async {
       expect(
         StoreMergeUtil.shouldUpdateData(
           DateTime(2024, 6, 2),
@@ -197,26 +197,26 @@ void main() {
       );
     });
 
-    test('updateTime 相等 → 不需要更新', () {
+    test('updateTime 相等 → 不需要更新', () async {
       final ts = DateTime(2024, 6, 1);
       expect(StoreMergeUtil.shouldUpdateData(ts, ts), isFalse);
     });
 
-    test('localUpdateTime 为 null → 需要更新', () {
+    test('localUpdateTime 为 null → 需要更新', () async {
       expect(
         StoreMergeUtil.shouldUpdateData(null, DateTime(2024, 6, 1)),
         isTrue,
       );
     });
 
-    test('remoteUpdateTime 为 null → 需要更新', () {
+    test('remoteUpdateTime 为 null → 需要更新', () async {
       expect(
         StoreMergeUtil.shouldUpdateData(DateTime(2024, 6, 1), null),
         isTrue,
       );
     });
 
-    test('双方都为 null → 需要更新', () {
+    test('双方都为 null → 需要更新', () async {
       expect(StoreMergeUtil.shouldUpdateData(null, null), isTrue);
     });
   });
@@ -225,7 +225,7 @@ void main() {
   // 2. SyncWatermarkEntity 序列化测试
   // ═══════════════════════════════════════════════════════════════
   group('SyncWatermarkEntity', () {
-    test('toMap → fromMap 往返一致', () {
+    test('toMap → fromMap 往返一致', () async {
       final now = DateTime(2025, 6, 15, 10, 30, 0);
       final entity = SyncWatermarkEntity(
         employeeId: 'emp-001',
@@ -247,7 +247,7 @@ void main() {
       );
     });
 
-    test('clearSeq 为 null 时序列化正确', () {
+    test('clearSeq 为 null 时序列化正确', () async {
       final entity = SyncWatermarkEntity(
         employeeId: 'emp-002',
         lastSeq: 0,
@@ -260,7 +260,7 @@ void main() {
       expect(restored.clearSeq, isNull);
     });
 
-    test('fromMap 缺失字段使用默认值', () {
+    test('fromMap 缺失字段使用默认值', () async {
       final restored = SyncWatermarkEntity.fromMap({
         'employeeId': 'emp-003',
       });
@@ -302,7 +302,7 @@ void main() {
       );
     }
 
-    test('toMap → fromMap 往返一致', () {
+    test('toMap → fromMap 往返一致', () async {
       final spec = createSpec();
       final map = spec.toMap();
       final restored = SpecItemEntity.fromMap(map);
@@ -318,7 +318,7 @@ void main() {
       expect(restored.deleted, equals(spec.deleted));
     });
 
-    test('copyWith 部分字段更新', () {
+    test('copyWith 部分字段更新', () async {
       final spec = createSpec();
       final updated = spec.copyWith(
         title: 'Updated Title',
@@ -334,7 +334,7 @@ void main() {
       expect(updated.content, equals(spec.content));
     });
 
-    test('fromMap 缺失字段使用默认值', () {
+    test('fromMap 缺失字段使用默认值', () async {
       final restored = SpecItemEntity.fromMap({
         'id': 'spec-002',
         'employeeId': 'emp-002',
@@ -357,7 +357,7 @@ void main() {
   group('TodoTopicEntity', () {
     final now = DateTime(2025, 6, 15);
 
-    test('toMap → fromMap 往返一致', () {
+    test('toMap → fromMap 往返一致', () async {
       final topic = TodoTopicEntity(
         id: 'topic-001',
         employeeId: 'emp-001',
@@ -383,7 +383,7 @@ void main() {
       expect(restored.completedAt, isNotNull);
     });
 
-    test('completedAt 为 null 时序列化正确', () {
+    test('completedAt 为 null 时序列化正确', () async {
       final topic = TodoTopicEntity(
         id: 'topic-002',
         employeeId: 'emp-001',
@@ -398,7 +398,7 @@ void main() {
       expect(restored.completedAt, isNull);
     });
 
-    test('copyWith 部分字段更新', () {
+    test('copyWith 部分字段更新', () async {
       final topic = TodoTopicEntity(
         id: 'topic-003',
         employeeId: 'emp-001',
@@ -421,7 +421,7 @@ void main() {
   group('TodoTaskItemEntity', () {
     final now = DateTime(2025, 6, 15);
 
-    test('toMap → fromMap 往返一致', () {
+    test('toMap → fromMap 往返一致', () async {
       final item = TodoTaskItemEntity(
         id: 'task-001',
         employeeId: 'emp-001',
@@ -447,7 +447,7 @@ void main() {
       expect(restored.completedAt, isNotNull);
     });
 
-    test('copyWith 部分字段更新', () {
+    test('copyWith 部分字段更新', () async {
       final item = TodoTaskItemEntity(
         id: 'task-002',
         employeeId: 'emp-001',
@@ -472,7 +472,7 @@ void main() {
   group('ProjectEntity', () {
     final now = DateTime(2025, 6, 15);
 
-    test('toMap → fromMap 往返一致', () {
+    test('toMap → fromMap 往返一致', () async {
       final project = ProjectEntity(
         uuid: 'proj-001',
         title: 'Test Project',
@@ -495,7 +495,7 @@ void main() {
       expect(restored.deleteTime, isNull);
     });
 
-    test('copyWith deleteTime sentinel 行为', () {
+    test('copyWith deleteTime sentinel 行为', () async {
       final dt = DateTime(2024, 1, 1);
       final project = ProjectEntity(
         uuid: 'proj-002',
@@ -520,7 +520,7 @@ void main() {
   group('ProjectModuleEntity', () {
     final now = DateTime(2025, 6, 15);
 
-    test('toMap → fromMap 往返一致', () {
+    test('toMap → fromMap 往返一致', () async {
       final module = ProjectModuleEntity(
         uuid: 'mod-001',
         projectUuid: 'proj-001',
@@ -543,7 +543,7 @@ void main() {
   group('ProjectSkillEntity', () {
     final now = DateTime(2025, 6, 15);
 
-    test('toMap → fromMap 往返一致', () {
+    test('toMap → fromMap 往返一致', () async {
       final skill = ProjectSkillEntity(
         uuid: 'pskill-001',
         projectUuid: 'proj-001',
@@ -565,7 +565,7 @@ void main() {
   group('ProjectIssueEntity', () {
     final now = DateTime(2025, 6, 15);
 
-    test('toMap → fromMap 往返一致', () {
+    test('toMap → fromMap 往返一致', () async {
       final issue = ProjectIssueEntity(
         uuid: 'issue-001',
         projectUuid: 'proj-001',
@@ -593,7 +593,7 @@ void main() {
   // 6. SessionSummaryEntity 序列化测试
   // ═══════════════════════════════════════════════════════════════
   group('SessionSummaryEntity', () {
-    test('toMap → fromMap 往返一致', () {
+    test('toMap → fromMap 往返一致', () async {
       final summary = SessionSummaryEntity(
         employeeId: 'emp-001',
         deviceId: 'dev-001',
@@ -624,7 +624,7 @@ void main() {
       expect(restored.hasPendingRequest, isTrue);
     });
 
-    test('空摘要的默认值', () {
+    test('空摘要的默认值', () async {
       final summary = SessionSummaryEntity(
         employeeId: 'emp-002',
         deviceId: 'dev-002',
@@ -636,7 +636,7 @@ void main() {
       expect(summary.previewText, equals(''));
     });
 
-    test('previewText 超过 100 字符截断', () {
+    test('previewText 超过 100 字符截断', () async {
       final longContent = 'A' * 150;
       final summary = SessionSummaryEntity(
         employeeId: 'emp-003',
@@ -653,28 +653,28 @@ void main() {
   // 7. RPC 同步请求实体测试
   // ═══════════════════════════════════════════════════════════════
   group('RPC 同步请求实体', () {
-    test('GetMinSeqRequest toMap/fromMap', () {
+    test('GetMinSeqRequest toMap/fromMap', () async {
       final req = GetMinSeqRequest(employeeId: 'emp-001');
       final map = req.toMap();
       final restored = GetMinSeqRequest.fromMap(map);
       expect(restored.employeeId, equals('emp-001'));
     });
 
-    test('GetClearSeqRequest toMap/fromMap', () {
+    test('GetClearSeqRequest toMap/fromMap', () async {
       final req = GetClearSeqRequest(employeeId: 'emp-002');
       final map = req.toMap();
       final restored = GetClearSeqRequest.fromMap(map);
       expect(restored.employeeId, equals('emp-002'));
     });
 
-    test('ClearClearSeqRequest toMap/fromMap', () {
+    test('ClearClearSeqRequest toMap/fromMap', () async {
       final req = ClearClearSeqRequest(employeeId: 'emp-003');
       final map = req.toMap();
       final restored = ClearClearSeqRequest.fromMap(map);
       expect(restored.employeeId, equals('emp-003'));
     });
 
-    test('UpdateSyncWatermarkRequest toMap/fromMap', () {
+    test('UpdateSyncWatermarkRequest toMap/fromMap', () async {
       final req = UpdateSyncWatermarkRequest(
         employeeId: 'emp-004',
         lastSeq: 100,
@@ -709,18 +709,18 @@ void main() {
     await dbManager.close();
     DatabaseManager.removeInstance(deviceId);
     try {
-      await Directory(testDbPath).delete(recursive: true);
+      Future<await> Directory(testDbPath).delete(recursive: true);
     } catch (_) {}
   });
 
   // ─────────────────────────────────────────────────────
   // 8. SpecStore upsertFromRemote merge 逻辑
   // ─────────────────────────────────────────────────────
-  group('SpecStore upsertFromRemote', () {
+  group('SpecStore upsertFromRemote', () async {
     late SpecStore store;
     const employeeId = 'emp-sync-spec';
 
-    setUp(() {
+    setUp(() async {
       store = SpecStore(deviceId: deviceId);
     });
 
@@ -744,34 +744,34 @@ void main() {
       );
     }
 
-    test('本地不存在 → 直接插入', () {
+    test('本地不存在 → 直接插入', () async {
       final remote = createSpec();
-      final changed = store.upsertFromRemote(remote);
+      final changed = await sawait await ore.upsertFromRemote(remote);
 
       expect(changed, isTrue);
-      final found = store.findByIdIncludingDeleted(remote.id);
+      final found = await store.findByIdIncludingDeleted(remote.id);
       expect(found, isNotNull);
       expect(found!.title, equals('Test Spec'));
     });
 
-    test('本地已存在且远程更新 → 更新数据', () {
+    test('本地已存在且远程更新 → 更新数据', () async {
       // 先保存本地版本
-      store.save(createSpec(title: 'Local Title'));
+      await store.save(createSpec(title: 'Local Title'));
 
       // 远程版本 updateTime 更新
       final remote = createSpec(
         title: 'Remote Title',
         updateTime: DateTime(2025, 6, 2),
       );
-      final changed = store.upsertFromRemote(remote);
+      final changed = await sawait await ore.upsertFromRemote(remote);
 
       expect(changed, isTrue);
-      final found = store.findByIdIncludingDeleted(remote.id);
+      final found = await store.findByIdIncludingDeleted(remote.id);
       expect(found!.title, equals('Remote Title'));
     });
 
-    test('本地已存在且远程更旧 → 不更新数据', () {
-      store.save(createSpec(
+    test('本地已存在且远程更旧 → 不更新数据', () async {
+      await store.save(createSpec(
         title: 'Local Title',
         updateTime: DateTime(2025, 6, 5),
       ));
@@ -780,36 +780,36 @@ void main() {
         title: 'Old Remote Title',
         updateTime: DateTime(2025, 6, 1),
       );
-      final changed = store.upsertFromRemote(remote);
+      final changed = await sawait await ore.upsertFromRemote(remote);
 
       expect(changed, isFalse);
-      final found = store.findByIdIncludingDeleted(remote.id);
+      final found = await store.findByIdIncludingDeleted(remote.id);
       expect(found!.title, equals('Local Title'));
     });
 
-    test('软删除合并 - 远程删除 → 本地也标记删除', () {
-      store.save(createSpec(deleted: 0));
+    test('软删除合并 - 远程删除 → 本地也标记删除', () async {
+      await store.save(createSpec(deleted: 0));
 
       final remote = createSpec(deleted: 1);
-      final changed = store.upsertFromRemote(remote);
+      final changed = await sawait await ore.upsertFromRemote(remote);
 
       expect(changed, isTrue);
-      final found = store.findByIdIncludingDeleted(remote.id);
+      final found = await store.findByIdIncludingDeleted(remote.id);
       expect(found!.deleted, equals(1));
     });
 
-    test('软删除合并 - 本地已删除 → 保持删除', () {
-      store.save(createSpec(deleted: 1));
+    test('软删除合并 - 本地已删除 → 保持删除', () async {
+      await store.save(createSpec(deleted: 1));
 
       final remote = createSpec(deleted: 0);
-      final changed = store.upsertFromRemote(remote);
+      final changed = await sawait await ore.upsertFromRemote(remote);
 
       expect(changed, isFalse);
-      final found = store.findByIdIncludingDeleted(remote.id);
+      final found = await store.findByIdIncludingDeleted(remote.id);
       expect(found!.deleted, equals(1));
     });
 
-    test('upsertAllFromRemote 批量操作', () {
+    test('upsertAllFromRemote 批量操作', () async {
       final items = List.generate(
         5,
         (i) => createSpec(
@@ -817,11 +817,11 @@ void main() {
           title: 'Batch Spec $i',
         ),
       );
-      final count = store.upsertAllFromRemote(items);
+      final count = await store.upsertAllFromRemote(items);
       expect(count, equals(5));
     });
 
-    test('upsertAllFromRemote 重复调用只更新变化项', () {
+    test('upsertAllFromRemote 重复调用只更新变化项', () async {
       final items = List.generate(
         3,
         (i) => createSpec(
@@ -831,10 +831,10 @@ void main() {
       );
 
       // 第一次：全部新增
-      expect(store.upsertAllFromRemote(items), equals(3));
+      expect(await store.upsertAllFromRemote(items), equals(3));
 
       // 第二次：相同数据，无变化
-      expect(store.upsertAllFromRemote(items), equals(0));
+      expect(await store.upsertAllFromRemote(items), equals(0));
     });
   });
 
@@ -845,11 +845,11 @@ void main() {
     late TodoStore store;
     const employeeId = 'emp-sync-todo';
 
-    setUp(() {
+    setUp(() async {
       store = TodoStore(deviceId: deviceId);
     });
 
-    test('upsertTopicFromRemote 本地不存在 → 插入', () {
+    test('upsertTopicFromRemote 本地不存在 → 插入', () async {
       final remote = TodoTopicEntity(
         id: 'topic-sync-001',
         employeeId: employeeId,
@@ -857,16 +857,16 @@ void main() {
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 6, 1),
       );
-      final changed = store.upsertTopicFromRemote(remote);
+      final changed = await store.upsertTopicFromRemote(remote);
 
       expect(changed, isTrue);
-      final found = store.findTopicByIdIncludingDeleted(remote.id);
+      final found = await store.findTopicByIdIncludingDeleted(remote.id);
       expect(found, isNotNull);
       expect(found!.title, equals('Remote Topic'));
     });
 
-    test('upsertTopicFromRemote 远程更新 → 更新数据', () {
-      store.saveTopic(TodoTopicEntity(
+    test('upsertTopicFromRemote 远程更新 → 更新数据', () async {
+      await store.saveTopic(TodoTopicEntity(
         id: 'topic-sync-002',
         employeeId: employeeId,
         title: 'Local Topic',
@@ -881,17 +881,17 @@ void main() {
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 6, 2),
       );
-      final changed = store.upsertTopicFromRemote(remote);
+      final changed = await store.upsertTopicFromRemote(remote);
 
       expect(changed, isTrue);
       expect(
-        store.findTopicByIdIncludingDeleted(remote.id)!.title,
+        await store.findTopicByIdIncludingDeleted(remote.id)!.title,
         equals('Updated Remote Topic'),
       );
     });
 
-    test('upsertTopicFromRemote 远程更旧 → 不更新', () {
-      store.saveTopic(TodoTopicEntity(
+    test('upsertTopicFromRemote 远程更旧 → 不更新', () async {
+      await store.saveTopic(TodoTopicEntity(
         id: 'topic-sync-003',
         employeeId: employeeId,
         title: 'Newer Local',
@@ -906,11 +906,11 @@ void main() {
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 6, 1),
       );
-      expect(store.upsertTopicFromRemote(remote), isFalse);
+      expect(await store.upsertTopicFromRemote(remote), isFalse);
     });
 
-    test('upsertTopicFromRemote 软删除合并', () {
-      store.saveTopic(TodoTopicEntity(
+    test('upsertTopicFromRemote 软删除合并', () async {
+      await store.saveTopic(TodoTopicEntity(
         id: 'topic-sync-004',
         employeeId: employeeId,
         title: 'Active Topic',
@@ -927,18 +927,18 @@ void main() {
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 6, 2),
       );
-      final changed = store.upsertTopicFromRemote(remote);
+      final changed = await store.upsertTopicFromRemote(remote);
 
       expect(changed, isTrue);
       expect(
-        store.findTopicByIdIncludingDeleted(remote.id)!.deleted,
+        await store.findTopicByIdIncludingDeleted(remote.id)!.deleted,
         equals(1),
       );
     });
 
-    test('upsertTaskItemFromRemote 本地不存在 → 插入', () {
+    test('upsertTaskItemFromRemote 本地不存在 → 插入', () async {
       // 先创建 topic
-      store.saveTopic(TodoTopicEntity(
+      await store.saveTopic(TodoTopicEntity(
         id: 'topic-for-task',
         employeeId: employeeId,
         title: 'Parent Topic',
@@ -954,23 +954,23 @@ void main() {
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 6, 1),
       );
-      final changed = store.upsertTaskItemFromRemote(remote);
+      final changed = await store.upsertTaskItemFromRemote(remote);
 
       expect(changed, isTrue);
-      final found = store.findTaskItemByIdIncludingDeleted(remote.id);
+      final found = await store.findTaskItemByIdIncludingDeleted(remote.id);
       expect(found, isNotNull);
       expect(found!.title, equals('Remote Task'));
     });
 
-    test('upsertTaskItemFromRemote 远程更新 → 更新', () {
-      store.saveTopic(TodoTopicEntity(
+    test('upsertTaskItemFromRemote 远程更新 → 更新', () async {
+      await store.saveTopic(TodoTopicEntity(
         id: 'topic-for-task2',
         employeeId: employeeId,
         title: 'Parent',
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 1, 1),
       ));
-      store.saveTaskItem(TodoTaskItemEntity(
+      await store.saveTaskItem(TodoTaskItemEntity(
         id: 'task-sync-002',
         employeeId: employeeId,
         topicId: 'topic-for-task2',
@@ -987,14 +987,14 @@ void main() {
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 6, 2),
       );
-      expect(store.upsertTaskItemFromRemote(remote), isTrue);
+      expect(await store.upsertTaskItemFromRemote(remote), isTrue);
       expect(
-        store.findTaskItemByIdIncludingDeleted(remote.id)!.title,
+        await store.findTaskItemByIdIncludingDeleted(remote.id)!.title,
         equals('Updated Task'),
       );
     });
 
-    test('upsertAllTopicsFromRemote + upsertAllTaskItemsFromRemote 批量', () {
+    test('upsertAllTopicsFromRemote + upsertAllTaskItemsFromRemote 批量', () async {
       final topics = List.generate(
         3,
         (i) => TodoTopicEntity(
@@ -1005,7 +1005,7 @@ void main() {
           updateTime: DateTime(2025, 6, 1),
         ),
       );
-      expect(store.upsertAllTopicsFromRemote(topics), equals(3));
+      expect(await store.upsertAllTopicsFromRemote(topics), equals(3));
 
       final tasks = List.generate(
         5,
@@ -1018,7 +1018,7 @@ void main() {
           updateTime: DateTime(2025, 6, 1),
         ),
       );
-      expect(store.upsertAllTaskItemsFromRemote(tasks), equals(5));
+      expect(await store.upsertAllTaskItemsFromRemote(tasks), equals(5));
     });
   });
 
@@ -1028,11 +1028,11 @@ void main() {
   group('ProjectStore upsertFromRemote', () {
     late ProjectStore store;
 
-    setUp(() {
+    setUp(() async {
       store = ProjectStore(deviceId: deviceId);
     });
 
-    test('upsertFromRemote 本地不存在且未删除 → 插入', () {
+    test('upsertFromRemote 本地不存在且未删除 → 插入', () async {
       final remote = ProjectEntity(
         uuid: 'proj-sync-001',
         title: 'Remote Project',
@@ -1040,10 +1040,10 @@ void main() {
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 6, 1),
       );
-      expect(store.upsertFromRemote(remote), isTrue);
+      expect(await sawait await ore.upsertFromRemote(remote), isTrue);
     });
 
-    test('upsertFromRemote 本地不存在且已删除 → 不插入', () {
+    test('upsertFromRemote 本地不存在且已删除 → 不插入', () async {
       final remote = ProjectEntity(
         uuid: 'proj-sync-deleted',
         title: 'Deleted Project',
@@ -1052,12 +1052,12 @@ void main() {
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 6, 1),
       );
-      expect(store.upsertFromRemote(remote), isFalse);
+      expect(await sawait await ore.upsertFromRemote(remote), isFalse);
     });
 
     test('upsertFromRemote 远程更新 → 更新数据', () async {
       // 先保存本地
-      await store.saveProject(ProjectEntity(
+      await sawait tore.saveProject(ProjectEntity(
         uuid: 'proj-sync-002',
         title: 'Local Project',
         createTime: DateTime(2025, 1, 1),
@@ -1070,11 +1070,11 @@ void main() {
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 6, 2),
       );
-      expect(store.upsertFromRemote(remote), isTrue);
+      expect(await sawait await ore.upsertFromRemote(remote), isTrue);
     });
 
     test('upsertFromRemote 远程更旧 → 不更新', () async {
-      await store.saveProject(ProjectEntity(
+      await sawait tore.saveProject(ProjectEntity(
         uuid: 'proj-sync-003',
         title: 'Newer Local',
         createTime: DateTime(2025, 1, 1),
@@ -1087,12 +1087,12 @@ void main() {
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 6, 1),
       );
-      expect(store.upsertFromRemote(remote), isFalse);
+      expect(await sawait await ore.upsertFromRemote(remote), isFalse);
     });
 
     test('upsertModuleFromRemote 本地不存在且未删除 → 插入', () async {
       // 先创建父项目
-      await store.saveProject(ProjectEntity(
+      await sawait tore.saveProject(ProjectEntity(
         uuid: 'proj-for-mod',
         title: 'Parent',
         createTime: DateTime(2025, 1, 1),
@@ -1106,10 +1106,10 @@ void main() {
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 6, 1),
       );
-      expect(store.upsertModuleFromRemote(remote), isTrue);
+      expect(await store.upsertModuleFromRemote(remote), isTrue);
     });
 
-    test('upsertSkillFromRemote 本地不存在且已删除 → 不插入', () {
+    test('upsertSkillFromRemote 本地不存在且已删除 → 不插入', () async {
       final remote = ProjectSkillEntity(
         uuid: 'pskill-sync-del',
         projectUuid: 'proj-any',
@@ -1119,17 +1119,17 @@ void main() {
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 6, 1),
       );
-      expect(store.upsertSkillFromRemote(remote), isFalse);
+      expect(await store.upsertSkillFromRemote(remote), isFalse);
     });
 
     test('upsertIssueFromRemote 远程更新 → 更新', () async {
-      await store.saveProject(ProjectEntity(
+      await sawait tore.saveProject(ProjectEntity(
         uuid: 'proj-for-issue',
         title: 'Parent',
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 1, 1),
       ));
-      await store.saveIssue(ProjectIssueEntity(
+      await sawait tore.saveIssue(ProjectIssueEntity(
         uuid: 'issue-sync-001',
         projectUuid: 'proj-for-issue',
         title: 'Local Issue',
@@ -1146,7 +1146,7 @@ void main() {
         createTime: DateTime(2025, 1, 1),
         updateTime: DateTime(2025, 6, 2),
       );
-      expect(store.upsertIssueFromRemote(remote), isTrue);
+      expect(await store.upsertIssueFromRemote(remote), isTrue);
     });
   });
 
@@ -1157,98 +1157,98 @@ void main() {
     late SyncWatermarkStore store;
     const employeeId = 'emp-sync-wm';
 
-    setUp(() {
+    setUp(() async {
       store = SyncWatermarkStore(deviceId: deviceId);
     });
 
-    test('不存在时 getWatermark 返回 null', () {
-      expect(store.getWatermark(employeeId), isNull);
+    test('不存在时 getWatermark 返回 null', () async {
+      expect(await store.getWatermark(employeeId), isNull);
     });
 
-    test('不存在时 getLastSeq 返回 0', () {
-      expect(store.getLastSeq(employeeId), equals(0));
+    test('不存在时 getLastSeq 返回 0', () async {
+      expect(await store.getLastSeq(employeeId), equals(0));
     });
 
-    test('upsert + getWatermark 往返', () {
-      store.upsert(SyncWatermarkEntity(
+    test('upsert + getWatermark 往返', () async {
+      await store.upsert(SyncWatermarkEntity(
         employeeId: employeeId,
         lastSeq: 100,
         clearSeq: 50,
         updateTime: DateTime(2025, 6, 15),
       ));
 
-      final wm = store.getWatermark(employeeId);
+      final wm = await store.getWatermark(employeeId);
       expect(wm, isNotNull);
       expect(wm!.lastSeq, equals(100));
       expect(wm.clearSeq, equals(50));
     });
 
-    test('updateLastSeq MAX 语义 - 更大值更新', () {
-      store.updateLastSeq(employeeId, 10, deviceId: deviceId);
-      store.updateLastSeq(employeeId, 20, deviceId: deviceId);
-      expect(store.getLastSeq(employeeId, deviceId: deviceId), equals(20));
+    test('updateLastSeq MAX 语义 - 更大值更新', () async {
+      await store.updateLastSeq(employeeId, 10, deviceId: deviceId);
+      await store.updateLastSeq(employeeId, 20, deviceId: deviceId);
+      expect(await store.getLastSeq(employeeId, deviceId: deviceId), equals(20));
     });
 
-    test('updateLastSeq MAX 语义 - 更小值不回退', () {
-      store.updateLastSeq(employeeId, 100, deviceId: deviceId);
-      store.updateLastSeq(employeeId, 50, deviceId: deviceId);
-      expect(store.getLastSeq(employeeId, deviceId: deviceId), equals(100));
+    test('updateLastSeq MAX 语义 - 更小值不回退', () async {
+      await store.updateLastSeq(employeeId, 100, deviceId: deviceId);
+      await store.updateLastSeq(employeeId, 50, deviceId: deviceId);
+      expect(await store.getLastSeq(employeeId, deviceId: deviceId), equals(100));
     });
 
-    test('resetLastSeq enforceMax=false 可以降低', () {
-      store.updateLastSeq(employeeId, 100, deviceId: deviceId);
-      store.resetLastSeq(employeeId, 0, deviceId: deviceId, enforceMax: false);
-      expect(store.getLastSeq(employeeId, deviceId: deviceId), equals(0));
+    test('resetLastSeq enforceMax=false 可以降低', () async {
+      await store.updateLastSeq(employeeId, 100, deviceId: deviceId);
+      await store.resetLastSeq(employeeId, 0, deviceId: deviceId, enforceMax: false);
+      expect(await store.getLastSeq(employeeId, deviceId: deviceId), equals(0));
     });
 
-    test('resetLastSeq 默认 enforceMax=true 不降低', () {
-      store.updateLastSeq(employeeId, 100, deviceId: deviceId);
-      store.resetLastSeq(employeeId, 0, deviceId: deviceId);
-      expect(store.getLastSeq(employeeId, deviceId: deviceId), equals(100));
+    test('resetLastSeq 默认 enforceMax=true 不降低', () async {
+      await store.updateLastSeq(employeeId, 100, deviceId: deviceId);
+      await store.resetLastSeq(employeeId, 0, deviceId: deviceId);
+      expect(await store.getLastSeq(employeeId, deviceId: deviceId), equals(100));
     });
 
-    test('clearSeq 生命周期: set → get → clear → null', () {
-      expect(store.getClearSeq(employeeId, deviceId: deviceId), isNull);
+    test('clearSeq 生命周期: set → get → clear → null', () async {
+      expect(await store.getClearSeq(employeeId, deviceId: deviceId), isNull);
 
-      store.setClearSeq(employeeId, 100, deviceId: deviceId);
-      expect(store.getClearSeq(employeeId, deviceId: deviceId), equals(100));
+      await store.setClearSeq(employeeId, 100, deviceId: deviceId);
+      expect(await store.getClearSeq(employeeId, deviceId: deviceId), equals(100));
 
-      store.clearClearSeq(employeeId, deviceId: deviceId);
-      expect(store.getClearSeq(employeeId, deviceId: deviceId), isNull);
+      await store.clearClearSeq(employeeId, deviceId: deviceId);
+      expect(await store.getClearSeq(employeeId, deviceId: deviceId), isNull);
     });
 
-    test('setClearSeq MAX 语义', () {
-      store.setClearSeq(employeeId, 50, deviceId: deviceId);
-      store.setClearSeq(employeeId, 100, deviceId: deviceId);
-      expect(store.getClearSeq(employeeId, deviceId: deviceId), equals(100));
+    test('setClearSeq MAX 语义', () async {
+      await store.setClearSeq(employeeId, 50, deviceId: deviceId);
+      await store.setClearSeq(employeeId, 100, deviceId: deviceId);
+      expect(await store.getClearSeq(employeeId, deviceId: deviceId), equals(100));
 
-      store.setClearSeq(employeeId, 30, deviceId: deviceId);
-      expect(store.getClearSeq(employeeId, deviceId: deviceId), equals(100));
+      await store.setClearSeq(employeeId, 30, deviceId: deviceId);
+      expect(await store.getClearSeq(employeeId, deviceId: deviceId), equals(100));
     });
 
-    test('deviceId 隔离', () {
-      store.updateLastSeq(employeeId, 100, deviceId: 'devA');
-      store.updateLastSeq(employeeId, 200, deviceId: 'devB');
+    test('deviceId 隔离', () async {
+      await store.updateLastSeq(employeeId, 100, deviceId: 'devA');
+      await store.updateLastSeq(employeeId, 200, deviceId: 'devB');
 
-      expect(store.getLastSeq(employeeId, deviceId: 'devA'), equals(100));
-      expect(store.getLastSeq(employeeId, deviceId: 'devB'), equals(200));
-      expect(store.getLastSeq(employeeId, deviceId: deviceId), equals(0));
+      expect(await store.getLastSeq(employeeId, deviceId: 'devA'), equals(100));
+      expect(await store.getLastSeq(employeeId, deviceId: 'devB'), equals(200));
+      expect(await store.getLastSeq(employeeId, deviceId: deviceId), equals(0));
     });
 
-    test('清空会话后重置水位线完整流程', () {
+    test('清空会话后重置水位线完整流程', () async {
       // 1. 正常同步
-      store.updateLastSeq(employeeId, 200, deviceId: deviceId);
+      await store.updateLastSeq(employeeId, 200, deviceId: deviceId);
       // 2. 清空会话
-      store.setClearSeq(employeeId, 200, deviceId: deviceId);
-      store.resetLastSeq(employeeId, 200, deviceId: deviceId);
+      await store.setClearSeq(employeeId, 200, deviceId: deviceId);
+      await store.resetLastSeq(employeeId, 200, deviceId: deviceId);
       // 3. 处理完清空
-      store.clearClearSeq(employeeId, deviceId: deviceId);
+      await store.clearClearSeq(employeeId, deviceId: deviceId);
       // 4. 新消息继续
-      store.updateLastSeq(employeeId, 210, deviceId: deviceId);
-      store.updateLastSeq(employeeId, 220, deviceId: deviceId);
+      await store.updateLastSeq(employeeId, 210, deviceId: deviceId);
+      await store.updateLastSeq(employeeId, 220, deviceId: deviceId);
 
-      expect(store.getLastSeq(employeeId, deviceId: deviceId), equals(220));
-      expect(store.getClearSeq(employeeId, deviceId: deviceId), isNull);
+      expect(await store.getLastSeq(employeeId, deviceId: deviceId), equals(220));
+      expect(await store.getClearSeq(employeeId, deviceId: deviceId), isNull);
     });
   });
 
@@ -1259,11 +1259,11 @@ void main() {
     late SessionSummaryStore store;
     const employeeId = 'emp-sync-summary';
 
-    setUp(() {
+    setUp(() async {
       store = SessionSummaryStore(deviceId: deviceId);
     });
 
-    test('首次 upsertFromRemote 插入新记录', () {
+    test('首次 upsertFromRemote 插入新记录', () async {
       final remote = SessionSummaryEntity(
         employeeId: employeeId,
         deviceId: 'dev-remote',
@@ -1276,19 +1276,19 @@ void main() {
         updateTime: 1718438400000,
       );
 
-      store.upsertFromRemote(remote);
+      await sawait await ore.upsertFromRemote(remote);
 
       // 查询验证（通过 getSummary）
-      final summary = store.getSummary(employeeId, deviceId: 'dev-remote');
+      final summary = await store.getSummary(employeeId, deviceId: 'dev-remote');
       expect(summary, isNotNull);
       expect(summary!.unreadCount, equals(3));
       expect(summary.lastMsgId, equals('msg-001'));
       expect(summary.lastMsgContent, equals('Hello'));
     });
 
-    test('未读数取 MAX（不丢失）', () {
+    test('未读数取 MAX（不丢失）', () async {
       // 先插入本地有 5 条未读
-      store.upsertFromRemote(SessionSummaryEntity(
+      await sawait await ore.upsertFromRemote(SessionSummaryEntity(
         employeeId: employeeId,
         deviceId: 'dev-max',
         unreadCount: 5,
@@ -1297,7 +1297,7 @@ void main() {
       ));
 
       // 远程同步来 2 条未读 → 应取 MAX = 5
-      store.upsertFromRemote(SessionSummaryEntity(
+      await sawait await ore.upsertFromRemote(SessionSummaryEntity(
         employeeId: employeeId,
         deviceId: 'dev-max',
         unreadCount: 2,
@@ -1305,12 +1305,12 @@ void main() {
         updateTime: 200,
       ));
 
-      final summary = store.getSummary(employeeId, deviceId: 'dev-max');
+      final summary = await store.getSummary(employeeId, deviceId: 'dev-max');
       expect(summary!.unreadCount, equals(5));
     });
 
-    test('最新消息字段：远程 lastMsgTime 更新时覆盖', () {
-      store.upsertFromRemote(SessionSummaryEntity(
+    test('最新消息字段：远程 lastMsgTime 更新时覆盖', () async {
+      await sawait await ore.upsertFromRemote(SessionSummaryEntity(
         employeeId: employeeId,
         deviceId: 'dev-msg',
         lastMsgId: 'msg-old',
@@ -1319,7 +1319,7 @@ void main() {
         updateTime: 100,
       ));
 
-      store.upsertFromRemote(SessionSummaryEntity(
+      await sawait await ore.upsertFromRemote(SessionSummaryEntity(
         employeeId: employeeId,
         deviceId: 'dev-msg',
         lastMsgId: 'msg-new',
@@ -1328,13 +1328,13 @@ void main() {
         updateTime: 200,
       ));
 
-      final summary = store.getSummary(employeeId, deviceId: 'dev-msg');
+      final summary = await store.getSummary(employeeId, deviceId: 'dev-msg');
       expect(summary!.lastMsgId, equals('msg-new'));
       expect(summary.lastMsgContent, equals('New message'));
     });
 
-    test('最新消息字段：远程 lastMsgTime 更旧时不覆盖', () {
-      store.upsertFromRemote(SessionSummaryEntity(
+    test('最新消息字段：远程 lastMsgTime 更旧时不覆盖', () async {
+      await sawait await ore.upsertFromRemote(SessionSummaryEntity(
         employeeId: employeeId,
         deviceId: 'dev-msg2',
         lastMsgId: 'msg-new',
@@ -1343,7 +1343,7 @@ void main() {
         updateTime: 200,
       ));
 
-      store.upsertFromRemote(SessionSummaryEntity(
+      await sawait await ore.upsertFromRemote(SessionSummaryEntity(
         employeeId: employeeId,
         deviceId: 'dev-msg2',
         lastMsgId: 'msg-old',
@@ -1352,19 +1352,19 @@ void main() {
         updateTime: 100,
       ));
 
-      final summary = store.getSummary(employeeId, deviceId: 'dev-msg2');
+      final summary = await store.getSummary(employeeId, deviceId: 'dev-msg2');
       expect(summary!.lastMsgId, equals('msg-new'));
       expect(summary.lastMsgContent, equals('New message'));
     });
 
-    test('pendingPermission: 远程有值本地无 → 采用远程', () {
-      store.upsertFromRemote(SessionSummaryEntity(
+    test('pendingPermission: 远程有值本地无 → 采用远程', () async {
+      await sawait await ore.upsertFromRemote(SessionSummaryEntity(
         employeeId: employeeId,
         deviceId: 'dev-perm',
         updateTime: 100,
       ));
 
-      store.upsertFromRemote(SessionSummaryEntity(
+      await sawait await ore.upsertFromRemote(SessionSummaryEntity(
         employeeId: employeeId,
         deviceId: 'dev-perm',
         pendingPermission: '{"type":"file_read"}',
@@ -1372,13 +1372,13 @@ void main() {
         updateTime: 200,
       ));
 
-      final summary = store.getSummary(employeeId, deviceId: 'dev-perm');
+      final summary = await store.getSummary(employeeId, deviceId: 'dev-perm');
       expect(summary!.hasPendingPermission, isTrue);
       expect(summary.pendingPermission, equals('{"type":"file_read"}'));
     });
 
-    test('pendingPermission: 本地有值远程无 → 保持本地', () {
-      store.upsertFromRemote(SessionSummaryEntity(
+    test('pendingPermission: 本地有值远程无 → 保持本地', () async {
+      await sawait await ore.upsertFromRemote(SessionSummaryEntity(
         employeeId: employeeId,
         deviceId: 'dev-perm2',
         pendingPermission: '{"type":"file_write"}',
@@ -1386,13 +1386,13 @@ void main() {
         updateTime: 200,
       ));
 
-      store.upsertFromRemote(SessionSummaryEntity(
+      await sawait await ore.upsertFromRemote(SessionSummaryEntity(
         employeeId: employeeId,
         deviceId: 'dev-perm2',
         updateTime: 300,
       ));
 
-      final summary = store.getSummary(employeeId, deviceId: 'dev-perm2');
+      final summary = await store.getSummary(employeeId, deviceId: 'dev-perm2');
       expect(summary!.hasPendingPermission, isTrue);
       expect(summary.pendingPermission, equals('{"type":"file_write"}'));
     });

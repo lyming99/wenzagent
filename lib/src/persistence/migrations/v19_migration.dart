@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import 'migration.dart';
 
@@ -13,12 +13,12 @@ class V19Migration extends Migration {
   int get version => 19;
 
   @override
-  void onUpgrade(Database db) {
+  Future<void> onUpgrade(SqliteDatabase db) async {
     // 1. 删除可能存在的旧索引（联合索引或单列索引同名）
-    _dropIndexIfExists(db, 'idx_skills_employee');
+    await _dropIndexIfExists(db, 'idx_skills_employee');
 
     // 2. 创建新的单列索引（只按 employee_id）
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_skills_employee
         ON skills(employee_id);
     ''');
@@ -27,14 +27,17 @@ class V19Migration extends Migration {
   }
 
   /// 安全删除索引（如果存在）
-  void _dropIndexIfExists(Database db, String indexName) {
+  Future<void> _dropIndexIfExists(
+    SqliteDatabase db,
+    String indexName,
+  ) async {
     try {
-   final result = db.select(
+      final result = await db.getAll(
         "SELECT name FROM sqlite_master WHERE type='index' AND name=?",
         [indexName],
       );
       if (result.isNotEmpty) {
-        db.execute('DROP INDEX $indexName');
+        await db.execute('DROP INDEX $indexName');
       }
     } catch (_) {
       // 忽略错误，索引可能不存在

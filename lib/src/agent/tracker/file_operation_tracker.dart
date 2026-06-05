@@ -165,18 +165,18 @@ class FileOperationTracker {
   }
 
   /// 查询文件操作记录
-  List<FileOperationEntity> getOperations(
-      {int limit = 100, int offset = 0}) {
-    return _store.findByEmployee(employeeId, limit: limit, offset: offset);
+  Future<List<FileOperationEntity>> getOperations(
+      {int limit = 100, int offset = 0}) async {
+    return await _store.findByEmployee(employeeId, limit: limit, offset: offset);
   }
 
   /// 查询指定消息的文件操作
-  List<FileOperationEntity> getOperationsByMessage(String messageId) {
-    return _store.findByMessageId(messageId);
+  Future<List<FileOperationEntity>> getOperationsByMessage(String messageId) async {
+    return await _store.findByMessageId(messageId);
   }
 
   /// 清除文件操作记录
-  void clear() {
-    _store.deleteByEmployee(employeeId);
+  Future<void> clear() async {
+    await _store.deleteByEmployee(employeeId);
   }
 }

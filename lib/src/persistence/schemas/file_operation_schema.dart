@@ -1,9 +1,9 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 /// file_operations 表 schema
 class FileOperationSchema {
-  static void create(Database db) {
-    db.execute('''
+  static Future<void> create(SqliteDatabase db) async {
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS file_operations (
         id              TEXT PRIMARY KEY,
         employee_id     TEXT NOT NULL,
@@ -19,11 +19,11 @@ class FileOperationSchema {
         created_at      INTEGER NOT NULL
       );
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_file_ops_employee
         ON file_operations(employee_id, created_at DESC);
     ''');
-    db.execute('''
+    await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_file_ops_message
         ON file_operations(message_id);
     ''');

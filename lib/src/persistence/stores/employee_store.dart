@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import '../database_manager.dart';
 import '../entities/employee_entity.dart';
@@ -12,7 +12,7 @@ class EmployeeStore {
   EmployeeStore({String? deviceId, DatabaseManager? dbManager})
       : _dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
 
-  Database get _db {
+  SqliteDatabase get _db {
     if (!_dbManager.isInitialized) {
       throw StateError(
         '$runtimeType: DatabaseManager 未初始化，请先调用 initialize()。',
@@ -22,7 +22,7 @@ class EmployeeStore {
   }
 
   /// 从数据库行解码为实体
-  AiEmployeeEntity _rowToEntity(Row row) {
+  AiEmployeeEntity _rowToEntity(Map<String, Object?> row) {
     return AiEmployeeEntity.fromMap({
       'uuid': row['uuid'],
       'name': row['name'],
@@ -125,13 +125,13 @@ class EmployeeStore {
     final sql =
         'SELECT * FROM employees WHERE $where ORDER BY is_pinned DESC, sort_order ASC';
 
-    final resultSet = _db.select(sql, params);
+    final resultSet = await _db.getAll(sql, params);
     return resultSet.map(_rowToEntity).toList();
   }
 
   /// 查找单个员工（包含已删除的，用于同步合并场景）
   Future<AiEmployeeEntity?> findIncludingDeleted(String uuid) async {
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT * FROM employees WHERE uuid = ? LIMIT 1',
       [uuid],
     );
@@ -152,7 +152,7 @@ class EmployeeStore {
     }
 
     final where = conditions.join(' AND ');
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT * FROM employees WHERE $where',
       params,
     );
@@ -174,7 +174,7 @@ class EmployeeStore {
     ];
     final placeholders = List.filled(columns.length, '?').join(', ');
     final columnList = columns.join(', ');
-    _db.execute(
+    await _db.execute(
       'INSERT OR REPLACE INTO employees ($columnList) VALUES ($placeholders)',
       _entityToParams(entity),
     );
@@ -183,7 +183,7 @@ class EmployeeStore {
   /// 删除员工（软删除）
   Future<void> delete(String? deviceId, String uuid) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    _db.execute(
+    await _db.execute(
       'UPDATE employees SET deleted = 1, deleted_time = ?, update_time = ? WHERE uuid = ?',
       [now, now, uuid],
     );
@@ -204,7 +204,7 @@ class EmployeeStore {
     }
 
     final where = conditions.join(' AND ');
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT COUNT(*) as cnt FROM employees WHERE $where',
       params,
     );
@@ -213,7 +213,7 @@ class EmployeeStore {
 
   /// 检查员工是否存在
   Future<bool> exists(String? deviceId, String uuid) async {
-    final resultSet = _db.select(
+    final resultSet = await _db.getAll(
       'SELECT 1 FROM employees WHERE uuid = ? AND deleted = 0 LIMIT 1',
       [uuid],
     );

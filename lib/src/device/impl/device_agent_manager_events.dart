@@ -165,7 +165,7 @@ extension DeviceAgentManagerEvents on DeviceAgentManager {
   }
 
   /// 广播 Agent 事件到 LAN
-  void broadcastAgentEvent(String employeeId, AgentEvent event) {
+  void broadcastAgentEvent(String employeeId, AgentEvent event) async {
     final lanClient = _connectionManager.lanClient;
     if (lanClient == null || !lanClient.isConnected) return;
 
@@ -218,7 +218,7 @@ extension DeviceAgentManagerEvents on DeviceAgentManager {
     Map<String, dynamic> broadcastData = data;
     if (type == AgentEventType.sessionSummaryChanged) {
       final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-      final summary = summaryStore.getSummary(employeeId, deviceId: _deviceId);
+      final summary = await summaryStore.getSummary(employeeId, deviceId: _deviceId);
       broadcastData = Map<String, dynamic>.from(data);
       if (summary != null) {
         broadcastData['summary'] = summary.toMap();
@@ -243,12 +243,12 @@ extension DeviceAgentManagerEvents on DeviceAgentManager {
   }
 
   /// 广播会话摘要到 LAN（助手消息完成后调用）
-  void _broadcastSessionSummary({required String employeeId}) {
+  Future<void> _broadcastSessionSummary({required String employeeId}) async {
     final lanClient = _connectionManager.lanClient;
     if (lanClient == null || !lanClient.isConnected) return;
 
     final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-    final summary = summaryStore.getSummary(employeeId, deviceId: _deviceId);
+    final summary = await summaryStore.getSummary(employeeId, deviceId: _deviceId);
 
     final msg = LanMessage(
       type: LanMessageType.agentSessionSummaryChanged,

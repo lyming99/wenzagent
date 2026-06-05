@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import 'migration.dart';
 
@@ -11,14 +11,14 @@ class V21Migration implements Migration {
   int get version => 21;
 
   @override
-  void onUpgrade(Database db) {
+  Future<void> onUpgrade(SqliteDatabase db) async {
     // 先检查列是否已存在，防止因历史部分迁移导致 duplicate column 错误
-    final result = db.select(
+    final result = await db.getAll(
       "SELECT count(*) AS cnt FROM pragma_table_info('skills') WHERE name = 'origin_name'",
     );
     final exists = (result.first['cnt'] as int) > 0;
     if (!exists) {
-      db.execute('ALTER TABLE skills ADD COLUMN origin_name TEXT');
+      await db.execute('ALTER TABLE skills ADD COLUMN origin_name TEXT');
     }
   }
 }

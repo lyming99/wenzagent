@@ -434,9 +434,9 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
     _pendingConfirmRequests.clear();
 
     // 在删除前获取本地 maxSeq，用于设置 clearSeq = lastSeq = maxSeq
-    final maxSeq = _messageStore.getMaxSeq(_deviceId, _employeeId);
+    final maxSeq = await _messageStore.getMaxSeq(_deviceId, _employeeId);
     // 获取当前水位线，确保不回退
-    final currentLastSeq = _messageStore.getLastSeq(_deviceId, _employeeId);
+    final currentLastSeq = await _messageStore.getLastSeq(_deviceId, _employeeId);
     await _messageStore.deleteMessages(_deviceId, _employeeId);
     // 水位线取 maxSeq 和 currentLastSeq 的较大值，确保不回退
     final targetSeq = maxSeq > currentLastSeq ? maxSeq : currentLastSeq;

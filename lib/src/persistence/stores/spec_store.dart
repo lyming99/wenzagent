@@ -1,4 +1,4 @@
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite_async/sqlite_async.dart';
 
 import '../database_manager.dart';
 import '../entities/spec_item_entity.dart';
@@ -12,7 +12,7 @@ class SpecStore {
   SpecStore({String? deviceId, DatabaseManager? dbManager})
       : _dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
 
-  Database get _db {
+  SqliteDatabase get _db {
     if (!_dbManager.isInitialized) {
       throw StateError(
         '$runtimeType: DatabaseManager 未初始化，请先调用 initialize()。',
@@ -24,7 +24,7 @@ class SpecStore {
   // ===== SpecItem 操作 =====
 
   /// 从数据库行解码为 SpecItemEntity
-  SpecItemEntity _rowToItem(Row row) {
+  SpecItemEntity _rowToItem(Map<String, Object?> row) {
     return SpecItemEntity.fromMap({
       'id': row['id'],
       'employeeId': row['employee_id'],
@@ -41,8 +41,8 @@ class SpecStore {
   }
 
   /// 查询员工的活跃 spec 项（pending + in_progress + draft）
-  List<SpecItemEntity> findActiveByEmployee(String employeeId) {
-    final resultSet = _db.select(
+  Future<List<SpecItemEntity>> findActiveByEmployee(String employeeId) async {
+    final resultSet = await _db.getAll(
       "SELECT * FROM spec_items WHERE employee_id = ? AND deleted = 0 AND status IN ('draft', 'pending', 'in_progress') ORDER BY sort_order ASC, create_time ASC",
       [employeeId],
     );
@@ -50,9 +50,9 @@ class SpecStore {
   }
 
   /// 查询员工的已完成 spec 项
-  List<SpecItemEntity> findCompletedByEmployee(String employeeId,
-      {int limit = 50}) {
-    final resultSet = _db.select(
+  Future<List<SpecItemEntity>> findCompletedByEmployee(String employeeId,
+      {int limit = 50}) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM spec_items WHERE employee_id = ? AND deleted = 0 AND status = ? ORDER BY update_time DESC LIMIT ?',
       [employeeId, 'completed', limit],
     );
@@ -60,8 +60,8 @@ class SpecStore {
   }
 
   /// 按 ID 查询单个 spec 项（不含已删除）
-  SpecItemEntity? findById(String id) {
-    final resultSet = _db.select(
+  Future<SpecItemEntity?> findById(String id) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM spec_items WHERE id = ? AND deleted = 0',
       [id],
     );
@@ -72,8 +72,8 @@ class SpecStore {
   }
 
   /// 按 ID 查询单个 spec 项（含已删除）
-  SpecItemEntity? findByIdIncludingDeleted(String id) {
-    final resultSet = _db.select(
+  Future<SpecItemEntity?> findByIdIncludingDeleted(String id) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM spec_items WHERE id = ?',
       [id],
     );
@@ -84,8 +84,8 @@ class SpecStore {
   }
 
   /// 查询员工的所有 spec 项（含已删除）
-  List<SpecItemEntity> findAllByEmployee(String employeeId) {
-    final resultSet = _db.select(
+  Future<List<SpecItemEntity>> findAllByEmployee(String employeeId) async {
+    final resultSet = await _db.getAll(
       'SELECT * FROM spec_items WHERE employee_id = ? ORDER BY sort_order ASC, create_time ASC',
       [employeeId],
     );
@@ -93,8 +93,8 @@ class SpecStore {
   }
 
   /// 保存 spec 项（INSERT OR REPLACE）
-  void save(SpecItemEntity item) {
-    _db.execute('''
+  Future<void> save(SpecItemEntity item) async {
+    await _db.execute('''
       INSERT OR REPLACE INTO spec_items (
         id, employee_id, title, content, status,
         priority, tags, sort_order, deleted, create_time, update_time
@@ -115,27 +115,27 @@ class SpecStore {
   }
 
   /// 更新状态
-  void updateStatus(String id, String status) {
-    _db.execute(
+  Future<void> updateStatus(String id, String status) async {
+    await _db.execute(
       'UPDATE spec_items SET status = ?, update_time = ? WHERE id = ?',
       [status, DateTime.now().millisecondsSinceEpoch, id],
     );
   }
 
   /// 更新内容
-  void updateContent(String id, {String? title, String? content}) {
+  Future<void> updateContent(String id, {String? title, String? content}) async {
     if (title != null && content != null) {
-      _db.execute(
+      await _db.execute(
         'UPDATE spec_items SET title = ?, content = ?, update_time = ? WHERE id = ?',
         [title, content, DateTime.now().millisecondsSinceEpoch, id],
       );
     } else if (title != null) {
-      _db.execute(
+      await _db.execute(
         'UPDATE spec_items SET title = ?, update_time = ? WHERE id = ?',
         [title, DateTime.now().millisecondsSinceEpoch, id],
       );
     } else if (content != null) {
-      _db.execute(
+      await _db.execute(
         'UPDATE spec_items SET content = ?, update_time = ? WHERE id = ?',
         [content, DateTime.now().millisecondsSinceEpoch, id],
       );
@@ -143,37 +143,32 @@ class SpecStore {
   }
 
   /// 软删除
-  void softDelete(String id) {
-    _db.execute(
+  Future<void> softDelete(String id) async {
+    await _db.execute(
       'UPDATE spec_items SET deleted = 1, update_time = ? WHERE id = ?',
       [DateTime.now().millisecondsSinceEpoch, id],
     );
   }
 
   /// 批量硬删除已完成的项
-  void deleteCompletedByEmployee(String employeeId) {
-    _db.execute(
+  Future<void> deleteCompletedByEmployee(String employeeId) async {
+    await _db.execute(
       'DELETE FROM spec_items WHERE employee_id = ? AND status = ?',
       [employeeId, 'completed'],
     );
   }
 
   /// 批量更新 spec 排序（事务）
-  void reorderSpecs(List<String> specIds) {
-    _db.execute('BEGIN TRANSACTION');
-    try {
+  Future<void> reorderSpecs(List<String> specIds) async {
+    await _db.writeTransaction((tx) async {
       final now = DateTime.now().millisecondsSinceEpoch;
       for (int i = 0; i < specIds.length; i++) {
-        _db.execute(
+        await tx.execute(
           'UPDATE spec_items SET sort_order = ?, update_time = ? WHERE id = ?',
           [i, now, specIds[i]],
         );
       }
-      _db.execute('COMMIT');
-    } catch (e) {
-      _db.execute('ROLLBACK');
-      rethrow;
-    }
+    });
   }
 
   // ===== 远程同步 merge 方法 =====
@@ -186,11 +181,11 @@ class SpecStore {
   /// - 软删除合并：取 deleted=1 的一方（双方都删除则保留较新的）
   ///
   /// 返回 true 表示数据有变化（新增或更新）
-  bool upsertFromRemote(SpecItemEntity remote) {
-    final existing = findByIdIncludingDeleted(remote.id);
+  Future<bool> upsertFromRemote(SpecItemEntity remote) async {
+    final existing = await findByIdIncludingDeleted(remote.id);
     if (existing == null) {
       // 本地不存在 → 直接插入
-      save(remote);
+      await save(remote);
       return true;
     }
 
@@ -212,7 +207,7 @@ class SpecStore {
 
     if (shouldUpdateData || shouldUpdateDelete) {
       final base = shouldUpdateData ? remote : existing;
-      save(base.copyWith(deleted: mergedDeleted));
+      await save(base.copyWith(deleted: mergedDeleted));
       return true;
     }
     return false;
@@ -221,10 +216,10 @@ class SpecStore {
   /// 从远程数据 merge 写入多个 spec 项（批量）
   ///
   /// 返回有变化的条数
-  int upsertAllFromRemote(List<SpecItemEntity> items) {
+  Future<int> upsertAllFromRemote(List<SpecItemEntity> items) async {
     int changedCount = 0;
     for (final item in items) {
-      if (upsertFromRemote(item)) {
+      if (await upsertFromRemote(item)) {
         changedCount++;
       }
     }
@@ -232,8 +227,8 @@ class SpecStore {
   }
 
   /// 按状态统计数量
-  Map<String, int> countByStatus(String employeeId) {
-    final resultSet = _db.select(
+  Future<Map<String, int>> countByStatus(String employeeId) async {
+    final resultSet = await _db.getAll(
       'SELECT status, COUNT(*) as cnt FROM spec_items WHERE employee_id = ? AND deleted = 0 GROUP BY status',
       [employeeId],
     );
@@ -252,8 +247,8 @@ class SpecStore {
   }
 
   /// 统计所有非删除 spec 的总数量（含已完成）
-  int countAll(String employeeId) {
-    final resultSet = _db.select(
+  Future<int> countAll(String employeeId) async {
+    final resultSet = await _db.getAll(
       'SELECT COUNT(*) as cnt FROM spec_items WHERE employee_id = ? AND deleted = 0',
       [employeeId],
     );

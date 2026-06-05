@@ -100,7 +100,7 @@ class DeviceNotificationManager {
 
   Future<void> setCurrentOpenSession({required String employeeId, String? fromDeviceId}) async {
     _currentOpenSession = OpenSessionState(employeeId: employeeId, fromDeviceId: fromDeviceId);
-    markAllMessagesAsRead(employeeId: employeeId, targetDeviceId: fromDeviceId);
+    await markAllMessagesAsRead(employeeId: employeeId, targetDeviceId: fromDeviceId);
   }
 
   void clearCurrentOpenSession() {
@@ -109,7 +109,7 @@ class DeviceNotificationManager {
 
   // ===== 已读管理 =====
 
-  void markAllMessagesAsRead({required String employeeId, String? targetDeviceId}) {
+  Future<void> markAllMessagesAsRead({required String employeeId, String? targetDeviceId}) async {
     // 使用 targetDeviceId（消息所在设备）而非本机 _deviceId，确保远程会话也能正确更新 DB
     final deviceId = targetDeviceId ?? _deviceId;
     // 1. 先写 DB（messages + session_summary），确保广播时数据已是最新
@@ -118,15 +118,15 @@ class DeviceNotificationManager {
     // 2. 更新内存层
     _stateHolder.notificationHub.markAllAsRead(employeeId: employeeId, fromDeviceId: targetDeviceId);
     // 3. 广播到远程设备（携带已读后的最新摘要）
-    _broadcastReadStatus(employeeId: employeeId, targetDeviceId: targetDeviceId);
+    await _broadcastReadStatus(employeeId: employeeId, targetDeviceId: targetDeviceId);
     // 4. 通知 agent 层
     _notifyAgentReadStatus(employeeId: employeeId, targetDeviceId: targetDeviceId);
   }
 
-  void markAllMessagesAsReadGlobal() {
+  Future<void> markAllMessagesAsReadGlobal() async {
     final employeeIds = _stateHolder.notificationHub.unreadEmployeeIds;
     for (final employeeId in employeeIds) {
-      markAllMessagesAsRead(employeeId: employeeId);
+      await markAllMessagesAsRead(employeeId: employeeId);
     }
   }
 
@@ -167,7 +167,7 @@ class DeviceNotificationManager {
     try {
       final summaryStore = SessionSummaryStore(deviceId: _deviceId);
       // 一次查询获取所有摘要（O(S)，S = 会话数）
-      final summaries = summaryStore.getAllSummaries(deviceId: _deviceId);
+      final summaries = await summaryStore.getAllSummaries(deviceId: _deviceId);
 
       for (final summary in summaries) {
         // 恢复未读计数（O(1) per session，直接从摘要表读取）
@@ -234,10 +234,10 @@ class DeviceNotificationManager {
   ///
   /// 遍历所有有 pending 请求的摘要，触发 notificationHub 事件，
   /// 使 UI 能在重启后显示未处理的权限/确认请求。
-  void restorePendingRequests() {
+  Future<void> restorePendingRequests() async {
     try {
       final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-      final pendingSummaries = summaryStore.getPendingSummaries();
+      final pendingSummaries = await summaryStore.getPendingSummaries();
 
       for (final summary in pendingSummaries) {
         if (summary.hasPendingPermission) {
@@ -371,12 +371,12 @@ class DeviceNotificationManager {
   }
 
   /// 广播带 pending 数据的会话摘要到远程设备
-  void _broadcastSessionSummaryWithPending(String employeeId, String fromDeviceId) {
+  Future<void> _broadcastSessionSummaryWithPending(String employeeId, String fromDeviceId) async {
     final lanClient = _connectionManager.lanClient;
     if (lanClient == null || !lanClient.isConnected) return;
 
     final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-    final summary = summaryStore.getSummary(employeeId, deviceId: fromDeviceId);
+    final summary = await summaryStore.getSummary(employeeId, deviceId: fromDeviceId);
 
     final msg = LanMessage(
       type: LanMessageType.agentSessionSummaryChanged,
@@ -456,17 +456,17 @@ class DeviceNotificationManager {
 
   // ===== 广播已读状态 =====
 
-  void _broadcastReadStatus({
+  Future<void> _broadcastReadStatus({
     required String employeeId,
     String? targetDeviceId,
-  }) {
+  }) async {
     final lanClient = _connectionManager.lanClient;
     if (lanClient == null || !lanClient.isConnected) return;
 
     // 使用 targetDeviceId（消息所在设备）查找摘要，确保远程会话也能获取正确的摘要
     final deviceId = targetDeviceId ?? _deviceId;
     // 发送完整摘要数据，使远程设备能正确更新 session summary
-    final summary = _messageStoreService.getLatestMessageSummary(deviceId, employeeId);
+    final summary = await _messageStoreService.getLatestMessageSummary(deviceId, employeeId);
 
     final msg = LanMessage(
       type: LanMessageType.agentSessionSummaryChanged,
