@@ -39,6 +39,9 @@ enum MessageStatus {
   /// 处理中
   processing,
 
+  /// LLM 调用重试中
+  retrying,
+
   /// 已完成
   completed,
 

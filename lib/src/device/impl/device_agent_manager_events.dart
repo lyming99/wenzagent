@@ -157,7 +157,9 @@ extension DeviceAgentManagerEvents on DeviceAgentManager {
               }
             })
             .catchError((e) {
-              DeviceAgentManager._log.debug('getSessionMessagesByUserCount failed: $e');
+              DeviceAgentManager._log.debug(
+                'getSessionMessagesByUserCount failed: $e',
+              );
             });
       }
     });
@@ -209,6 +211,7 @@ extension DeviceAgentManagerEvents on DeviceAgentManager {
       // streamDelta 和 thinkingDelta 为高频事件，仅本地使用，不广播到 LAN
       case AgentEventType.streamDelta:
       case AgentEventType.thinkingDelta:
+      case AgentEventType.llmRetrying:
         return;
       default:
         return;
@@ -218,7 +221,10 @@ extension DeviceAgentManagerEvents on DeviceAgentManager {
     Map<String, dynamic> broadcastData = data;
     if (type == AgentEventType.sessionSummaryChanged) {
       final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-      final summary = await summaryStore.getSummary(employeeId, deviceId: _deviceId);
+      final summary = await summaryStore.getSummary(
+        employeeId,
+        deviceId: _deviceId,
+      );
       broadcastData = Map<String, dynamic>.from(data);
       if (summary != null) {
         broadcastData['summary'] = summary.toMap();
@@ -248,7 +254,10 @@ extension DeviceAgentManagerEvents on DeviceAgentManager {
     if (lanClient == null || !lanClient.isConnected) return;
 
     final summaryStore = SessionSummaryStore(deviceId: _deviceId);
-    final summary = await summaryStore.getSummary(employeeId, deviceId: _deviceId);
+    final summary = await summaryStore.getSummary(
+      employeeId,
+      deviceId: _deviceId,
+    );
 
     final msg = LanMessage(
       type: LanMessageType.agentSessionSummaryChanged,

@@ -114,7 +114,7 @@ class AgentLatestMessageClearedEvent extends AgentNotificationEvent {
 class AgentStatusNotifyEvent extends AgentNotificationEvent {
   final String employeeId;
   final String fromDeviceId;
-  final String status; // idle / processing / streaming / waitingPermission
+  final String status; // idle / processing / streaming / retrying / waitingPermission
   final Map<String, dynamic>? extra;
 
   AgentStatusNotifyEvent({

@@ -217,6 +217,20 @@ class AiConnectionTester {
         if (statusCode == 401) {
           return 'API 密钥无效或已过期';
         }
+        if (statusCode == 402) {
+          return 'API 余额不足，请检查您的账户余额或升级套餐';
+        }
+        if (statusCode == 403) {
+          return 'API 访问被拒绝，请检查您的账户权限或 API 密钥是否具有相应权限';
+        }
+        if (statusCode == 404) {
+          // 尝试从响应体中提取模型相关信息
+          final body = e.response?.data?.toString() ?? '';
+          if (body.contains('model') || body.contains('Model')) {
+            return '模型不存在或不可用，请检查模型名称是否正确';
+          }
+          return 'API 端点不存在 (HTTP 404)，请检查 API 地址是否正确';
+        }
         return 'API 返回错误 (HTTP $statusCode): ${e.response?.statusMessage ?? '未知'}';
       default:
         return '连接失败: ${e.message ?? e.type.toString()}';

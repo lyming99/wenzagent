@@ -95,11 +95,13 @@ class RetryUtil {
   ///
   /// 以下错误可重试：
   /// - [DioException] 类型为 connectionError, connectionTimeout, sendTimeout, receiveTimeout
-  /// - [DioException] 类型为 badResponse 且状态码在可重试列表中（429, 5xx）
+  /// - [DioException] 类型为 badResponse 且状态码在可重试列表中（408, 429, 5xx）
+  /// - [DioException] 类型为 unknown 且为临时性网络错误（连接重置、DNS 失败等）
   /// - 其他非 [StateError]、[TypeError]、[ArgumentError] 的异常
   ///
   /// 以下错误**不可重试**：
   /// - 上下文长度超限（context_length_exceeded / maximum context length）
+  /// - 429 配额用尽（insufficient_quota / billing 相关）
   /// - 无效请求（400）中包含 token 超限信息
   static bool isRetryableError(Object error) {
     // 先检查错误消息中是否包含 token/上下文超限关键词
@@ -119,16 +121,25 @@ class RetryUtil {
         case DioExceptionType.badResponse:
           final statusCode = error.response?.statusCode;
           if (statusCode != null) {
-            // 400 Bad Request 但不是 token 超限（已在上方过滤）
-            // 429 频率限制，5xx 服务端错误
-            return statusCode == 429 ||
+            // 429 频率限制：但需排除配额用尽的情况
+            if (statusCode == 429) {
+              if (_isQuotaExhaustedError(error)) {
+                _log.warn('检测到 API 配额用尽，不重试: $error');
+                return false;
+              }
+              return true;
+            }
+            // 408 请求超时，5xx 服务端错误
+            return statusCode == 408 ||
                 (statusCode >= 500 && statusCode < 600);
           }
           return false;
         case DioExceptionType.cancel:
         case DioExceptionType.badCertificate:
-        case DioExceptionType.unknown:
           return false;
+        case DioExceptionType.unknown:
+          // 检查是否为临时性网络错误（连接重置、DNS 失败等），这些值得重试
+          return _isTransientNetworkError(error);
       }
     }
 
@@ -180,5 +191,76 @@ class RetryUtil {
     if (!hasContextKeyword) return false;
 
     return tokenLimitPatterns.any((p) => errorStr.contains(p));
+  }
+
+  /// 检查 429 错误是否为配额用尽（而非频率限制）
+  ///
+  /// OpenAI 429 响应体中可能包含：
+  /// - "insufficient_quota" / "billing_hard_limit_reached"
+  /// - "You exceeded your current quota"
+  /// - "Please check your plan and billing details"
+  ///
+  /// 配额用尽不应重试（重试只会浪费延迟），而频率限制可以等待后重试。
+  static bool _isQuotaExhaustedError(DioException error) {
+    final responseBody = error.response?.data;
+    final errorStr = responseBody?.toString().toLowerCase() ??
+        error.message?.toLowerCase() ??
+        '';
+
+    const quotaPatterns = [
+      'insufficient_quota',
+      'billing_hard_limit_reached',
+      'exceeded your current quota',
+      'check your plan and billing',
+      'billing limit',
+      'account has been deactivated',
+      'api key has been revoked',
+    ];
+
+    return quotaPatterns.any((p) => errorStr.contains(p));
+  }
+
+  /// 检查 DioExceptionType.unknown 是否为临时性网络错误
+  ///
+  /// unknown 类型的 DioException 可能包含各种底层错误，
+  /// 其中一些是临时性的（如连接重置、DNS 解析失败），值得重试；
+  /// 而另一些（如 SSL 证书错误、文件不存在）则不应重试。
+  static bool _isTransientNetworkError(DioException error) {
+    final errorMsg = error.error?.toString().toLowerCase() ?? '';
+    final messageStr = error.message?.toLowerCase() ?? '';
+    final combined = '$errorMsg $messageStr';
+
+    // 临时性网络错误模式 → 可重试
+    const transientPatterns = [
+      'connection reset',
+      'broken pipe',
+      'connection refused',
+      'network is unreachable',
+      'no route to host',
+      'software caused connection abort',
+      'connection timed out',
+      'timed out',
+      'recv failure',
+      'send failure',
+      'connection aborted',
+      'name resolution', // DNS 解析临时失败
+      'temporary failure in name resolution',
+      'host lookup failed',
+      'errno =', // 系统级网络错误
+      'socket exception',
+      'handshake error', // TLS 握手临时失败
+      'connection closed prematurely',
+    ];
+
+    final isTransient = transientPatterns.any((p) => combined.contains(p));
+
+    if (isTransient) {
+      _log.info('检测到临时性网络错误，将重试: $errorMsg');
+      return true;
+    }
+
+    // 无法判断的 unknown 错误，保守不重试
+    _log.warn('DioExceptionType.unknown，无法确认为临时错误，不重试: $errorMsg');
+    return false;
   }
 }

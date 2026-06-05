@@ -496,8 +496,16 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
       throw Exception('未配置 LLM Provider');
     }
     final messages = [llm.ChatMessage.user(prompt)];
-    final response = await _chatCapability!.chat(messages);
-    return response.text ?? '';
+    final retryConfig = _providerConfig?.retryConfig ?? const RetryConfig();
+    try {
+      return await RetryUtil.executeWithRetry<String>(
+        () async => (await _chatCapability!.chat(messages)).text ?? '',
+        config: retryConfig,
+      );
+    } on AggregateException catch (e) {
+      _log.error('invokeOnce 在 ${e.errors.length} 次尝试后全部失败');
+      return '';
+    }
   }
 
   @override

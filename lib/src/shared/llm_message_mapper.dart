@@ -22,10 +22,14 @@ class _ToolResultInfo {
   final String toolCallId;
   final ChatMessage msg;
   final ToolResult? result; // 分组中的单个 result（单条 tool result 时为 null）
+  final int sourceIndex;
+  final int resultIndex;
 
   const _ToolResultInfo({
     required this.toolCallId,
     required this.msg,
+    required this.sourceIndex,
+    required this.resultIndex,
     this.result,
   });
 }
@@ -57,14 +61,18 @@ class LlmMessageMapper {
               .toList();
           if (validToolCalls.isNotEmpty) {
             final toolUseMsg = llm.ChatMessage.toolUse(
-              toolCalls: validToolCalls.map((tc) => llm.ToolCall(
-                    id: tc.id,
-                    callType: 'function',
-                    function: llm.FunctionCall(
-                      name: tc.name,
-                      arguments: tc.argumentsJson,
+              toolCalls: validToolCalls
+                  .map(
+                    (tc) => llm.ToolCall(
+                      id: tc.id,
+                      callType: 'function',
+                      function: llm.FunctionCall(
+                        name: tc.name,
+                        arguments: tc.argumentsJson,
+                      ),
                     ),
-                  )).toList(),
+                  )
+                  .toList(),
               content: msg.content ?? '',
             );
             // 回传 thinking 内容
@@ -73,7 +81,9 @@ class LlmMessageMapper {
             }
             return toolUseMsg;
           } else {
-            _log.warn('toLlmDart: assistant 消息的所有 toolCall name 为空，降级为纯文本 (id=${msg.id})');
+            _log.warn(
+              'toLlmDart: assistant 消息的所有 toolCall name 为空，降级为纯文本 (id=${msg.id})',
+            );
             return _buildAssistantMessageWithThinking(msg, provider: provider);
           }
         }
@@ -137,8 +147,12 @@ class LlmMessageMapper {
             ? jsonEncode({'error': msg.content ?? ''})
             : jsonEncode({'result': msg.content ?? ''});
         // 防御性校验：确保 name 不为空
-        final toolName = msg.toolName?.isNotEmpty == true ? msg.toolName! : 'unknown';
-        final toolCallId = msg.toolCallId?.isNotEmpty == true ? msg.toolCallId! : '';
+        final toolName = msg.toolName?.isNotEmpty == true
+            ? msg.toolName!
+            : 'unknown';
+        final toolCallId = msg.toolCallId?.isNotEmpty == true
+            ? msg.toolCallId!
+            : '';
         return llm.ChatMessage.toolResult(
           results: [
             llm.ToolCall(
@@ -161,7 +175,10 @@ class LlmMessageMapper {
   /// 避免触发 API 错误 "assistant message must not be empty"。
   ///
   /// [provider] 可选的 LLM 提供商类型，用于决定 thinking 内容的回传方式。
-  static List<llm.ChatMessage> toLlmDartList(List<ChatMessage> messages, {LLMProvider? provider}) {
+  static List<llm.ChatMessage> toLlmDartList(
+    List<ChatMessage> messages, {
+    LLMProvider? provider,
+  }) {
     final result = <llm.ChatMessage>[];
     for (final msg in messages) {
       // 跳过空内容的 assistant 消息（既无文本也无工具调用）
@@ -171,20 +188,24 @@ class LlmMessageMapper {
       if (msg.role == MessageRole.assistant) {
         final hasContent =
             msg.content != null && msg.content!.trim().isNotEmpty;
-        final hasToolCalls =
-            msg.toolCalls != null && msg.toolCalls!.isNotEmpty;
+        final hasToolCalls = msg.toolCalls != null && msg.toolCalls!.isNotEmpty;
         final hasLegacyToolCall =
             msg.toolCallId != null && msg.toolName != null;
         final hasThinking =
             msg.thinking != null && msg.thinking!.trim().isNotEmpty;
-        if (!hasContent && !hasToolCalls && !hasLegacyToolCall && !hasThinking) {
+        if (!hasContent &&
+            !hasToolCalls &&
+            !hasLegacyToolCall &&
+            !hasThinking) {
           _log.warn('toLlmDartList: 跳过空 assistant 消息 (id=${msg.id})');
           continue;
         }
         // Debug: log assistant messages with thinking
         if (hasThinking) {
-          _log.debug('toLlmDartList: assistant 消息有 thinking (${msg.thinking!.length} chars), '
-            'hasContent=$hasContent, hasToolCalls=$hasToolCalls, provider=$provider');
+          _log.debug(
+            'toLlmDartList: assistant 消息有 thinking (${msg.thinking!.length} chars), '
+            'hasContent=$hasContent, hasToolCalls=$hasToolCalls, provider=$provider',
+          );
         }
       }
       result.add(toLlmDart(msg, provider: provider));
@@ -219,11 +240,15 @@ class LlmMessageMapper {
             id: id ?? '',
             employeeId: employeeId,
             content: msg.content,
-            toolCalls: toolUse.toolCalls.map((tc) => ToolCall(
-                  id: tc.id,
-                  name: tc.function.name,
-                  arguments: _parseArguments(tc.function.arguments),
-                )).toList(),
+            toolCalls: toolUse.toolCalls
+                .map(
+                  (tc) => ToolCall(
+                    id: tc.id,
+                    name: tc.function.name,
+                    arguments: _parseArguments(tc.function.arguments),
+                  ),
+                )
+                .toList(),
           );
         }
         return ChatMessage.assistant(
@@ -252,11 +277,15 @@ class LlmMessageMapper {
       id: id ?? '',
       employeeId: employeeId,
       content: response.text ?? '',
-      toolCalls: response.toolCalls?.map((tc) => ToolCall(
-            id: tc.id,
-            name: tc.function.name,
-            arguments: _parseArguments(tc.function.arguments),
-          )).toList(),
+      toolCalls: response.toolCalls
+          ?.map(
+            (tc) => ToolCall(
+              id: tc.id,
+              name: tc.function.name,
+              arguments: _parseArguments(tc.function.arguments),
+            ),
+          )
+          .toList(),
     );
   }
 
@@ -268,7 +297,8 @@ class LlmMessageMapper {
   /// 应作为一组传递，确保 tool_call_id 对应关系正确。
   /// 与原 SessionMemoryManager._mergeConsecutiveToolMessages 逻辑一致。
   static List<ChatMessage> mergeConsecutiveToolResults(
-      List<ChatMessage> messages) {
+    List<ChatMessage> messages,
+  ) {
     if (messages.isEmpty) return messages;
 
     final result = <ChatMessage>[];
@@ -278,21 +308,26 @@ class LlmMessageMapper {
       if (msg.role == MessageRole.tool && !msg.isToolResultGroup) {
         // 单条 tool result → 加入待合并缓冲区
         pendingResults ??= [];
-        pendingResults.add(ToolResult(
-          toolCallId: msg.toolCallId ?? '',
-          content: msg.content ?? '',
-          isError: msg.isError,
-          name: msg.toolName,
-        ));
+        pendingResults.add(
+          ToolResult(
+            toolCallId: msg.toolCallId ?? '',
+            content: msg.content ?? '',
+            isError: msg.isError,
+            name: msg.toolName,
+          ),
+        );
       } else {
         // 非 tool 消息 → 先刷新缓冲区
         if (pendingResults != null) {
-          result.add(ChatMessage.toolResultGroup(
-            id: pendingResults.first.toolCallId.isEmpty
-                ? '' : pendingResults.first.toolCallId,
-            employeeId: '',
-            results: pendingResults,
-          ));
+          result.add(
+            ChatMessage.toolResultGroup(
+              id: pendingResults.first.toolCallId.isEmpty
+                  ? ''
+                  : pendingResults.first.toolCallId,
+              employeeId: '',
+              results: pendingResults,
+            ),
+          );
           pendingResults = null;
         }
         result.add(msg);
@@ -301,11 +336,13 @@ class LlmMessageMapper {
 
     // 刷新末尾剩余的 tool results
     if (pendingResults != null) {
-      result.add(ChatMessage.toolResultGroup(
-        id: '',
-        employeeId: '',
-        results: pendingResults,
-      ));
+      result.add(
+        ChatMessage.toolResultGroup(
+          id: '',
+          employeeId: '',
+          results: pendingResults,
+        ),
+      );
     }
 
     return result;
@@ -340,8 +377,7 @@ class LlmMessageMapper {
     // 判断是否启用跨轮次累积匹配模式
     // 注意：即使在 strictMode 下，knownToolCallIds 也用于阶段一的跨轮次匹配
     // 阶段二仍会执行紧邻验证，确保 Anthropic API 要求得到满足
-    final useKnownIds =
-        knownToolCallIds != null && knownToolCallIds.isNotEmpty;
+    final useKnownIds = knownToolCallIds != null && knownToolCallIds.isNotEmpty;
 
     final result = <ChatMessage>[];
     final expectedIds = <String>{};
@@ -379,14 +415,19 @@ class LlmMessageMapper {
         if (msg.isToolResultGroup) {
           // 分组 tool result：只保留 expectedIds 或 knownToolCallIds 中存在的
           final validResults = msg.toolResults!
-              .where((r) => expectedIds.contains(r.toolCallId) ||
-                  (useKnownIds && knownToolCallIds.contains(r.toolCallId)))
+              .where(
+                (r) =>
+                    expectedIds.contains(r.toolCallId) ||
+                    (useKnownIds && knownToolCallIds.contains(r.toolCallId)),
+              )
               .toList();
           for (final r in validResults) {
             expectedIds.remove(r.toolCallId);
           }
           if (validResults.isEmpty) {
-            _log.warn('sanitizeForLlm: 丢弃孤立 tool result group (无匹配 toolCallId)');
+            _log.warn(
+              'sanitizeForLlm: 丢弃孤立 tool result group (无匹配 toolCallId)',
+            );
             continue;
           }
           if (validResults.length == msg.toolResults!.length) {
@@ -408,10 +449,13 @@ class LlmMessageMapper {
         } else {
           // 单条 tool result
           final toolCallId = msg.toolCallId ?? '';
-          final isValid = expectedIds.contains(toolCallId) ||
+          final isValid =
+              expectedIds.contains(toolCallId) ||
               (useKnownIds && knownToolCallIds.contains(toolCallId));
           if (toolCallId.isEmpty || !isValid) {
-            _log.warn('sanitizeForLlm: 丢弃孤立 tool result (toolCallId=$toolCallId)');
+            _log.warn(
+              'sanitizeForLlm: 丢弃孤立 tool result (toolCallId=$toolCallId)',
+            );
             continue;
           }
           expectedIds.remove(toolCallId);
@@ -482,22 +526,36 @@ class LlmMessageMapper {
 
     // 收集所有 tool_result 并记录它们对应的 toolCallId
     final toolResultInfos = <_ToolResultInfo>[];
-    for (final msg in messages) {
+    for (var sourceIndex = 0; sourceIndex < messages.length; sourceIndex++) {
+      final msg = messages[sourceIndex];
       if (msg.role == MessageRole.tool) {
         if (msg.isToolResultGroup) {
-          for (final r in msg.toolResults!) {
-            toolResultInfos.add(_ToolResultInfo(
-              toolCallId: r.toolCallId,
-              msg: msg,
-              result: r,
-            ));
+          for (
+            var resultIndex = 0;
+            resultIndex < msg.toolResults!.length;
+            resultIndex++
+          ) {
+            final r = msg.toolResults![resultIndex];
+            toolResultInfos.add(
+              _ToolResultInfo(
+                toolCallId: r.toolCallId,
+                msg: msg,
+                sourceIndex: sourceIndex,
+                resultIndex: resultIndex,
+                result: r,
+              ),
+            );
           }
         } else {
-          toolResultInfos.add(_ToolResultInfo(
-            toolCallId: msg.toolCallId ?? '',
-            msg: msg,
-            result: null,
-          ));
+          toolResultInfos.add(
+            _ToolResultInfo(
+              toolCallId: msg.toolCallId ?? '',
+              msg: msg,
+              sourceIndex: sourceIndex,
+              resultIndex: 0,
+              result: null,
+            ),
+          );
         }
       }
     }
@@ -511,7 +569,7 @@ class LlmMessageMapper {
     // 第二遍：构建重排后的消息序列
     final result = <ChatMessage>[];
     final usedToolCallIds = <String>{};
-    final usedToolResultMsgs = <String>{}; // 已处理过的 tool result 消息 ID
+    final usedToolResultKeys = <String>{}; // 已处理过的 tool result 条目
 
     for (var i = 0; i < messages.length; i++) {
       final msg = messages[i];
@@ -526,17 +584,21 @@ class LlmMessageMapper {
         }
 
         // 查找属于本轮的 tool_result（按原始消息顺序）
-        final roundResultMsgs = <ChatMessage>{}; // 用 Set 避免重复添加
+        final roundResultInfos = <_ToolResultInfo>[];
         final matchedIds = <String>{};
 
         for (final tcId in roundToolCallIds) {
           final results = toolCallIdToResults[tcId];
           if (results != null && results.isNotEmpty) {
-            matchedIds.add(tcId);
+            var matched = false;
             for (final info in results) {
-              if (!usedToolResultMsgs.contains(info.msg.id)) {
-                roundResultMsgs.add(info.msg);
+              if (!usedToolResultKeys.contains(_toolResultKey(info))) {
+                roundResultInfos.add(info);
+                matched = true;
               }
+            }
+            if (matched) {
+              matchedIds.add(tcId);
             }
           }
         }
@@ -564,22 +626,16 @@ class LlmMessageMapper {
           result.add(msg);
           _stripUnmatchedToolCallsAt(result, result.length - 1, unmatchedIds);
           // 添加匹配的 tool_results
-          for (final resultMsg in roundResultMsgs) {
-            if (!usedToolResultMsgs.contains(resultMsg.id)) {
-              result.add(resultMsg);
-              usedToolResultMsgs.add(resultMsg.id);
-            }
-          }
+          result.addAll(
+            _consumeToolResultInfos(roundResultInfos, usedToolResultKeys),
+          );
         } else {
           // 全部匹配 → 正常添加
           result.add(msg);
           // 添加 tool_results
-          for (final resultMsg in roundResultMsgs) {
-            if (!usedToolResultMsgs.contains(resultMsg.id)) {
-              result.add(resultMsg);
-              usedToolResultMsgs.add(resultMsg.id);
-            }
-          }
+          result.addAll(
+            _consumeToolResultInfos(roundResultInfos, usedToolResultKeys),
+          );
         }
 
         for (final tcId in matchedIds) {
@@ -587,7 +643,7 @@ class LlmMessageMapper {
         }
       } else if (msg.role == MessageRole.tool) {
         // tool_result：仅添加尚未被提前消费的
-        if (!usedToolResultMsgs.contains(msg.id)) {
+        if (!_allToolResultsConsumed(msg, i, usedToolResultKeys)) {
           // 检查是否为孤立 tool_result（没有对应的 assistant(toolCalls)）
           bool hasMatchingAssistant = false;
           if (msg.isToolResultGroup) {
@@ -605,7 +661,7 @@ class LlmMessageMapper {
 
           if (hasMatchingAssistant) {
             // 已被提前消费，跳过
-            usedToolResultMsgs.add(msg.id);
+            _markAllToolResultsConsumed(msg, i, usedToolResultKeys);
           } else {
             // 孤立 tool_result，丢弃
             final ids = msg.isToolResultGroup
@@ -615,7 +671,7 @@ class LlmMessageMapper {
               '_validateStrictSequence: 丢弃孤立 tool_result '
               'tool_use_ids=$ids（无匹配的 assistant(toolCalls)）',
             );
-            usedToolResultMsgs.add(msg.id);
+            _markAllToolResultsConsumed(msg, i, usedToolResultKeys);
           }
         }
       } else {
@@ -625,6 +681,86 @@ class LlmMessageMapper {
     }
 
     return result;
+  }
+
+  static String _toolResultKey(_ToolResultInfo info) {
+    return '${info.sourceIndex}:${info.resultIndex}';
+  }
+
+  static bool _allToolResultsConsumed(
+    ChatMessage msg,
+    int sourceIndex,
+    Set<String> usedToolResultKeys,
+  ) {
+    if (!msg.isToolResultGroup) {
+      return usedToolResultKeys.contains('$sourceIndex:0');
+    }
+    return msg.toolResults!.asMap().entries.every(
+      (entry) => usedToolResultKeys.contains('$sourceIndex:${entry.key}'),
+    );
+  }
+
+  static void _markAllToolResultsConsumed(
+    ChatMessage msg,
+    int sourceIndex,
+    Set<String> usedToolResultKeys,
+  ) {
+    if (!msg.isToolResultGroup) {
+      usedToolResultKeys.add('$sourceIndex:0');
+      return;
+    }
+    for (final entry in msg.toolResults!.asMap().entries) {
+      usedToolResultKeys.add('$sourceIndex:${entry.key}');
+    }
+  }
+
+  static List<ChatMessage> _consumeToolResultInfos(
+    List<_ToolResultInfo> infos,
+    Set<String> usedToolResultKeys,
+  ) {
+    final groupedInfos = <int, List<_ToolResultInfo>>{};
+    final groupOrder = <int>[];
+
+    for (final info in infos) {
+      final key = _toolResultKey(info);
+      if (usedToolResultKeys.contains(key)) continue;
+
+      groupedInfos
+          .putIfAbsent(info.sourceIndex, () {
+            groupOrder.add(info.sourceIndex);
+            return [];
+          })
+          .add(info);
+      usedToolResultKeys.add(key);
+    }
+
+    final messages = <ChatMessage>[];
+    for (final sourceIndex in groupOrder) {
+      final group = groupedInfos[sourceIndex]!;
+      final source = group.first.msg;
+
+      if (source.isToolResultGroup) {
+        final results = group
+            .map((info) => info.result)
+            .whereType<ToolResult>()
+            .toList();
+        if (results.isEmpty) continue;
+
+        messages.add(
+          ChatMessage.toolResultGroup(
+            id: source.id,
+            employeeId: source.employeeId,
+            results: results,
+            createdAt: source.createdAt,
+            deviceId: source.deviceId,
+          ),
+        );
+      } else {
+        messages.add(source);
+      }
+    }
+
+    return messages;
   }
 
   /// 在指定索引处，仅 strip assistant 消息中未匹配的 toolCalls
@@ -672,7 +808,8 @@ class LlmMessageMapper {
                 .map((e) => '${e.key}=${_truncate('${e.value}', 80)}')
                 .join(', ');
           } else {
-            argsPreview = args.entries.take(3)
+            argsPreview = args.entries
+                .take(3)
                 .map((e) => '${e.key}=${_truncate('${e.value}', 80)}')
                 .join(', ');
             argsPreview += ', ...(共${args.length}个参数)';
@@ -714,7 +851,8 @@ class LlmMessageMapper {
                 .map((e) => '${e.key}=${_truncate('${e.value}', 80)}')
                 .join(', ');
           } else {
-            argsPreview = args.entries.take(3)
+            argsPreview = args.entries
+                .take(3)
                 .map((e) => '${e.key}=${_truncate('${e.value}', 80)}')
                 .join(', ');
             argsPreview += ', ...(共${args.length}个参数)';
@@ -743,7 +881,8 @@ class LlmMessageMapper {
   ///
   /// 复用 `sanitizeForLlm` 的核心逻辑，但只收集问题而不修改消息。
   static MessageSequenceReport analyzeMessageSequence(
-      List<ChatMessage> messages) {
+    List<ChatMessage> messages,
+  ) {
     final issues = <MessageSequenceIssue>[];
     final summaries = <MessageSummary>[];
     final chains = <ToolCallChain>[];
@@ -757,13 +896,15 @@ class LlmMessageMapper {
       final msg = messages[i];
 
       // 生成消息摘要
-      summaries.add(MessageSummary(
-        index: i,
-        role: msg.role.name,
-        type: msg.type,
-        toolCallId: msg.toolCallId,
-        contentPreview: _truncate(msg.content ?? '', 80),
-      ));
+      summaries.add(
+        MessageSummary(
+          index: i,
+          role: msg.role.name,
+          type: msg.type,
+          toolCallId: msg.toolCallId,
+          contentPreview: _truncate(msg.content ?? '', 80),
+        ),
+      );
 
       if (msg.role == MessageRole.assistant &&
           msg.toolCalls != null &&
@@ -771,19 +912,23 @@ class LlmMessageMapper {
         // 如果之前有未匹配的 toolCallIds，报告问题
         if (pendingToolCalls.isNotEmpty) {
           for (final entry in pendingToolCalls.entries) {
-            issues.add(MessageSequenceIssue(
-              type: 'unmatched_tool_call',
-              index: entry.value.$2,
-              description:
-                  'assistant 消息中的 toolCall ${entry.key} (${entry.value.$1}) 没有对应的 toolResult',
-              toolCallId: entry.key,
-            ));
-            chains.add(ToolCallChain(
-              toolCallId: entry.key,
-              toolName: entry.value.$1,
-              assistantIndex: entry.value.$2,
-              matched: false,
-            ));
+            issues.add(
+              MessageSequenceIssue(
+                type: 'unmatched_tool_call',
+                index: entry.value.$2,
+                description:
+                    'assistant 消息中的 toolCall ${entry.key} (${entry.value.$1}) 没有对应的 toolResult',
+                toolCallId: entry.key,
+              ),
+            );
+            chains.add(
+              ToolCallChain(
+                toolCallId: entry.key,
+                toolName: entry.value.$1,
+                assistantIndex: entry.value.$2,
+                matched: false,
+              ),
+            );
           }
           pendingToolCalls.clear();
         }
@@ -796,75 +941,91 @@ class LlmMessageMapper {
           for (final r in msg.toolResults!) {
             final info = pendingToolCalls.remove(r.toolCallId);
             if (info == null) {
-              issues.add(MessageSequenceIssue(
-                type: 'orphaned_tool_result',
-                index: i,
-                description:
-                    'toolResult ${r.toolCallId} (${r.name ?? 'unknown'}) 没有匹配的 toolCall',
-                toolCallId: r.toolCallId,
-              ));
-              chains.add(ToolCallChain(
-                toolCallId: r.toolCallId,
-                toolName: r.name ?? 'unknown',
-                resultIndex: i,
-                matched: false,
-              ));
+              issues.add(
+                MessageSequenceIssue(
+                  type: 'orphaned_tool_result',
+                  index: i,
+                  description:
+                      'toolResult ${r.toolCallId} (${r.name ?? 'unknown'}) 没有匹配的 toolCall',
+                  toolCallId: r.toolCallId,
+                ),
+              );
+              chains.add(
+                ToolCallChain(
+                  toolCallId: r.toolCallId,
+                  toolName: r.name ?? 'unknown',
+                  resultIndex: i,
+                  matched: false,
+                ),
+              );
             } else {
               matchedToolCallIds.add(r.toolCallId);
-              chains.add(ToolCallChain(
-                toolCallId: r.toolCallId,
-                toolName: info.$1,
-                assistantIndex: info.$2,
-                resultIndex: i,
-                matched: true,
-              ));
+              chains.add(
+                ToolCallChain(
+                  toolCallId: r.toolCallId,
+                  toolName: info.$1,
+                  assistantIndex: info.$2,
+                  resultIndex: i,
+                  matched: true,
+                ),
+              );
             }
           }
         } else {
           final toolCallId = msg.toolCallId ?? '';
           final info = pendingToolCalls.remove(toolCallId);
           if (info == null && toolCallId.isNotEmpty) {
-            issues.add(MessageSequenceIssue(
-              type: 'orphaned_tool_result',
-              index: i,
-              description:
-                  'toolResult $toolCallId (${msg.toolName ?? 'unknown'}) 没有匹配的 toolCall',
-              toolCallId: toolCallId,
-            ));
-            chains.add(ToolCallChain(
-              toolCallId: toolCallId,
-              toolName: msg.toolName ?? 'unknown',
-              resultIndex: i,
-              matched: false,
-            ));
+            issues.add(
+              MessageSequenceIssue(
+                type: 'orphaned_tool_result',
+                index: i,
+                description:
+                    'toolResult $toolCallId (${msg.toolName ?? 'unknown'}) 没有匹配的 toolCall',
+                toolCallId: toolCallId,
+              ),
+            );
+            chains.add(
+              ToolCallChain(
+                toolCallId: toolCallId,
+                toolName: msg.toolName ?? 'unknown',
+                resultIndex: i,
+                matched: false,
+              ),
+            );
           } else if (info != null) {
             matchedToolCallIds.add(toolCallId);
-            chains.add(ToolCallChain(
-              toolCallId: toolCallId,
-              toolName: info.$1,
-              assistantIndex: info.$2,
-              resultIndex: i,
-              matched: true,
-            ));
+            chains.add(
+              ToolCallChain(
+                toolCallId: toolCallId,
+                toolName: info.$1,
+                assistantIndex: info.$2,
+                resultIndex: i,
+                matched: true,
+              ),
+            );
           }
         }
       } else {
         // user / system 等非 tool 消息
         if (pendingToolCalls.isNotEmpty) {
           for (final entry in pendingToolCalls.entries) {
-            issues.add(MessageSequenceIssue(
-              type: 'unexpected_message_order',
-              index: i,
-              description:
-                  '在 toolCall ${entry.key} (${entry.value.$1}) 与其 toolResult 之间出现了 ${msg.role.name} 消息',
-              toolCallId: entry.key,
-            ));
-            chains.add(ToolCallChain(
-              toolCallId: entry.key,
-              toolName: entry.value.$1,
-              assistantIndex: entry.value.$2,
-              matched: false,
-            ));
+            issues.add(
+              MessageSequenceIssue(
+                type: 'unexpected_message_order',
+                index: i,
+                description:
+                    '在 toolCall ${entry.key} (${entry.value.$1}) 与其 toolResult 之间出现了 ${msg.role.name} 消息',
+                toolCallId: entry.key,
+              ),
+            );
+            chains.add(
+              ToolCallChain(
+                toolCallId: entry.key,
+                toolName: entry.value.$1,
+                assistantIndex: entry.value.$2,
+                matched: false,
+              ),
+            );
           }
           pendingToolCalls.clear();
         }
@@ -874,19 +1035,22 @@ class LlmMessageMapper {
     // 序列末尾残留未匹配的 toolCalls
     if (pendingToolCalls.isNotEmpty) {
       for (final entry in pendingToolCalls.entries) {
-        issues.add(MessageSequenceIssue(
-          type: 'unmatched_tool_call',
-          index: entry.value.$2,
-          description:
-              '序列末尾仍有未匹配的 toolCall ${entry.key} (${entry.value.$1})',
-          toolCallId: entry.key,
-        ));
-        chains.add(ToolCallChain(
-          toolCallId: entry.key,
-          toolName: entry.value.$1,
-          assistantIndex: entry.value.$2,
-          matched: false,
-        ));
+        issues.add(
+          MessageSequenceIssue(
+            type: 'unmatched_tool_call',
+            index: entry.value.$2,
+            description: '序列末尾仍有未匹配的 toolCall ${entry.key} (${entry.value.$1})',
+            toolCallId: entry.key,
+          ),
+        );
+        chains.add(
+          ToolCallChain(
+            toolCallId: entry.key,
+            toolName: entry.value.$1,
+            assistantIndex: entry.value.$2,
+            matched: false,
+          ),
+        );
       }
     }
 
@@ -908,7 +1072,10 @@ class LlmMessageMapper {
   /// 根据提供商不同，采用不同的回传方式：
   /// - Anthropic：通过 anthropic extension 的 contentBlocks 回传
   /// - DeepSeek/OpenAI：直接通过 llm_dart 的 thinking 扩展回传
-  static llm.ChatMessage _buildAssistantMessageWithThinking(ChatMessage msg, {LLMProvider? provider}) {
+  static llm.ChatMessage _buildAssistantMessageWithThinking(
+    ChatMessage msg, {
+    LLMProvider? provider,
+  }) {
     // For DeepSeek thinking mode, content must not be empty when reasoning_content is present.
     // If content is empty/null but thinking is present, provide a placeholder.
     final content = msg.content;
@@ -926,7 +1093,11 @@ class LlmMessageMapper {
   ///
   /// - Anthropic：通过 anthropic extension 的 contentBlocks 回传
   /// - 其他（DeepSeek/OpenAI）：通过 deepseek extension 的 reasoning_content 回传
-  static llm.ChatMessage _attachThinking(llm.ChatMessage baseMsg, String thinking, LLMProvider? provider) {
+  static llm.ChatMessage _attachThinking(
+    llm.ChatMessage baseMsg,
+    String thinking,
+    LLMProvider? provider,
+  ) {
     if (provider == LLMProvider.anthropic) {
       return baseMsg.withExtension('anthropic', {
         'contentBlocks': [
@@ -936,9 +1107,7 @@ class LlmMessageMapper {
     }
     // DeepSeek/OpenAI 等提供商：通过 deepseek extension 回传 reasoning_content
     // llm_dart DeepSeek provider 会读取此扩展
-    return baseMsg.withExtension('deepseek', {
-      'reasoning_content': thinking,
-    });
+    return baseMsg.withExtension('deepseek', {'reasoning_content': thinking});
   }
 
   /// 从 result 列表中找到最后一条含 toolCalls 的 assistant 消息，
@@ -965,7 +1134,8 @@ class LlmMessageMapper {
                     .map((e) => '${e.key}=${_truncate('${e.value}', 80)}')
                     .join(', ');
               } else {
-                argsPreview = args.entries.take(3)
+                argsPreview = args.entries
+                    .take(3)
                     .map((e) => '${e.key}=${_truncate('${e.value}', 80)}')
                     .join(', ');
                 argsPreview += ', ...(共${args.length}个参数)';

@@ -3,7 +3,7 @@ enum AgentEventType {
   /// Agent 状态变更
   agentStatusChanged,
 
-  /// 消息状态变更（queued/processing/streaming/completed/failed/interrupted/revoked）
+  /// 消息状态变更（queued/processing/retrying/streaming/completed/failed/interrupted/revoked）
   messageStatusChanged,
 
   /// 消息已读状态变更
@@ -56,6 +56,9 @@ enum AgentEventType {
 
   /// Token 用量更新（每次 LLM 调用后触发）
   tokenUsageUpdated,
+
+  /// LLM 调用重试中
+  llmRetrying,
 
   /// 未知类型（兼容旧数据或外部扩展）
   unknown;

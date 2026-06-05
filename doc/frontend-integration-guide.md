@@ -363,7 +363,7 @@ msgSub.cancel();
 | `AgentUnreadCountChangedEvent` | 未读数变化 | `employeeId`, `unreadCount` |
 | `AgentLatestMessageUpdatedEvent` | 会话最新消息更新 | `latestMessage`, `unreadCount` |
 | `AgentLatestMessageClearedEvent` | 会话消息被清空 | `employeeId` |
-| `AgentStatusNotifyEvent` | Agent 状态变更 | `status` (idle/processing/streaming/waitingPermission) |
+| `AgentStatusNotifyEvent` | Agent 状态变更 | `status` (idle/processing/streaming/retrying/waitingPermission) |
 | `AgentPermissionPendingEvent` | 权限请求待处理 | `permissionJson` |
 | `AgentPermissionResolvedEvent` | 权限请求已处理 | `requestId` |
 | `AgentConfirmPendingEvent` | 确认请求待处理 | `confirmJson` |
@@ -755,7 +755,7 @@ SessionSummaryEntity
 | 枚举值 | 说明 | 前端处理建议 |
 |--------|------|-------------|
 | `agentStatusChanged` | Agent 状态变更 | 更新状态指示器 |
-| `messageStatusChanged` | 消息状态变更（queued/processing/streaming/completed/failed/interrupted/revoked） | 更新消息气泡 |
+| `messageStatusChanged` | 消息状态变更（queued/processing/retrying/streaming/completed/failed/interrupted/revoked） | 更新消息气泡 |
 | `messageReadStatusChanged` | 消息已读状态变更 | 更新已读/未读样式 |
 | `toolCallStart` | 工具调用开始 | 显示工具调用进度 |
 | `toolCallResult` | 工具调用结果 | 显示工具结果 |
@@ -784,6 +784,7 @@ enum AgentStatus {
   idle,              // 空闲
   processing,        // 处理中
   streaming,         // 流式输出中
+  retrying,          // LLM 调用失败，正在重试
   waitingPermission, // 等待权限确认
 }
 ```

@@ -37,7 +37,7 @@ class AgentMessage {
   /// 元数据（可选，用于存储自定义字段）
   final Map<String, dynamic>? metadata;
 
-  /// 消息状态 (none/queued/processing/completed/failed/interrupted)
+  /// 消息状态 (none/queued/processing/retrying/completed/failed/interrupted/revoked)
   final String? status;
 
   const AgentMessage({

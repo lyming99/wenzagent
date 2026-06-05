@@ -21,8 +21,11 @@ void main() {
     test('所有枚举值的 value 属性返回正确的字符串', () {
       for (final type in AgentEventType.values) {
         if (type == AgentEventType.unknown) continue;
-        expect(type.value, equals(type.name),
-            reason: '$type.value 应等于 ${type.name}');
+        expect(
+          type.value,
+          equals(type.name),
+          reason: '$type.value 应等于 ${type.name}',
+        );
       }
     });
 
@@ -30,50 +33,92 @@ void main() {
       for (final type in AgentEventType.values) {
         if (type == AgentEventType.unknown) continue;
         final parsed = AgentEventType.fromString(type.name);
-        expect(parsed, equals(type),
-            reason: 'fromString("${type.name}") 应返回 $type');
+        expect(
+          parsed,
+          equals(type),
+          reason: 'fromString("${type.name}") 应返回 $type',
+        );
       }
     });
 
     test('fromString 对未知字符串返回 unknown', () {
-      expect(AgentEventType.fromString('nonExistentEvent'),
-          equals(AgentEventType.unknown));
+      expect(
+        AgentEventType.fromString('nonExistentEvent'),
+        equals(AgentEventType.unknown),
+      );
       expect(AgentEventType.fromString(''), equals(AgentEventType.unknown));
-      expect(AgentEventType.fromString('messageQueued'),
-          equals(AgentEventType.unknown),
-          reason: '已删除的 messageQueued 应返回 unknown');
-      expect(AgentEventType.fromString('messageProcessing'),
-          equals(AgentEventType.unknown),
-          reason: '已删除的 messageProcessing 应返回 unknown');
-      expect(AgentEventType.fromString('messageReplied'),
-          equals(AgentEventType.unknown),
-          reason: '已删除的 messageReplied 应返回 unknown');
-      expect(AgentEventType.fromString('specGroupChanged'),
-          equals(AgentEventType.unknown),
-          reason: '已删除的 specGroupChanged 应返回 unknown');
+      expect(
+        AgentEventType.fromString('messageQueued'),
+        equals(AgentEventType.unknown),
+        reason: '已删除的 messageQueued 应返回 unknown',
+      );
+      expect(
+        AgentEventType.fromString('messageProcessing'),
+        equals(AgentEventType.unknown),
+        reason: '已删除的 messageProcessing 应返回 unknown',
+      );
+      expect(
+        AgentEventType.fromString('messageReplied'),
+        equals(AgentEventType.unknown),
+        reason: '已删除的 messageReplied 应返回 unknown',
+      );
+      expect(
+        AgentEventType.fromString('specGroupChanged'),
+        equals(AgentEventType.unknown),
+        reason: '已删除的 specGroupChanged 应返回 unknown',
+      );
     });
 
     test('新增事件类型枚举值存在', () {
-      expect(AgentEventType.values.contains(AgentEventType.thinkingDelta),
-          isTrue, reason: 'thinkingDelta 应存在');
-      expect(AgentEventType.values.contains(AgentEventType.streamDelta),
-          isTrue, reason: 'streamDelta 应存在');
-      expect(AgentEventType.values.contains(AgentEventType.configChanged),
-          isTrue, reason: 'configChanged 应存在');
-      expect(AgentEventType.values.contains(AgentEventType.messageStarted),
-          isTrue, reason: 'messageStarted 应存在');
+      expect(
+        AgentEventType.values.contains(AgentEventType.thinkingDelta),
+        isTrue,
+        reason: 'thinkingDelta 应存在',
+      );
+      expect(
+        AgentEventType.values.contains(AgentEventType.streamDelta),
+        isTrue,
+        reason: 'streamDelta 应存在',
+      );
+      expect(
+        AgentEventType.values.contains(AgentEventType.configChanged),
+        isTrue,
+        reason: 'configChanged 应存在',
+      );
+      expect(
+        AgentEventType.values.contains(AgentEventType.messageStarted),
+        isTrue,
+        reason: 'messageStarted 应存在',
+      );
+      expect(
+        AgentEventType.values.contains(AgentEventType.llmRetrying),
+        isTrue,
+        reason: 'llmRetrying 应存在',
+      );
     });
 
     test('已删除的事件类型枚举值不存在', () {
       final names = AgentEventType.values.map((e) => e.name).toSet();
-      expect(names.contains('messageQueued'), isFalse,
-          reason: 'messageQueued 应已删除');
-      expect(names.contains('messageProcessing'), isFalse,
-          reason: 'messageProcessing 应已删除');
-      expect(names.contains('messageReplied'), isFalse,
-          reason: 'messageReplied 应已删除');
-      expect(names.contains('specGroupChanged'), isFalse,
-          reason: 'specGroupChanged 应已删除');
+      expect(
+        names.contains('messageQueued'),
+        isFalse,
+        reason: 'messageQueued 应已删除',
+      );
+      expect(
+        names.contains('messageProcessing'),
+        isFalse,
+        reason: 'messageProcessing 应已删除',
+      );
+      expect(
+        names.contains('messageReplied'),
+        isFalse,
+        reason: 'messageReplied 应已删除',
+      );
+      expect(
+        names.contains('specGroupChanged'),
+        isFalse,
+        reason: 'specGroupChanged 应已删除',
+      );
     });
   });
 
@@ -219,12 +264,12 @@ void main() {
         AgentEventType.streamDelta,
         AgentEventType.configChanged,
         AgentEventType.messageStarted,
+        AgentEventType.llmRetrying,
       ]) {
         final event = AgentEvent(type: type, data: {'test': true});
         final map = event.toMap();
         final restored = AgentEvent.fromMap(map);
-        expect(restored.type, equals(type),
-            reason: '$type 序列化/反序列化往返应一致');
+        expect(restored.type, equals(type), reason: '$type 序列化/反序列化往返应一致');
       }
     });
   });
@@ -546,10 +591,7 @@ void main() {
     test('configChanged 事件 data 结构', () {
       final data = {
         'configType': 'provider',
-        'configData': {
-          'model': 'gpt-4',
-          'temperature': 0.7,
-        },
+        'configData': {'model': 'gpt-4', 'temperature': 0.7},
       };
 
       final event = AgentEvent(
@@ -634,20 +676,19 @@ void main() {
       final localOnlyTypes = {
         AgentEventType.streamDelta,
         AgentEventType.thinkingDelta,
+        AgentEventType.llmRetrying,
       };
 
       // unknown 不应有任何处理
-      final ignoredTypes = {
-        AgentEventType.unknown,
-      };
+      final ignoredTypes = {AgentEventType.unknown};
 
       final allTypes = AgentEventType.values.toSet();
-      final accountedTypes =
-          lanBroadcastTypes.union(localOnlyTypes).union(ignoredTypes);
+      final accountedTypes = lanBroadcastTypes
+          .union(localOnlyTypes)
+          .union(ignoredTypes);
 
       final unaccounted = allTypes.difference(accountedTypes);
-      expect(unaccounted, isEmpty,
-          reason: '以下事件类型未在任何处理策略中覆盖: $unaccounted');
+      expect(unaccounted, isEmpty, reason: '以下事件类型未在任何处理策略中覆盖: $unaccounted');
     });
   });
 
@@ -683,7 +724,9 @@ void main() {
         ),
         AgentEvent(
           type: AgentEventType.sessionSummaryChanged,
-          data: {'summary': {'unreadCount': 3}},
+          data: {
+            'summary': {'unreadCount': 3},
+          },
           employeeId: 'emp-001',
         ),
       ];
@@ -693,8 +736,11 @@ void main() {
         final map = jsonDecode(jsonStr) as Map<String, dynamic>;
         final restored = AgentEvent.fromMap(map);
 
-        expect(restored.type, equals(original.type),
-            reason: '${original.type} JSON 往返失败');
+        expect(
+          restored.type,
+          equals(original.type),
+          reason: '${original.type} JSON 往返失败',
+        );
         expect(restored.employeeId, equals(original.employeeId));
         expect(restored.fromDeviceId, equals(original.fromDeviceId));
       }
@@ -726,8 +772,10 @@ void main() {
         expect(restored.toolName, equals(original.toolName));
 
         if (original is ToolCallStartEvent) {
-          expect((restored as ToolCallStartEvent).arguments,
-              equals(original.arguments));
+          expect(
+            (restored as ToolCallStartEvent).arguments,
+            equals(original.arguments),
+          );
         }
       }
     });
@@ -738,10 +786,7 @@ void main() {
   // ============================================================
   group('边界条件和兼容性', () {
     test('空 data 的 AgentEvent 正常工作', () {
-      final event = AgentEvent(
-        type: AgentEventType.unknown,
-        data: {},
-      );
+      final event = AgentEvent(type: AgentEventType.unknown, data: {});
 
       expect(event.data, isEmpty);
       expect(event.toMap()['data'], isEmpty);
@@ -774,19 +819,14 @@ void main() {
     test('嵌套 Map 的 data 正常序列化', () {
       final data = {
         'level1': {
-          'level2': {
-            'level3': 'deep value',
-          },
+          'level2': {'level3': 'deep value'},
         },
         'list': [1, 2, 3],
         'bool': true,
         'null': null,
       };
 
-      final event = AgentEvent(
-        type: AgentEventType.configChanged,
-        data: data,
-      );
+      final event = AgentEvent(type: AgentEventType.configChanged, data: data);
 
       final jsonStr = jsonEncode(event.toMap());
       final restored = AgentEvent.fromMap(jsonDecode(jsonStr));
@@ -800,16 +840,31 @@ void main() {
     test('旧版事件数据兼容性', () {
       // 模拟旧版客户端发送的已删除事件类型
       final oldEvents = [
-        {'type': 'messageQueued', 'data': {'messageId': 'old-1'}},
-        {'type': 'messageProcessing', 'data': {'messageId': 'old-2'}},
-        {'type': 'messageReplied', 'data': {'originalMessageId': 'o1'}},
-        {'type': 'specGroupChanged', 'data': {'groupId': 'g1'}},
+        {
+          'type': 'messageQueued',
+          'data': {'messageId': 'old-1'},
+        },
+        {
+          'type': 'messageProcessing',
+          'data': {'messageId': 'old-2'},
+        },
+        {
+          'type': 'messageReplied',
+          'data': {'originalMessageId': 'o1'},
+        },
+        {
+          'type': 'specGroupChanged',
+          'data': {'groupId': 'g1'},
+        },
       ];
 
       for (final oldMap in oldEvents) {
         final event = AgentEvent.fromMap(oldMap);
-        expect(event.type, equals(AgentEventType.unknown),
-            reason: '旧事件类型 ${oldMap['type']} 应被解析为 unknown');
+        expect(
+          event.type,
+          equals(AgentEventType.unknown),
+          reason: '旧事件类型 ${oldMap['type']} 应被解析为 unknown',
+        );
         // 不应抛出异常
       }
     });

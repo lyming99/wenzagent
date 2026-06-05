@@ -11,6 +11,9 @@ enum AgentStatus {
   /// 正在流式输出
   streaming,
 
+  /// LLM 调用失败，正在重试
+  retrying,
+
   /// 等待权限确认
   waitingPermission,
 
@@ -29,7 +32,9 @@ enum AgentStatus {
 /// 消息处理状态
 ///
 /// 注意：保留此枚举以向后兼容，新的代码应该使用 MessageProcessingStatus
-@Deprecated('Use MessageProcessingStatus from entity/queued_message.dart instead')
+@Deprecated(
+  'Use MessageProcessingStatus from entity/queued_message.dart instead',
+)
 enum AgentMessageStatus {
   /// 无状态
   none,
@@ -39,6 +44,9 @@ enum AgentMessageStatus {
 
   /// 处理中
   processing,
+
+  /// LLM 调用重试中
+  retrying,
 
   /// 已完成
   completed,
@@ -104,8 +112,7 @@ class AgentStateSnapshot {
   factory AgentStateSnapshot.fromMap(Map<String, dynamic> map) {
     return AgentStateSnapshot(
       status: AgentStatus.fromString(map['status'] as String? ?? 'idle'),
-      currentProcessingMessageId:
-          map['currentProcessingMessageId'] as String?,
+      currentProcessingMessageId: map['currentProcessingMessageId'] as String?,
       queuedMessageIds:
           (map['queuedMessageIds'] as List?)?.cast<String>() ?? [],
       isStreaming: map['isStreaming'] as bool? ?? false,
@@ -406,6 +413,8 @@ extension AgentMessageStatusExtension on AgentMessageStatus {
         return MessageProcessingStatus.queued;
       case AgentMessageStatus.processing:
         return MessageProcessingStatus.processing;
+      case AgentMessageStatus.retrying:
+        return MessageProcessingStatus.retrying;
       case AgentMessageStatus.completed:
         return MessageProcessingStatus.completed;
       case AgentMessageStatus.failed:
@@ -430,6 +439,8 @@ extension MessageProcessingStatusExtension on MessageProcessingStatus {
         return AgentMessageStatus.queued;
       case MessageProcessingStatus.processing:
         return AgentMessageStatus.processing;
+      case MessageProcessingStatus.retrying:
+        return AgentMessageStatus.retrying;
       case MessageProcessingStatus.completed:
         return AgentMessageStatus.completed;
       case MessageProcessingStatus.failed:

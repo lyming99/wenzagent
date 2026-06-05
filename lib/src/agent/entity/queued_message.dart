@@ -6,6 +6,7 @@ enum MessageProcessingStatus {
   none, // 无状态
   queued, // 排队中
   processing, // 处理中
+  retrying, // LLM 调用重试中
   completed, // 已完成
   failed, // 失败
   interrupted, // 被中断
@@ -161,6 +162,9 @@ class QueuedMessage extends AgentMessage {
 
   /// 是否处理中
   bool get isProcessing => processingStatus == MessageProcessingStatus.processing;
+
+  /// 是否重试中
+  bool get isRetrying => processingStatus == MessageProcessingStatus.retrying;
 
   /// 是否已完成
   bool get isCompleted => processingStatus == MessageProcessingStatus.completed;

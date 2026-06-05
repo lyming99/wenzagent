@@ -5,7 +5,7 @@
 class RetryConfig {
   /// 最大重试次数
   ///
-  /// 默认 3 次（即最多尝试 4 次：1 次原始调用 + 3 次重试）。
+  /// 默认 5 次（即最多尝试 6 次：1 次原始调用 + 5 次重试）。
   final int maxRetries;
 
   /// 基础延迟（毫秒）
@@ -15,7 +15,7 @@ class RetryConfig {
 
   /// 最大延迟（毫秒）
   ///
-  /// 指数退避的上限，默认 30000ms（30 秒）。
+  /// 指数退避的上限，默认 20000ms（20 秒）。
   final int maxDelayMs;
 
   /// 是否添加随机抖动
@@ -26,15 +26,15 @@ class RetryConfig {
 
   /// 可重试的 HTTP 状态码
   ///
-  /// 默认包含：429（频率限制）、500、502、503、504（服务端错误）。
+  /// 默认包含：408（请求超时）、429（频率限制）、500、502、503、504（服务端错误）。
   final List<int> retryableStatusCodes;
 
   const RetryConfig({
-    this.maxRetries = 3,
+    this.maxRetries = 5,
     this.baseDelayMs = 1000,
-    this.maxDelayMs = 30000,
+    this.maxDelayMs = 20000,
     this.jitter = true,
-    this.retryableStatusCodes = const [429, 500, 502, 503, 504],
+    this.retryableStatusCodes = const [408, 429, 500, 502, 503, 504],
   });
 
   /// 计算第 [attempt] 次重试的延迟时间（毫秒）
@@ -59,14 +59,14 @@ class RetryConfig {
   /// 从 Map 创建配置
   factory RetryConfig.fromMap(Map<String, dynamic> map) {
     return RetryConfig(
-      maxRetries: (map['maxRetries'] as num?)?.toInt() ?? 3,
+      maxRetries: (map['maxRetries'] as num?)?.toInt() ?? 5,
       baseDelayMs: (map['baseDelayMs'] as num?)?.toInt() ?? 1000,
-      maxDelayMs: (map['maxDelayMs'] as num?)?.toInt() ?? 30000,
+      maxDelayMs: (map['maxDelayMs'] as num?)?.toInt() ?? 20000,
       jitter: (map['jitter'] as bool?) ?? true,
       retryableStatusCodes: (map['retryableStatusCodes'] as List<dynamic>?)
               ?.map((e) => e as int)
               .toList() ??
-          const [429, 500, 502, 503, 504],
+          const [408, 429, 500, 502, 503, 504],
     );
   }
 

@@ -109,7 +109,7 @@ final isAlive = proxy.isAlive;      // Agent 是否存活
 
 // 监听状态变化
 proxy.onStateChanged.listen((AgentStateSnapshot snapshot) {
-  // snapshot.status: idle / processing / streaming / waitingPermission / disposed
+  // snapshot.status: idle / processing / streaming / retrying / waitingPermission / disposed
   // snapshot.currentProcessingMessageId: 当前处理的消息 ID
   // snapshot.queuedMessageIds: 队列中的消息 ID 列表
   // snapshot.queueLength: 队列长度
@@ -126,6 +126,7 @@ final snapshot = await proxy.getStateSnapshotAsync();
 | `idle` | 空闲，等待消息 |
 | `processing` | 正在处理消息 |
 | `streaming` | 流式输出中 |
+| `retrying` | LLM 调用失败，正在重试 |
 | `waitingPermission` | 等待工具权限确认 |
 | `disposed` | 已释放 |
 
@@ -243,6 +244,7 @@ final toolIds = await proxy.getCallingToolIdsAsync();
 | `sent` | 已发送到远程 | 否（很快被覆盖） |
 | `queued` | 排队中 | 否 |
 | `processing` | 处理中 | 否 |
+| `retrying` | LLM 调用失败，正在重试 | 否 |
 | `completed` | 处理完成 | 是 |
 | `failed` | 处理失败 | 是 |
 | `interrupted` | 被中断 | 是 |

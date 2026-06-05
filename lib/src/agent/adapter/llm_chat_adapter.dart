@@ -217,6 +217,20 @@ class LlmChatAdapter implements IChatAdapter {
   /// [content] end 工具调用时携带的结束内容，可为空。
   void Function({required String status, String? content})? onEndEvent;
 
+  /// LLM 重试状态变更回调
+  ///
+  /// 由 AgentImpl 注入，用于更新 AgentStatus 为 retrying。
+  /// [isRetrying] true 表示开始重试，false 表示重试结束（成功或全部失败）。
+  /// [attempt] 当前重试次数（从 1 开始）
+  /// [maxRetries] 最大重试次数
+  /// [error] 导致重试的错误信息
+  void Function({
+    required bool isRetrying,
+    int? attempt,
+    int? maxRetries,
+    String? error,
+  })? onRetryStatus;
+
   // ===== IChatAdapter 属性实现 =====
 
   String? get currentSessionUuid => currentEmployeeUuid;
@@ -671,8 +685,16 @@ class LlmChatAdapter implements IChatAdapter {
       throw Exception('未配置 LLM Provider');
     }
     final messages = [llm.ChatMessage.user(prompt)];
-    final response = await _chatCapability!.chat(messages);
-    return response.text ?? '';
+    final retryConfig = _providerConfig?.retryConfig ?? const RetryConfig();
+    try {
+      return await RetryUtil.executeWithRetry<String>(
+        () async => (await _chatCapability!.chat(messages)).text ?? '',
+        config: retryConfig,
+      );
+    } on AggregateException catch (e) {
+      _log.error('invokeOnce 在 ${e.errors.length} 次尝试后全部失败');
+      return '';
+    }
   }
 
   @override

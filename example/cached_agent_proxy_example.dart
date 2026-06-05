@@ -524,7 +524,8 @@ void main() async {
   //   // --- 状态访问器 ---
   //   bool get isProcessing =>
   //       _status == AgentStatus.processing ||
-  //       _status == AgentStatus.streaming;
+  //       _status == AgentStatus.streaming ||
+  //       _status == AgentStatus.retrying;
   //
   //   bool get isWaitingPermission =>
   //       _status == AgentStatus.waitingPermission;
@@ -693,6 +694,6 @@ void _handlePermissionRequest(
 // │ isDisposed             是否已释放 (bool)                         │
 // └───────────────────────────────────────────────────────────────────┘
 //
-// AgentStatus 枚举值: idle, processing, streaming, waitingPermission, disposed
+// AgentStatus 枚举值: idle, processing, streaming, retrying, waitingPermission, disposed
 // CacheState 枚举值:   idle, loading, syncing, error
 // PermissionDecision:   allow, deny, allowAlways

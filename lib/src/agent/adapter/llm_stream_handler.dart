@@ -182,11 +182,20 @@ extension _StreamHandler on LlmChatAdapter {
           return RetryUtil.isRetryableError(error);
         },
         onRetry: (attempt, error, delay) async {
+          onRetryStatus?.call(
+            isRetrying: true,
+            attempt: attempt,
+            maxRetries: retryConfig.maxRetries,
+            error: error.toString(),
+          );
           LlmChatAdapter._log.warn(
             'LLM 调用失败，${delay.inMilliseconds}ms 后重试第 $attempt 次: $error',
           );
         },
       );
+
+      // 重试成功，恢复非重试状态
+      onRetryStatus?.call(isRetrying: false);
 
       if (response.text != null && response.text!.isNotEmpty) {
         aiContentBuffer.write(response.text);
@@ -207,12 +216,15 @@ extension _StreamHandler on LlmChatAdapter {
         onTokenUsage?.call(usage);
       }
     } on StateError catch (e, st) {
+      onRetryStatus?.call(isRetrying: false);
       LlmChatAdapter._log.error('LLM stream error (StateError): $e\n$st');
       return _LlmStreamResult.error('LLM 调用异常: $e');
     } on TypeError catch (e, st) {
+      onRetryStatus?.call(isRetrying: false);
       LlmChatAdapter._log.error('LLM stream error (TypeError): $e\n$st');
       return _LlmStreamResult.error('LLM 调用异常: $e');
     } on AggregateException catch (e) {
+      onRetryStatus?.call(isRetrying: false);
       LlmChatAdapter._log.error(
         'LLM 调用在 ${e.errors.length} 次尝试后全部失败',
       );
@@ -225,6 +237,7 @@ extension _StreamHandler on LlmChatAdapter {
         'LLM 请求在 ${e.errors.length} 次尝试后仍然失败。最后错误: $lastError',
       );
     } catch (e, st) {
+      onRetryStatus?.call(isRetrying: false);
       LlmChatAdapter._log.error('LLM stream error: $e\n$st');
       return _LlmStreamResult.error('LLM 调用异常: $e');
     }

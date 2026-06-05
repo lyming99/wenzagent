@@ -1214,7 +1214,8 @@ class AgentProxy {
       return _localAgent.isSending;
     }
     return _remoteCache.status == AgentStatus.processing ||
-        _remoteCache.status == AgentStatus.streaming;
+        _remoteCache.status == AgentStatus.streaming ||
+        _remoteCache.status == AgentStatus.retrying;
   }
 
   /// 待确认消息队列长度

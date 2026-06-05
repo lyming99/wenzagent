@@ -6,26 +6,22 @@ void main() {
   group('sanitizeForLlm', () {
     // ===== 辅助方法 =====
 
-    ChatMessage userMsg(String id, String content) => ChatMessage.user(
-          id: id,
-          employeeId: 'emp1',
-          content: content,
-        );
+    ChatMessage userMsg(String id, String content) =>
+        ChatMessage.user(id: id, employeeId: 'emp1', content: content);
 
-    ChatMessage systemMsg(String id, String content) => ChatMessage.system(
-          id: id,
-          employeeId: 'emp1',
-          content: content,
-        );
+    ChatMessage systemMsg(String id, String content) =>
+        ChatMessage.system(id: id, employeeId: 'emp1', content: content);
 
-    ChatMessage assistantMsg(String id, String content,
-            {List<ToolCall>? toolCalls}) =>
-        ChatMessage.assistant(
-          id: id,
-          employeeId: 'emp1',
-          content: content,
-          toolCalls: toolCalls,
-        );
+    ChatMessage assistantMsg(
+      String id,
+      String content, {
+      List<ToolCall>? toolCalls,
+    }) => ChatMessage.assistant(
+      id: id,
+      employeeId: 'emp1',
+      content: content,
+      toolCalls: toolCalls,
+    );
 
     ChatMessage toolResultGroup(String id, List<ToolResult> results) =>
         ChatMessage.toolResultGroup(
@@ -34,31 +30,35 @@ void main() {
           results: results,
         );
 
-    ChatMessage toolResultMsg(String id, String toolCallId, String content,
-            {bool isError = false, String? toolName}) =>
-        ChatMessage.toolResult(
-          id: id,
-          employeeId: 'emp1',
-          toolCallId: toolCallId,
-          content: content,
-          isError: isError,
-          toolName: toolName,
-        );
+    ChatMessage toolResultMsg(
+      String id,
+      String toolCallId,
+      String content, {
+      bool isError = false,
+      String? toolName,
+    }) => ChatMessage.toolResult(
+      id: id,
+      employeeId: 'emp1',
+      toolCallId: toolCallId,
+      content: content,
+      isError: isError,
+      toolName: toolName,
+    );
 
-    ToolCall tc(String id, String name) => ToolCall(
-          id: id,
-          name: name,
-          arguments: {},
-        );
+    ToolCall tc(String id, String name) =>
+        ToolCall(id: id, name: name, arguments: {});
 
-    ToolResult tr(String toolCallId, String content,
-            {bool isError = false, String? name}) =>
-        ToolResult(
-          toolCallId: toolCallId,
-          content: content,
-          isError: isError,
-          name: name,
-        );
+    ToolResult tr(
+      String toolCallId,
+      String content, {
+      bool isError = false,
+      String? name,
+    }) => ToolResult(
+      toolCallId: toolCallId,
+      content: content,
+      isError: isError,
+      name: name,
+    );
 
     // ===== 基础场景：正常序列不应被修改 =====
 
@@ -84,7 +84,11 @@ void main() {
       final messages = [
         userMsg('u1', 'read file'),
         assistantMsg('a1', 'reading', toolCalls: [tc('tc1', 'file_read')]),
-        assistantMsg('a2', 'also writing', toolCalls: [tc('tc2', 'file_write')]),
+        assistantMsg(
+          'a2',
+          'also writing',
+          toolCalls: [tc('tc2', 'file_write')],
+        ),
         toolResultGroup('r1', [tr('tc1', 'file content')]),
         toolResultGroup('r2', [tr('tc2', 'write ok')]),
       ];
@@ -97,10 +101,16 @@ void main() {
       // strictMode 下：遇到 a2(toolCalls) 时，tc1 未匹配 → strip a1 的 toolCalls
       // tc1 的 tool_result (r1) 在阶段二被丢弃（因为 a1 已被 strip）
       // 只保留 tc2 的 tool_result (r2)
-      expect(result.any((m) => m.id == 'r1'), isFalse,
-          reason: 'tc1 的 tool_result 应被丢弃（因为 a1 的 toolCalls 被 strip 了）');
-      expect(result.any((m) => m.id == 'r2'), isTrue,
-          reason: 'tc2 的 tool_result 应被保留');
+      expect(
+        result.any((m) => m.id == 'r1'),
+        isFalse,
+        reason: 'tc1 的 tool_result 应被丢弃（因为 a1 的 toolCalls 被 strip 了）',
+      );
+      expect(
+        result.any((m) => m.id == 'r2'),
+        isTrue,
+        reason: 'tc2 的 tool_result 应被保留',
+      );
     });
 
     test('strictMode=true: 正常多轮 tool calling 序列保持不变', () {
@@ -164,12 +174,14 @@ void main() {
 
       // 阶段一：expectedIds 包含 call_001，遇到 system 消息时 strip a1
       // 阶段二：tool_result(call_001) 前面没有 assistant(toolCalls) → 丢弃
-      expect(result.any((m) => m.id == 'r1'), isFalse,
-          reason: 'tool_result 出现在 system 消息之后，不再是紧邻 assistant，应被丢弃');
+      expect(
+        result.any((m) => m.id == 'r1'),
+        isFalse,
+        reason: 'tool_result 出现在 system 消息之后，不再是紧邻 assistant，应被丢弃',
+      );
       // a1 应被 strip
       final a1Result = result.firstWhere((m) => m.id == 'a1');
-      expect(a1Result.toolCalls, isNull,
-          reason: 'a1 的 toolCalls 应被 strip');
+      expect(a1Result.toolCalls, isNull, reason: 'a1 的 toolCalls 应被 strip');
     });
 
     test('strictMode=true: 多个 tool_result group 只保留紧邻的', () {
@@ -191,10 +203,16 @@ void main() {
       // 阶段一：遇到 a2 时 strip a1
       // 阶段二：r1(call_001) 前面的 a1 已被 strip，无 assistant(toolCalls) → 丢弃
       // r2(call_002) 前面是 a2(toolCalls: [tc2]) → 匹配，保留
-      expect(result.any((m) => m.id == 'r1'), isFalse,
-          reason: 'r1 的 tool_use_id 不在紧邻的前一条 assistant 中');
-      expect(result.any((m) => m.id == 'r2'), isTrue,
-          reason: 'r2 的 tool_use_id 在紧邻的前一条 assistant 中');
+      expect(
+        result.any((m) => m.id == 'r1'),
+        isFalse,
+        reason: 'r1 的 tool_use_id 不在紧邻的前一条 assistant 中',
+      );
+      expect(
+        result.any((m) => m.id == 'r2'),
+        isTrue,
+        reason: 'r2 的 tool_use_id 在紧邻的前一条 assistant 中',
+      );
     });
 
     test('strictMode=true: 部分匹配的 tool_result_group 被拆分', () {
@@ -218,8 +236,11 @@ void main() {
       // 阶段二：tc1 在紧邻的 a1 中 → 保留
       expect(result.any((m) => m.id == 'r1'), isTrue);
       final r1Result = result.firstWhere((m) => m.id == 'r1');
-      expect(r1Result.toolResults!.length, equals(1),
-          reason: '只有 tc1 的 result 被保留');
+      expect(
+        r1Result.toolResults!.length,
+        equals(1),
+        reason: '只有 tc1 的 result 被保留',
+      );
       expect(r1Result.toolResults!.first.toolCallId, equals('tc1'));
     });
 
@@ -241,8 +262,11 @@ void main() {
       // 阶段一：expectedIds={call_001}，遇到 assistant(无 toolCalls) 时
       //   进入 else 分支，strip a1 的 toolCalls，expectedIds 清空
       // 阶段二：r1(call_001) 前面没有 assistant(toolCalls) → 丢弃
-      expect(result.any((m) => m.id == 'r1'), isFalse,
-          reason: 'tool_result 不紧邻 assistant(toolCalls)，应被丢弃');
+      expect(
+        result.any((m) => m.id == 'r1'),
+        isFalse,
+        reason: 'tool_result 不紧邻 assistant(toolCalls)，应被丢弃',
+      );
     });
 
     // ===== strictMode=false + knownToolCallIds 场景（OpenAI 行为）=====
@@ -268,13 +292,29 @@ void main() {
       // 阶段一：tc1 在 knownToolCallIds 中，其 tool_result 被保留
       // 阶段二：r1(tc1) 不在紧邻的 a2(toolCalls=[tc2]) 中 → 被丢弃
       // 这是正确的修复行为，避免 Anthropic API "unexpected tool_use_id" 错误
-      expect(result.any((m) => m.id == 'r1'), isFalse,
-          reason: 'tc1 的 tool_result 在阶段二验证时因不满足紧邻要求被丢弃');
-      expect(result.any((m) => m.id == 'r2'), isTrue,
-          reason: 'tc2 的 tool_result 紧邻 a2(toolCalls) 应被保留');
+      expect(
+        result.any((m) => m.id == 'r1'),
+        isFalse,
+        reason: 'tc1 的 tool_result 在阶段二验证时因不满足紧邻要求被丢弃',
+      );
+      expect(
+        result.any((m) => m.id == 'r2'),
+        isTrue,
+        reason: 'tc2 的 tool_result 紧邻 a2(toolCalls) 应被保留',
+      );
       // a2 的 toolCalls 中 tc2 有匹配的 r2，保留
-      expect(result.where((m) => m.role == MessageRole.assistant && m.toolCalls != null && m.toolCalls!.isNotEmpty).length, equals(1),
-          reason: '只有 a2 保留 toolCalls（a1 被 strip 因为其 tc1 无紧邻 tool_result）');
+      expect(
+        result
+            .where(
+              (m) =>
+                  m.role == MessageRole.assistant &&
+                  m.toolCalls != null &&
+                  m.toolCalls!.isNotEmpty,
+            )
+            .length,
+        equals(1),
+        reason: '只有 a2 保留 toolCalls（a1 被 strip 因为其 tc1 无紧邻 tool_result）',
+      );
     });
 
     test('strictMode=false + knownToolCallIds: 孤立 tool_result 被丢弃', () {
@@ -294,8 +334,11 @@ void main() {
       );
 
       expect(result.any((m) => m.id == 'r1'), isTrue);
-      expect(result.any((m) => m.id == 'r2'), isFalse,
-          reason: '未知 toolCallId 的 tool_result 应被丢弃');
+      expect(
+        result.any((m) => m.id == 'r2'),
+        isFalse,
+        reason: '未知 toolCallId 的 tool_result 应被丢弃',
+      );
     });
 
     // ===== 默认行为（无 knownToolCallIds, strictMode=false）=====
@@ -304,7 +347,11 @@ void main() {
       final messages = [
         userMsg('u1', 'read file'),
         assistantMsg('a1', 'reading', toolCalls: [tc('tc1', 'file_read')]),
-        assistantMsg('a2', 'also writing', toolCalls: [tc('tc2', 'file_write')]),
+        assistantMsg(
+          'a2',
+          'also writing',
+          toolCalls: [tc('tc2', 'file_write')],
+        ),
         toolResultGroup('r1', [tr('tc1', 'file content')]),
         toolResultGroup('r2', [tr('tc2', 'write ok')]),
       ];
@@ -339,8 +386,11 @@ void main() {
 
       // strictMode=true 时，knownToolCallIds 应被忽略
       // tc1 的 tool_result 应被丢弃
-      expect(result.any((m) => m.id == 'r1'), isFalse,
-          reason: 'strictMode=true 时应忽略 knownToolCallIds');
+      expect(
+        result.any((m) => m.id == 'r1'),
+        isFalse,
+        reason: 'strictMode=true 时应忽略 knownToolCallIds',
+      );
       expect(result.any((m) => m.id == 'r2'), isTrue);
     });
 
@@ -356,7 +406,10 @@ void main() {
         toolResultMsg('r1', 'tc1', 'file content'),
       ];
 
-      final result = LlmMessageMapper.sanitizeForLlm(messages, strictMode: true);
+      final result = LlmMessageMapper.sanitizeForLlm(
+        messages,
+        strictMode: true,
+      );
       expect(result.length, equals(3));
     });
 
@@ -366,9 +419,11 @@ void main() {
         toolResultMsg('r1', 'tc_unknown', 'orphan'),
       ];
 
-      final result = LlmMessageMapper.sanitizeForLlm(messages, strictMode: true);
-      expect(result.length, equals(1),
-          reason: '孤立的 tool result 应被丢弃');
+      final result = LlmMessageMapper.sanitizeForLlm(
+        messages,
+        strictMode: true,
+      );
+      expect(result.length, equals(1), reason: '孤立的 tool result 应被丢弃');
     });
 
     test('strictMode=true: 复杂交错序列（模拟实际 bug 场景）', () {
@@ -377,7 +432,11 @@ void main() {
       final messages = [
         systemMsg('sys1', 'You are a helpful assistant.'),
         userMsg('u1', '请帮我搜索文件'),
-        assistantMsg('a1', '我来搜索', toolCalls: [tc('call_00_abc123', 'content_search')]),
+        assistantMsg(
+          'a1',
+          '我来搜索',
+          toolCalls: [tc('call_00_abc123', 'content_search')],
+        ),
         assistantMsg('a_inject', '正在处理...'), // 注入的 assistant 消息
         toolResultGroup('r1', [tr('call_00_abc123', '搜索结果')]),
       ];
@@ -390,14 +449,16 @@ void main() {
       // 阶段一：expectedIds={call_00_abc123}，遇到 a_inject(无 toolCalls) →
       //   进入 else 分支，strip a1 的 toolCalls，清空 expectedIds
       // 阶段二：r1 前面没有 assistant(toolCalls) → 丢弃
-      expect(result.any((m) => m.id == 'r1'), isFalse,
-          reason: 'tool_result 不紧邻 assistant(toolCalls)');
+      expect(
+        result.any((m) => m.id == 'r1'),
+        isFalse,
+        reason: 'tool_result 不紧邻 assistant(toolCalls)',
+      );
 
       // 验证最终序列不包含任何 toolCalls
       for (final m in result) {
         if (m.role == MessageRole.assistant) {
-          expect(m.toolCalls, isNull,
-              reason: '最终序列中不应有残留的 toolCalls');
+          expect(m.toolCalls, isNull, reason: '最终序列中不应有残留的 toolCalls');
         }
       }
     });
@@ -406,7 +467,11 @@ void main() {
       // 一个 assistant(toolCalls) 后跟多个 tool_result（分组合并后的场景）
       final messages = [
         userMsg('u1', 'multi tool'),
-        assistantMsg('a1', '', toolCalls: [tc('tc1', 'tool_a'), tc('tc2', 'tool_b')]),
+        assistantMsg(
+          'a1',
+          '',
+          toolCalls: [tc('tc1', 'tool_a'), tc('tc2', 'tool_b')],
+        ),
         toolResultGroup('r1', [tr('tc1', 'result a')]),
         toolResultGroup('r2', [tr('tc2', 'result b')]),
         assistantMsg('a2', 'done'),
@@ -423,6 +488,33 @@ void main() {
       expect(result.any((m) => m.id == 'r1'), isTrue);
       expect(result.any((m) => m.id == 'r2'), isTrue);
       expect(result.length, equals(5));
+    });
+
+    test('跨轮次合并的 tool_result group 会按 assistant 拆分配对', () {
+      final messages = [
+        userMsg('u1', 'do two steps'),
+        assistantMsg('a1', 'step one', toolCalls: [tc('tc1', 'tool_a')]),
+        assistantMsg('a2', 'step two', toolCalls: [tc('tc2', 'tool_b')]),
+        toolResultGroup('r_merged', [
+          tr('tc1', 'result a'),
+          tr('tc2', 'result b'),
+        ]),
+        assistantMsg('a3', 'done'),
+      ];
+
+      final result = LlmMessageMapper.sanitizeForLlm(
+        messages,
+        knownToolCallIds: {'tc1', 'tc2'},
+      );
+
+      expect(result.length, equals(6));
+      expect(result[1].id, equals('a1'));
+      expect(result[2].role, equals(MessageRole.tool));
+      expect(result[2].toolResults!.map((r) => r.toolCallId), equals(['tc1']));
+      expect(result[3].id, equals('a2'));
+      expect(result[4].role, equals(MessageRole.tool));
+      expect(result[4].toolResults!.map((r) => r.toolCallId), equals(['tc2']));
+      expect(result[5].id, equals('a3'));
     });
   });
 }

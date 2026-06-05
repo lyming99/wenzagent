@@ -72,6 +72,9 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
       case AgentEventType.tokenUsageUpdated:
         // Token 用量更新事件：直接透传给前端
         break;
+      case AgentEventType.llmRetrying:
+        // LLM 重试事件：状态和消息状态分别由 agentStatusChanged/messageStatusChanged 处理。
+        break;
       case AgentEventType.unknown:
         break;
     }
@@ -85,7 +88,9 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
 
     if (messageId == null || status == null) return;
 
-    _CachedAgentProxyBase._log.debug('消息状态变更: $messageId -> $status${error != null ? ", error: $error" : ""}');
+    _CachedAgentProxyBase._log.debug(
+      '消息状态变更: $messageId -> $status${error != null ? ", error: $error" : ""}',
+    );
 
     // 更新本地缓存中的消息状态（包含错误信息）
     _updateMessageStatus(messageId, status, error: error);
@@ -96,7 +101,8 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
     }
 
     // 如果是完成或失败状态，立即同步远程消息（避免 500ms 去抖延迟）
-    if (status == 'completed' || status == 'failed' ||
+    if (status == 'completed' ||
+        status == 'failed' ||
         status == 'interrupted') {
       // 清除 callingToolIds 缓存（消息处理完成时所有工具调用已结束）
       _callingToolIdsCache = [];
@@ -115,8 +121,10 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
   }
 
   /// 创建错误消息（当消息处理失败时，生成一条 assistant 类型的错误消息给客户端可见）
-  Future<void> _createErrorMessage(String originalMessageId,
-      String errorContent) async {
+  Future<void> _createErrorMessage(
+    String originalMessageId,
+    String errorContent,
+  ) async {
     // 截断过长的错误信息，避免存储和显示问题
     final displayError = errorContent.length > 500
         ? '${errorContent.substring(0, 500)}...'
@@ -149,10 +157,12 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
 
     // 更新状态缓存
     if (data.containsKey('currentProcessingMessageId')) {
-      _currentProcessingMessageId = data['currentProcessingMessageId'] as String?;
+      _currentProcessingMessageId =
+          data['currentProcessingMessageId'] as String?;
     }
     if (data.containsKey('queuedMessageIds')) {
-      _queuedMessageIds = (data['queuedMessageIds'] as List?)?.cast<String>() ?? [];
+      _queuedMessageIds =
+          (data['queuedMessageIds'] as List?)?.cast<String>() ?? [];
     }
 
     // 如果是空闲状态，可能意味着消息处理完成
@@ -182,7 +192,9 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
       // 更新 callingToolIds 缓存
       final toolCallId = data['toolCallId'] as String?;
       if (toolCallId != null) {
-        _callingToolIdsCache = _callingToolIdsCache.where((id) => id != toolCallId).toList();
+        _callingToolIdsCache = _callingToolIdsCache
+            .where((id) => id != toolCallId)
+            .toList();
       }
 
       // 使用 debounce 同步消息，避免与 completed/idle 重复
@@ -202,7 +214,9 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
     final localId = 'local_toolcall_$toolCallId';
     final exists = await _messageStore.getMessage(_deviceId, localId);
     if (exists != null) {
-      _CachedAgentProxyBase._log.debug('工具调用临时消息已存在，跳过: $toolName ($toolCallId)');
+      _CachedAgentProxyBase._log.debug(
+        '工具调用临时消息已存在，跳过: $toolName ($toolCallId)',
+      );
       return;
     }
 
@@ -218,7 +232,7 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
       toolName: toolName,
       toolArguments: arguments,
       toolCalls: [
-        ToolCall(id: toolCallId, name: toolName, arguments: arguments ?? {})
+        ToolCall(id: toolCallId, name: toolName, arguments: arguments ?? {}),
       ],
       status: 'processing',
       createdAt: DateTime.now(),
@@ -307,7 +321,10 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
     try {
       final chatMsg = _agentMessageToChatMessage(message);
       await _messageStore.addMessage(
-          _deviceId, chatMsg, updateWatermark: false);
+        _deviceId,
+        chatMsg,
+        updateWatermark: false,
+      );
     } catch (e) {
       _CachedAgentProxyBase._log.error('保存工具调用消息失败', e);
     }
@@ -318,7 +335,11 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
   Future<void> _updateToolCallMessageInDb(AgentMessage message) async {
     try {
       final chatMsg = _agentMessageToChatMessage(message);
-      await _messageStore.updateMessage(_deviceId, chatMsg, updateWatermark: false);
+      await _messageStore.updateMessage(
+        _deviceId,
+        chatMsg,
+        updateWatermark: false,
+      );
     } catch (e) {
       _CachedAgentProxyBase._log.error('更新工具调用消息失败', e);
     }
@@ -329,7 +350,9 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
     try {
       final request = AgentPermissionRequest.fromMap(data);
       _pendingPermissionRequests[request.requestId] = request;
-      _CachedAgentProxyBase._log.info('收到权限请求: ${request.requestId}, 函数: ${request.functionName}');
+      _CachedAgentProxyBase._log.info(
+        '收到权限请求: ${request.requestId}, 函数: ${request.functionName}',
+      );
 
       // 通知客户端重新加载消息
       _notifyMessagesChanged();
@@ -353,7 +376,8 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
     final removed = _pendingPermissionRequests.remove(requestId);
     if (removed != null) {
       _CachedAgentProxyBase._log.info(
-        '收到权限响应（其他设备已处理）: $requestId, decision=$decision, scope=$scope');
+        '收到权限响应（其他设备已处理）: $requestId, decision=$decision, scope=$scope',
+      );
       _notifyMessagesChanged();
     }
   }
@@ -363,7 +387,9 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
     try {
       final request = AgentConfirmRequest.fromMap(data);
       _pendingConfirmRequests[request.requestId] = request;
-      _CachedAgentProxyBase._log.info('收到确认请求: ${request.requestId}, 标题: ${request.title}');
+      _CachedAgentProxyBase._log.info(
+        '收到确认请求: ${request.requestId}, 标题: ${request.title}',
+      );
 
       // 通知客户端重新加载消息
       _notifyMessagesChanged();
@@ -420,13 +446,17 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
         _sessionClearPending = false;
         _sessionClearGuardTimer = null;
         // 保护期结束后，主动触发一次补偿同步，确保保护期内收到的消息事件被处理
-        _CachedAgentProxyBase._log.debug('会话清空保护期结束(gen=$currentGeneration)，触发补偿同步');
+        _CachedAgentProxyBase._log.debug(
+          '会话清空保护期结束(gen=$currentGeneration)，触发补偿同步',
+        );
         // 走 _syncLock 保证互斥，避免与 syncWithRemote/syncFromRemote 并发
         _syncLock.synchronized(() async {
           await _syncMessagesFromRemote();
         });
       } else {
-        _CachedAgentProxyBase._log.debug('会话清空保护期跳过(gen=$currentGeneration, current=$_sessionClearGeneration)');
+        _CachedAgentProxyBase._log.debug(
+          '会话清空保护期跳过(gen=$currentGeneration, current=$_sessionClearGeneration)',
+        );
       }
     });
 
@@ -436,7 +466,10 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
     // 在删除前获取本地 maxSeq，用于设置 clearSeq = lastSeq = maxSeq
     final maxSeq = await _messageStore.getMaxSeq(_deviceId, _employeeId);
     // 获取当前水位线，确保不回退
-    final currentLastSeq = await _messageStore.getLastSeq(_deviceId, _employeeId);
+    final currentLastSeq = await _messageStore.getLastSeq(
+      _deviceId,
+      _employeeId,
+    );
     await _messageStore.deleteMessages(_deviceId, _employeeId);
     // 水位线取 maxSeq 和 currentLastSeq 的较大值，确保不回退
     final targetSeq = maxSeq > currentLastSeq ? maxSeq : currentLastSeq;
@@ -445,7 +478,9 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
     }
     _notifyMessagesChanged();
 
-    _CachedAgentProxyBase._log.info('本地会话已清空，水位线: lastSeq=$targetSeq (maxSeq=$maxSeq, prev=$currentLastSeq)');
+    _CachedAgentProxyBase._log.info(
+      '本地会话已清空，水位线: lastSeq=$targetSeq (maxSeq=$maxSeq, prev=$currentLastSeq)',
+    );
   }
 
   /// 处理会话摘要变更事件
@@ -486,10 +521,13 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
 
     switch (configType) {
       case 'provider':
-        final providerConfigMap = data['providerConfig'] as Map<String, dynamic>?;
+        final providerConfigMap =
+            data['providerConfig'] as Map<String, dynamic>?;
         if (providerConfigMap != null) {
           _proxy.updateRemoteCache(providerConfig: providerConfigMap);
-          _CachedAgentProxyBase._log.info('远程 Provider 配置已更新: ${providerConfigMap['provider']} · ${providerConfigMap['model']}');
+          _CachedAgentProxyBase._log.info(
+            '远程 Provider 配置已更新: ${providerConfigMap['provider']} · ${providerConfigMap['model']}',
+          );
         } else if (action == 'cleared') {
           _proxy.clearRemoteCacheConfig('provider');
         }

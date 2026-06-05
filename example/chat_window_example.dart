@@ -89,6 +89,9 @@ void main() async {
       case AgentStatus.streaming:
         // 流式输出中
         print('[聊天窗口] Agent 流式输出中...');
+      case AgentStatus.retrying:
+        // LLM 调用失败，正在重试
+        print('[聊天窗口] Agent 重试中...');
       case AgentStatus.waitingPermission:
         // 显示权限请求 UI
         print('[聊天窗口] Agent 等待权限确认...');

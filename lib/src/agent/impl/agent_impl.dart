@@ -200,8 +200,8 @@ class AgentImpl extends _AgentImplBase
     required this.deviceId,
     required IChatAdapter chatAdapter,
     BuiltinToolProvider? builtinToolProvider,
-  })  : _chatAdapter = chatAdapter,
-        _builtinToolProvider = builtinToolProvider;
+  }) : _chatAdapter = chatAdapter,
+       _builtinToolProvider = builtinToolProvider;
 
   // ===== IAgent: 基础信息 =====
 
@@ -219,7 +219,9 @@ class AgentImpl extends _AgentImplBase
 
   @override
   bool get isSending =>
-      _status == AgentStatus.processing || _status == AgentStatus.streaming;
+      _status == AgentStatus.processing ||
+      _status == AgentStatus.streaming ||
+      _status == AgentStatus.retrying;
 
   @override
   bool get isStreaming => _chatAdapter.isStreaming;
@@ -302,21 +304,25 @@ class AgentImpl extends _AgentImplBase
     // 注入流式输出增量回调：发射 streamDelta AgentEvent
     _chatAdapter.onStreamDelta = (chunk) {
       if (_status == AgentStatus.disposed) return;
-      _eventController.add(AgentEvent(
-        type: AgentEventType.streamDelta,
-        data: {'content': chunk},
-        employeeId: employeeId,
-      ));
+      _eventController.add(
+        AgentEvent(
+          type: AgentEventType.streamDelta,
+          data: {'content': chunk},
+          employeeId: employeeId,
+        ),
+      );
     };
 
     // 注入思考内容增量回调：发射 thinkingDelta AgentEvent
     _chatAdapter.onThinkingDelta = (delta) {
       if (_status == AgentStatus.disposed) return;
-      _eventController.add(AgentEvent(
-        type: AgentEventType.thinkingDelta,
-        data: {'content': delta},
-        employeeId: employeeId,
-      ));
+      _eventController.add(
+        AgentEvent(
+          type: AgentEventType.thinkingDelta,
+          data: {'content': delta},
+          employeeId: employeeId,
+        ),
+      );
     };
 
     // 注入 Token 用量回调：累加统计并广播 tokenUsageUpdated AgentEvent
@@ -329,16 +335,22 @@ class AgentImpl extends _AgentImplBase
       final msgId = currentMsgId;
       final eid = this.employeeId;
       _tokenUsageTracker?.accumulate(eid, msgId, usage);
-      _eventController.add(AgentEvent(
-        type: AgentEventType.tokenUsageUpdated,
-        data: {
-          'sessionUsage': _tokenUsageTracker?.getSessionUsage(eid).toMap(),
-          'messageUsage': _tokenUsageTracker?.getMessageUsage(msgId)?.toMap(),
-          'messageId': msgId,
-        },
-        employeeId: eid,
-      ));
+      _eventController.add(
+        AgentEvent(
+          type: AgentEventType.tokenUsageUpdated,
+          data: {
+            'sessionUsage': _tokenUsageTracker?.getSessionUsage(eid).toMap(),
+            'messageUsage': _tokenUsageTracker?.getMessageUsage(msgId)?.toMap(),
+            'messageId': msgId,
+          },
+          employeeId: eid,
+        ),
+      );
     };
+
+    if (_chatAdapter case final LlmChatAdapter adapter) {
+      adapter.onRetryStatus = _handleRetryStatusChanged;
+    }
 
     // 设置权限回调：通过事件流广播权限请求
     _permissionManager.onPermissionRequest = (request) async {
@@ -423,16 +435,18 @@ class AgentImpl extends _AgentImplBase
 
     // 消息开始处理回调：发射 messageStarted AgentEvent
     _processor!.onMessageStarted = (messageId, messageData) {
-      _eventController.add(AgentEvent(
-        type: AgentEventType.messageStarted,
-        data: {
-          'messageId': messageId,
-          'role': messageData['role'],
-          'type': messageData['type'],
-          'content': messageData['content'],
-        },
-        employeeId: employeeId,
-      ));
+      _eventController.add(
+        AgentEvent(
+          type: AgentEventType.messageStarted,
+          data: {
+            'messageId': messageId,
+            'role': messageData['role'],
+            'type': messageData['type'],
+            'content': messageData['content'],
+          },
+          employeeId: employeeId,
+        ),
+      );
     };
 
     // 监听消息处理状态变更
@@ -545,22 +559,30 @@ class AgentImpl extends _AgentImplBase
   Future<void> setContext(Map<String, dynamic> contextData) async {
     _touch();
     _chatAdapter.setContext(contextData);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.configChanged,
-      data: {'configType': 'context', 'action': 'updated', 'contextData': contextData},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.configChanged,
+        data: {
+          'configType': 'context',
+          'action': 'updated',
+          'contextData': contextData,
+        },
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
   Future<void> clearContext() async {
     _touch();
     _chatAdapter.clearContext();
-    _eventController.add(AgentEvent(
-      type: AgentEventType.configChanged,
-      data: {'configType': 'context', 'action': 'cleared'},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.configChanged,
+        data: {'configType': 'context', 'action': 'cleared'},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
@@ -576,11 +598,17 @@ class AgentImpl extends _AgentImplBase
     await _withLock(() async {
       await _chatAdapter.updateProvider(providerConfig.toMap());
     });
-    _eventController.add(AgentEvent(
-      type: AgentEventType.configChanged,
-      data: {'configType': 'provider', 'action': 'updated', 'providerConfig': providerConfig.toMap()},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.configChanged,
+        data: {
+          'configType': 'provider',
+          'action': 'updated',
+          'providerConfig': providerConfig.toMap(),
+        },
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
@@ -595,15 +623,17 @@ class AgentImpl extends _AgentImplBase
   Future<void> setProject(ProjectData? projectData) async {
     _touch();
     await _chatAdapter.updateProjectContext(projectData?.toMap());
-    _eventController.add(AgentEvent(
-      type: AgentEventType.configChanged,
-      data: {
-        'configType': 'project',
-        'action': projectData != null ? 'updated' : 'cleared',
-        if (projectData != null) 'projectData': projectData.toMap(),
-      },
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.configChanged,
+        data: {
+          'configType': 'project',
+          'action': projectData != null ? 'updated' : 'cleared',
+          if (projectData != null) 'projectData': projectData.toMap(),
+        },
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
@@ -617,31 +647,37 @@ class AgentImpl extends _AgentImplBase
   @override
   void registerTool(AgentTool tool) {
     _toolRegistry.registerTool(tool);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.configChanged,
-      data: {'configType': 'tools', 'action': 'added', 'toolName': tool.name},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.configChanged,
+        data: {'configType': 'tools', 'action': 'added', 'toolName': tool.name},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
   void registerTools(List<AgentTool> tools) {
     _toolRegistry.registerTools(tools);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.configChanged,
-      data: {'configType': 'tools', 'action': 'added', 'count': tools.length},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.configChanged,
+        data: {'configType': 'tools', 'action': 'added', 'count': tools.length},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
   void unregisterTool(String name) {
     _toolRegistry.unregisterTool(name);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.configChanged,
-      data: {'configType': 'tools', 'action': 'removed', 'toolName': name},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.configChanged,
+        data: {'configType': 'tools', 'action': 'removed', 'toolName': name},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
@@ -767,14 +803,10 @@ class AgentImpl extends _AgentImplBase
       final eventType = type == 'todoTopicChanged'
           ? AgentEventType.todoTopicChanged
           : type == 'todoTaskItemChanged'
-              ? AgentEventType.todoTaskItemChanged
-              : AgentEventType.todoTopicChanged;
+          ? AgentEventType.todoTaskItemChanged
+          : AgentEventType.todoTopicChanged;
       _eventController.add(
-        AgentEvent(
-          type: eventType,
-          data: data,
-          employeeId: employeeId,
-        ),
+        AgentEvent(type: eventType, data: data, employeeId: employeeId),
       );
     };
   }
@@ -803,7 +835,9 @@ class AgentImpl extends _AgentImplBase
   }
 
   @override
-  Future<List<Map<String, dynamic>>> getCompletedTopics({int limit = 50}) async {
+  Future<List<Map<String, dynamic>>> getCompletedTopics({
+    int limit = 50,
+  }) async {
     final store = TodoStore(deviceId: deviceId);
     final items = await store.findCompletedTopics(employeeId, limit: limit);
     return items.map((e) => e.toMap()).toList();
@@ -816,36 +850,46 @@ class AgentImpl extends _AgentImplBase
   }
 
   @override
-  Future<void> updateTopicContent(String topicId, {String? title, String? description}) async {
+  Future<void> updateTopicContent(
+    String topicId, {
+    String? title,
+    String? description,
+  }) async {
     final store = TodoStore(deviceId: deviceId);
     store.updateTopicContent(topicId, title: title, description: description);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.todoTopicChanged,
-      data: {'action': 'updated', 'topicId': topicId},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.todoTopicChanged,
+        data: {'action': 'updated', 'topicId': topicId},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
   Future<void> deleteTopic(String topicId) async {
     final store = TodoStore(deviceId: deviceId);
     store.softDeleteTopic(topicId);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.todoTopicChanged,
-      data: {'action': 'removed', 'topicId': topicId},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.todoTopicChanged,
+        data: {'action': 'removed', 'topicId': topicId},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
   Future<void> clearCompletedTopics() async {
     final store = TodoStore(deviceId: deviceId);
     store.deleteCompletedTopics(employeeId);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.todoTopicChanged,
-      data: {'action': 'cleared'},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.todoTopicChanged,
+        data: {'action': 'cleared'},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
@@ -863,22 +907,30 @@ class AgentImpl extends _AgentImplBase
     if (taskItem != null) {
       await store.recalculateTopicStatus(taskItem.topicId);
     }
-    _eventController.add(AgentEvent(
-      type: AgentEventType.todoTaskItemChanged,
-      data: {'action': 'updated', 'taskId': taskId, 'status': status},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.todoTaskItemChanged,
+        data: {'action': 'updated', 'taskId': taskId, 'status': status},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
-  Future<void> updateTaskItemContent(String taskId, {String? title, String? content}) async {
+  Future<void> updateTaskItemContent(
+    String taskId, {
+    String? title,
+    String? content,
+  }) async {
     final store = TodoStore(deviceId: deviceId);
     store.updateTaskItemContent(taskId, title: title, content: content);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.todoTaskItemChanged,
-      data: {'action': 'updated', 'taskId': taskId},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.todoTaskItemChanged,
+        data: {'action': 'updated', 'taskId': taskId},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
@@ -889,44 +941,52 @@ class AgentImpl extends _AgentImplBase
     if (taskItem != null) {
       await store.recalculateTopicStatus(taskItem.topicId);
     }
-    _eventController.add(AgentEvent(
-      type: AgentEventType.todoTaskItemChanged,
-      data: {'action': 'removed', 'taskId': taskId},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.todoTaskItemChanged,
+        data: {'action': 'removed', 'taskId': taskId},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
   Future<void> updateTopicStatus(String topicId, String status) async {
     final store = TodoStore(deviceId: deviceId);
     store.updateTopicStatus(topicId, status);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.todoTopicChanged,
-      data: {'action': 'updated', 'topicId': topicId, 'status': status},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.todoTopicChanged,
+        data: {'action': 'updated', 'topicId': topicId, 'status': status},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
   Future<void> reorderTopics(List<String> topicIds) async {
     final store = TodoStore(deviceId: deviceId);
     store.reorderTopics(topicIds);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.todoTopicChanged,
-      data: {'action': 'reordered', 'topicIds': topicIds},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.todoTopicChanged,
+        data: {'action': 'reordered', 'topicIds': topicIds},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
   Future<void> reorderTaskItems(List<String> taskItemIds) async {
     final store = TodoStore(deviceId: deviceId);
     store.reorderTaskItems(taskItemIds);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.todoTaskItemChanged,
-      data: {'action': 'reordered', 'taskItemIds': taskItemIds},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.todoTaskItemChanged,
+        data: {'action': 'reordered', 'taskItemIds': taskItemIds},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   /// 注入 SpecManageTool 回调
@@ -978,11 +1038,7 @@ class AgentImpl extends _AgentImplBase
     specTool.broadcastEvent = (type, data) {
       final eventType = AgentEventType.specChanged;
       _eventController.add(
-        AgentEvent(
-          type: eventType,
-          data: data,
-          employeeId: employeeId,
-        ),
+        AgentEvent(type: eventType, data: data, employeeId: employeeId),
       );
     };
   }
@@ -1014,16 +1070,18 @@ class AgentImpl extends _AgentImplBase
     final store = SpecStore(deviceId: deviceId);
     store.updateStatus(specId, status);
     final spec = await store.findByIdIncludingDeleted(specId);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.specChanged,
-      data: {
-        'action': 'updated',
-        'specId': specId,
-        'status': status,
-        if (spec != null) 'spec': spec.toMap(),
-      },
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.specChanged,
+        data: {
+          'action': 'updated',
+          'specId': specId,
+          'status': status,
+          if (spec != null) 'spec': spec.toMap(),
+        },
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
@@ -1031,15 +1089,17 @@ class AgentImpl extends _AgentImplBase
     final store = SpecStore(deviceId: deviceId);
     store.updateContent(specId, content: content);
     final spec = await store.findByIdIncludingDeleted(specId);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.specChanged,
-      data: {
-        'action': 'updated',
-        'specId': specId,
-        if (spec != null) 'spec': spec.toMap(),
-      },
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.specChanged,
+        data: {
+          'action': 'updated',
+          'specId': specId,
+          if (spec != null) 'spec': spec.toMap(),
+        },
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
@@ -1047,37 +1107,47 @@ class AgentImpl extends _AgentImplBase
     final store = SpecStore(deviceId: deviceId);
     store.softDelete(specId);
     final spec = await store.findByIdIncludingDeleted(specId);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.specChanged,
-      data: {
-        'action': 'deleted',
-        'specId': specId,
-        if (spec != null) 'spec': spec.toMap(),
-      },
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.specChanged,
+        data: {
+          'action': 'deleted',
+          'specId': specId,
+          if (spec != null) 'spec': spec.toMap(),
+        },
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
   Future<void> clearCompletedSpecs() async {
     final store = SpecStore(deviceId: deviceId);
     store.deleteCompletedByEmployee(employeeId);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.specChanged,
-      data: {'action': 'cleared', 'employeeId': employeeId},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.specChanged,
+        data: {'action': 'cleared', 'employeeId': employeeId},
+        employeeId: employeeId,
+      ),
+    );
   }
 
   @override
   Future<void> reorderSpecs(List<String> specIds) async {
     final store = SpecStore(deviceId: deviceId);
     store.reorderSpecs(specIds);
-    _eventController.add(AgentEvent(
-      type: AgentEventType.specChanged,
-      data: {'action': 'reordered', 'specIds': specIds, 'employeeId': employeeId},
-      employeeId: employeeId,
-    ));
+    _eventController.add(
+      AgentEvent(
+        type: AgentEventType.specChanged,
+        data: {
+          'action': 'reordered',
+          'specIds': specIds,
+          'employeeId': employeeId,
+        },
+        employeeId: employeeId,
+      ),
+    );
   }
 
   // ===== IAgent: 文件操作追踪 =====
@@ -1087,14 +1157,22 @@ class AgentImpl extends _AgentImplBase
     int limit = 100,
     int offset = 0,
   }) async {
-    final ops = await (_fileOperationTracker?.getOperations(limit: limit, offset: offset) ?? Future.value(<FileOperationEntity>[]));
+    final ops =
+        await (_fileOperationTracker?.getOperations(
+              limit: limit,
+              offset: offset,
+            ) ??
+            Future.value(<FileOperationEntity>[]));
     return ops.map((e) => e.toMap()).toList();
   }
 
   @override
   Future<List<Map<String, dynamic>>> getFileOperationsByMessage(
-      String messageId) async {
-    final ops = await (_fileOperationTracker?.getOperationsByMessage(messageId) ?? Future.value(<FileOperationEntity>[]));
+    String messageId,
+  ) async {
+    final ops =
+        await (_fileOperationTracker?.getOperationsByMessage(messageId) ??
+            Future.value(<FileOperationEntity>[]));
     return ops.map((e) => e.toMap()).toList();
   }
 
@@ -1133,7 +1211,8 @@ class AgentImpl extends _AgentImplBase
 
   @override
   TokenUsageRecord getSessionTokenUsage() {
-    return _tokenUsageTracker?.getSessionUsage(employeeId) ?? const TokenUsageRecord();
+    return _tokenUsageTracker?.getSessionUsage(employeeId) ??
+        const TokenUsageRecord();
   }
 
   @override
@@ -1232,61 +1311,61 @@ class AgentImpl extends _AgentImplBase
     final agentEmployeeId = employeeId;
     final agentDeviceId = deviceId;
 
-    tool.sendFileMessage = ({
-      required String filePath,
-      String? mimeType,
-    }) async {
-      // 1. 校验文件
-      final file = File(filePath);
-      if (!await file.exists()) {
-        throw Exception('文件不存在: $filePath');
-      }
+    tool.sendFileMessage =
+        ({required String filePath, String? mimeType}) async {
+          // 1. 校验文件
+          final file = File(filePath);
+          if (!await file.exists()) {
+            throw Exception('文件不存在: $filePath');
+          }
 
-      final fileName = p.basename(filePath);
-      final fileSize = await file.length();
-      final hash = crypto.sha256.convert(await file.readAsBytes()).toString();
-      final fileId = const Uuid().v4();
-      final messageId = const Uuid().v4();
-      final actualMimeType = mimeType ?? _inferMimeType(filePath);
+          final fileName = p.basename(filePath);
+          final fileSize = await file.length();
+          final hash = crypto.sha256
+              .convert(await file.readAsBytes())
+              .toString();
+          final fileId = const Uuid().v4();
+          final messageId = const Uuid().v4();
+          final actualMimeType = mimeType ?? _inferMimeType(filePath);
 
-      // 2. 创建助手文件消息（与 AI 循环中 ChatMessage.assistant 模式一致）
-      final fileMessage = ChatMessage.file(
-        id: messageId,
-        employeeId: agentEmployeeId,
-        role: MessageRole.assistant,
-        fileName: fileName,
-        fileSize: fileSize,
-        fileId: fileId,
-        fileHash: hash,
-        filePath: filePath,
-        fromDeviceId: agentDeviceId,
-        mimeType: actualMimeType,
-        deviceId: agentDeviceId,
-      );
+          // 2. 创建助手文件消息（与 AI 循环中 ChatMessage.assistant 模式一致）
+          final fileMessage = ChatMessage.file(
+            id: messageId,
+            employeeId: agentEmployeeId,
+            role: MessageRole.assistant,
+            fileName: fileName,
+            fileSize: fileSize,
+            fileId: fileId,
+            fileHash: hash,
+            filePath: filePath,
+            fromDeviceId: agentDeviceId,
+            mimeType: actualMimeType,
+            deviceId: agentDeviceId,
+          );
 
-      // 3. 持久化到 DB（与 injectAssistantMessage 模式一致）
-      if (_chatAdapter case final LlmChatAdapter adapter) {
-        adapter.memoryManager.addMessage(
-          agentEmployeeId,
-          agentDeviceId,
-          fileMessage,
-        );
-      }
+          // 3. 持久化到 DB（与 injectAssistantMessage 模式一致）
+          if (_chatAdapter case final LlmChatAdapter adapter) {
+            adapter.memoryManager.addMessage(
+              agentEmployeeId,
+              agentDeviceId,
+              fileMessage,
+            );
+          }
 
-      // 4. 广播 completed 事件（与 AI 循环 onMessageStatusChanged 模式一致）
-      _broadcasterBroadcastMessageStatusChange(
-        messageId: messageId,
-        status: AgentMessageStatus.completed,
-        extraData: {
-          'role': 'assistant',
-          'type': 'file',
-          'content': fileMessage.content,
-          'metadata': fileMessage.metadata,
-        },
-      );
+          // 4. 广播 completed 事件（与 AI 循环 onMessageStatusChanged 模式一致）
+          _broadcasterBroadcastMessageStatusChange(
+            messageId: messageId,
+            status: AgentMessageStatus.completed,
+            extraData: {
+              'role': 'assistant',
+              'type': 'file',
+              'content': fileMessage.content,
+              'metadata': fileMessage.metadata,
+            },
+          );
 
-      return messageId;
-    };
+          return messageId;
+        };
 
     _AgentImplBase._log.info(
       'SendFileMessageTool injected for $agentEmployeeId',
@@ -1369,63 +1448,68 @@ class AgentImpl extends _AgentImplBase
 
     tool.employeeId = employeeId;
 
-    tool.queryMessages = ({
-      required String employeeId,
-      String? keyword,
-      String? role,
-      int limit = 20,
-      int offset = 0,
-      int? beforeSeq,
-      int? afterSeq,
-    }) async {
-      // 从 LlmChatAdapter 的 memoryManager 获取消息
-      if (_chatAdapter is! LlmChatAdapter) {
-        return {'messages': [], 'total': 0, 'hasMore': false};
-      }
-      final adapter = _chatAdapter as LlmChatAdapter;
-      final session = adapter.memoryManager.getSession(employeeId);
-      if (session == null) {
-        return {'messages': [], 'total': 0, 'hasMore': false};
-      }
+    tool.queryMessages =
+        ({
+          required String employeeId,
+          String? keyword,
+          String? role,
+          int limit = 20,
+          int offset = 0,
+          int? beforeSeq,
+          int? afterSeq,
+        }) async {
+          // 从 LlmChatAdapter 的 memoryManager 获取消息
+          if (_chatAdapter is! LlmChatAdapter) {
+            return {'messages': [], 'total': 0, 'hasMore': false};
+          }
+          final adapter = _chatAdapter as LlmChatAdapter;
+          final session = adapter.memoryManager.getSession(employeeId);
+          if (session == null) {
+            return {'messages': [], 'total': 0, 'hasMore': false};
+          }
 
-      var allMsgs = session.allMessages;
+          var allMsgs = session.allMessages;
 
-      // 过滤
-      if (role != null && role.isNotEmpty) {
-        allMsgs = allMsgs.where((m) => m.role.name == role).toList();
-      }
-      if (beforeSeq != null) {
-        allMsgs = allMsgs.where((m) => m.seq < beforeSeq).toList();
-      }
-      if (afterSeq != null) {
-        allMsgs = allMsgs.where((m) => m.seq > afterSeq).toList();
-      }
-      if (keyword != null && keyword.isNotEmpty) {
-        allMsgs = allMsgs.where((m) {
-          final content = m.content ?? '';
-          return content.contains(keyword);
-        }).toList();
-      }
+          // 过滤
+          if (role != null && role.isNotEmpty) {
+            allMsgs = allMsgs.where((m) => m.role.name == role).toList();
+          }
+          if (beforeSeq != null) {
+            allMsgs = allMsgs.where((m) => m.seq < beforeSeq).toList();
+          }
+          if (afterSeq != null) {
+            allMsgs = allMsgs.where((m) => m.seq > afterSeq).toList();
+          }
+          if (keyword != null && keyword.isNotEmpty) {
+            allMsgs = allMsgs.where((m) {
+              final content = m.content ?? '';
+              return content.contains(keyword);
+            }).toList();
+          }
 
-      final total = allMsgs.length;
+          final total = allMsgs.length;
 
-      // 分页
-      final paged = allMsgs.skip(offset).take(limit).toList();
+          // 分页
+          final paged = allMsgs.skip(offset).take(limit).toList();
 
-      // 转为 Map 列表
-      final messages = paged.map((m) => {
-        'seq': m.seq,
-        'role': m.role.name,
-        'content': m.content,
-        'createdAt': m.createdAt.toIso8601String(),
-      }).toList();
+          // 转为 Map 列表
+          final messages = paged
+              .map(
+                (m) => {
+                  'seq': m.seq,
+                  'role': m.role.name,
+                  'content': m.content,
+                  'createdAt': m.createdAt.toIso8601String(),
+                },
+              )
+              .toList();
 
-      return {
-        'messages': messages,
-        'total': total,
-        'hasMore': offset + limit < total,
-      };
-    };
+          return {
+            'messages': messages,
+            'total': total,
+            'hasMore': offset + limit < total,
+          };
+        };
 
     _AgentImplBase._log.info(
       'QueryConversationHistoryTool injected for $employeeId',
@@ -1520,8 +1604,12 @@ class AgentImpl extends _AgentImplBase
 
     // 提取项目相关字段，传递给子 Agent 以便注入项目信息到 system prompt
     const projectKeys = [
-      'projectUuid', 'projectName', 'projectContext',
-      'workPath', 'additionalInfo', 'metadata',
+      'projectUuid',
+      'projectName',
+      'projectContext',
+      'workPath',
+      'additionalInfo',
+      'metadata',
     ];
     final projectContext = <String, dynamic>{};
     if (context != null) {
@@ -1541,6 +1629,59 @@ class AgentImpl extends _AgentImplBase
   }
 
   /// 同步处理器状态到 Agent 状态
+  void _handleRetryStatusChanged({
+    required bool isRetrying,
+    int? attempt,
+    int? maxRetries,
+    String? error,
+  }) {
+    if (_status == AgentStatus.disposed) return;
+
+    final messageId = _processor?.currentProcessingMessageId;
+    if (isRetrying) {
+      _setStatus(AgentStatus.retrying);
+      if (messageId != null) {
+        _broadcasterBroadcastMessageStatusChange(
+          messageId: messageId,
+          status: AgentMessageStatus.retrying,
+          error: error,
+          extraData: {'attempt': ?attempt, 'maxRetries': ?maxRetries},
+        );
+      }
+      _eventController.add(
+        AgentEvent(
+          type: AgentEventType.llmRetrying,
+          data: {
+            'messageId': ?messageId,
+            'attempt': ?attempt,
+            'maxRetries': ?maxRetries,
+            'error': ?error,
+          },
+          employeeId: employeeId,
+        ),
+      );
+      return;
+    }
+
+    if (_status == AgentStatus.retrying) {
+      final processorStatus = _processor?.status;
+      if (processorStatus != null) {
+        _syncProcessorStatus(processorStatus);
+      } else {
+        _setStatus(AgentStatus.processing);
+      }
+    }
+
+    if (messageId != null) {
+      _broadcasterBroadcastMessageStatusChange(
+        messageId: messageId,
+        status: AgentMessageStatus.processing,
+        extraData: const {'retryEnded': true},
+      );
+    }
+  }
+
+  /// 同步处理器状态到 Agent 状态
   void _syncProcessorStatus(AgentStatus processorStatus) {
     switch (processorStatus) {
       case AgentStatus.idle:
@@ -1548,6 +1689,7 @@ class AgentImpl extends _AgentImplBase
         break;
       case AgentStatus.processing:
       case AgentStatus.streaming:
+      case AgentStatus.retrying:
         _setStatus(processorStatus);
         break;
       case AgentStatus.waitingPermission:
