@@ -15,13 +15,11 @@ class MessageStore {
   final DatabaseManager _dbManager;
 
   MessageStore({String? deviceId, DatabaseManager? dbManager})
-      : _dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
+    : _dbManager = dbManager ?? DatabaseManager.getInstance(deviceId ?? '');
 
   SqliteDatabase get _db {
     if (!_dbManager.isInitialized) {
-      throw StateError(
-        '$runtimeType: DatabaseManager 未初始化，请先调用 initialize()。',
-      );
+      throw StateError('$runtimeType: DatabaseManager 未初始化，请先调用 initialize()。');
     }
     return _dbManager.db;
   }
@@ -66,11 +64,16 @@ class MessageStore {
       return _getLastNMessages(employeeId, effDeviceId, limit);
     }
 
-    final conditions = <String>['employee_id = ?', 'device_id = ?', 'deleted = 0'];
+    final conditions = <String>[
+      'employee_id = ?',
+      'device_id = ?',
+      'deleted = 0',
+    ];
     final params = <Object?>[employeeId, effDeviceId];
 
     final where = conditions.join(' AND ');
-    String sql = 'SELECT * FROM messages WHERE $where ORDER BY create_time ASC';
+    String sql =
+        'SELECT * FROM messages WHERE $where ORDER BY create_time ASC, seq ASC, uuid ASC';
 
     if (limit != null && limit > 0) {
       sql += ' LIMIT ?';
@@ -98,6 +101,7 @@ class MessageStore {
     messages.sort((a, b) {
       final timeCompare = a.createdAt.compareTo(b.createdAt);
       if (timeCompare != 0) return timeCompare;
+      if (a.seq != b.seq) return a.seq.compareTo(b.seq);
       return a.id.compareTo(b.id);
     });
     return messages;
@@ -117,22 +121,26 @@ class MessageStore {
 
   /// 添加消息
   Future<void> add(ChatMessage message) async {
-    await addWithDeviceId(
-      message.employeeId.split('-').firstOrNull,
-      message,
-    );
+    await addWithDeviceId(message.employeeId.split('-').firstOrNull, message);
   }
 
   /// 更新 sync_watermark.last_seq（MAX 语义，防止回退）
-  Future<void> _updateWatermarkLastSeq(String employeeId, int seq, {String deviceId = ''}) async {
+  Future<void> _updateWatermarkLastSeq(
+    String employeeId,
+    int seq, {
+    String deviceId = '',
+  }) async {
     _validateDeviceId(deviceId, '_updateWatermarkLastSeq');
-    await _db.execute('''
+    await _db.execute(
+      '''
       INSERT INTO sync_watermark (employee_id, device_id, last_seq, update_time)
         VALUES (?, ?, ?, ?)
       ON CONFLICT(employee_id, device_id) DO UPDATE SET
         last_seq = MAX(last_seq, excluded.last_seq),
         update_time = excluded.update_time
-    ''', [employeeId, deviceId, seq, DateTime.now().millisecondsSinceEpoch]);
+    ''',
+      [employeeId, deviceId, seq, DateTime.now().millisecondsSinceEpoch],
+    );
   }
 
   /// 使用明确 deviceId 添加消息（upsert）
@@ -173,7 +181,11 @@ class MessageStore {
     ''', _messageToParams(msg, effDeviceId));
 
     if (updateWatermark) {
-      await _updateWatermarkLastSeq(msg.employeeId, msg.seq, deviceId: effDeviceId);
+      await _updateWatermarkLastSeq(
+        msg.employeeId,
+        msg.seq,
+        deviceId: effDeviceId,
+      );
     }
   }
 
@@ -184,6 +196,7 @@ class MessageStore {
       message,
     );
   }
+
   Future<void> updateWithDeviceId(
     String? deviceId,
     ChatMessage message, {
@@ -209,7 +222,11 @@ class MessageStore {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', _messageToParams(msg, effDeviceId));
     if (updateWatermark) {
-      await _updateWatermarkLastSeq(msg.employeeId, msg.seq, deviceId: effDeviceId);
+      await _updateWatermarkLastSeq(
+        msg.employeeId,
+        msg.seq,
+        deviceId: effDeviceId,
+      );
     }
   }
 
@@ -234,7 +251,11 @@ class MessageStore {
         updatedAt: DateTime.now(),
         seq: newSeq,
       );
-      await updateWithDeviceId(deviceId, updated, updateWatermark: updateWatermark);
+      await updateWithDeviceId(
+        deviceId,
+        updated,
+        updateWatermark: updateWatermark,
+      );
     }
   }
 
@@ -301,13 +322,21 @@ class MessageStore {
       // 更新 sync_watermark.last_seq
       if (updateWatermark) {
         for (var msg in messages) {
-          await tx.execute('''
+          await tx.execute(
+            '''
             INSERT INTO sync_watermark (employee_id, device_id, last_seq, update_time)
               VALUES (?, ?, ?, ?)
             ON CONFLICT(employee_id, device_id) DO UPDATE SET
               last_seq = MAX(last_seq, excluded.last_seq),
               update_time = excluded.update_time
-          ''', [msg.employeeId, effDeviceId, msg.seq, DateTime.now().millisecondsSinceEpoch]);
+          ''',
+            [
+              msg.employeeId,
+              effDeviceId,
+              msg.seq,
+              DateTime.now().millisecondsSinceEpoch,
+            ],
+          );
         }
       }
     });
@@ -341,7 +370,11 @@ class MessageStore {
     );
     final clearMaxSeq = clearSeqResult.first['max_clear'] as int;
 
-    final currentMax = [msgMaxSeq, wmMaxSeq, clearMaxSeq].reduce((a, b) => a > b ? a : b);
+    final currentMax = [
+      msgMaxSeq,
+      wmMaxSeq,
+      clearMaxSeq,
+    ].reduce((a, b) => a > b ? a : b);
     return currentMax + 1;
   }
 
@@ -354,12 +387,17 @@ class MessageStore {
       );
       return result.first['max_seq'] as int;
     }
-    final result = await _db.getAll('SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages');
+    final result = await _db.getAll(
+      'SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages',
+    );
     return result.first['max_seq'] as int;
   }
 
   /// 获取指定 employee 的最大 seq（按 device_id 隔离）
-  Future<int> getMaxSeqForEmployee(String employeeId, {String deviceId = ''}) async {
+  Future<int> getMaxSeqForEmployee(
+    String employeeId, {
+    String deviceId = '',
+  }) async {
     if (deviceId.isNotEmpty) {
       final result = await _db.getAll(
         'SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE employee_id = ? AND device_id = ? AND deleted = 0',
@@ -377,7 +415,10 @@ class MessageStore {
   /// 获取指定 employee + device 的最大 seq（含已软删除的消息）
   ///
   /// 用于服务端上报 maxSeq 给客户端增量同步使用。
-  Future<int> getMaxSeqForEmployeeAll(String employeeId, {String deviceId = ''}) async {
+  Future<int> getMaxSeqForEmployeeAll(
+    String employeeId, {
+    String deviceId = '',
+  }) async {
     if (deviceId.isNotEmpty) {
       final result = await _db.getAll(
         'SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE employee_id = ? AND device_id = ?',
@@ -393,7 +434,10 @@ class MessageStore {
   }
 
   /// 获取指定 employee 的最小 seq（按 device_id 隔离，未删除消息）
-  Future<int> getMinSeqForEmployee(String employeeId, {String deviceId = ''}) async {
+  Future<int> getMinSeqForEmployee(
+    String employeeId, {
+    String deviceId = '',
+  }) async {
     if (deviceId.isNotEmpty) {
       final result = await _db.getAll(
         'SELECT COALESCE(MIN(seq), 0) as min_seq FROM messages WHERE employee_id = ? AND device_id = ? AND deleted = 0',
@@ -452,9 +496,12 @@ class MessageStore {
 
   /// 获取指定员工所有消息的已读状态（按 device_id 隔离）
   ///
-  /// 返回 Map<uuid, is_read>，用于 Agent 侧恢复已读状态。
+  /// 返回 `Map<uuid, is_read>`，用于 Agent 侧恢复已读状态。
   /// 只返回 assistant 角色且未删除的消息。
-  Future<Map<String, bool>> getReadStatusMap(String employeeId, {String deviceId = ''}) async {
+  Future<Map<String, bool>> getReadStatusMap(
+    String employeeId, {
+    String deviceId = '',
+  }) async {
     if (deviceId.isNotEmpty) {
       final resultSet = await _db.getAll(
         'SELECT uuid, is_read FROM messages WHERE employee_id = ? AND device_id = ? AND role = ? AND deleted = 0',
@@ -462,7 +509,7 @@ class MessageStore {
       );
       return {
         for (final row in resultSet)
-          row['uuid'] as String: (row['is_read'] as int) == 1
+          row['uuid'] as String: (row['is_read'] as int) == 1,
       };
     }
     final resultSet = await _db.getAll(
@@ -471,12 +518,15 @@ class MessageStore {
     );
     return {
       for (final row in resultSet)
-        row['uuid'] as String: (row['is_read'] as int) == 1
+        row['uuid'] as String: (row['is_read'] as int) == 1,
     };
   }
 
   /// 获取指定员工的未读消息 ID 列表（按 device_id 隔离）
-  Future<List<String>> getUnreadMessageIds(String employeeId, {String deviceId = ''}) async {
+  Future<List<String>> getUnreadMessageIds(
+    String employeeId, {
+    String deviceId = '',
+  }) async {
     if (deviceId.isNotEmpty) {
       final resultSet = await _db.getAll(
         'SELECT uuid FROM messages WHERE employee_id = ? AND device_id = ? AND role = ? AND is_read = 0 AND deleted = 0 ORDER BY create_time ASC',
@@ -492,14 +542,17 @@ class MessageStore {
   }
 
   /// 获取指定员工中仍处于 processing 状态的本地工具调用消息 ID 列表（按 device_id 隔离）
-  Future<List<String>> getStaleLocalToolCallMessages(String employeeId, {String deviceId = ''}) async {
+  Future<List<String>> getStaleLocalToolCallMessages(
+    String employeeId, {
+    String deviceId = '',
+  }) async {
     if (deviceId.isNotEmpty) {
       try {
         _log.debug('getStaleLocalToolCallMessages');
         final resultSet = await _db.getAll(
-                "SELECT uuid FROM messages WHERE employee_id = ? AND device_id = ? AND uuid LIKE 'local_toolcall_%' AND processing_status = 'processing' AND deleted = 0",
-                [employeeId, deviceId],
-              );
+          "SELECT uuid FROM messages WHERE employee_id = ? AND device_id = ? AND uuid LIKE 'local_toolcall_%' AND processing_status = 'processing' AND deleted = 0",
+          [employeeId, deviceId],
+        );
         _log.debug('success');
         return resultSet.map((row) => row['uuid'] as String).toList();
       } catch (e) {
@@ -528,17 +581,22 @@ class MessageStore {
   ///
   /// 使用单次 UPDATE 批量标记 is_read=1，不再逐条分配 seq。
   /// 已读状态的跨设备同步通过 DeviceNotificationManager + RPC 广播实现。
-  Future<int> markAsReadByEmployee(String employeeId, {String deviceId = ''}) async {
+  Future<int> markAsReadByEmployee(
+    String employeeId, {
+    String deviceId = '',
+  }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     // 根据 deviceId 是否为空，构建不同的 SQL 条件
     final String whereClause;
     final List<dynamic> queryParams;
     if (deviceId.isNotEmpty) {
-      whereClause = 'employee_id = ? AND device_id = ? AND role = ? AND is_read = 0 AND deleted = 0';
+      whereClause =
+          'employee_id = ? AND device_id = ? AND role = ? AND is_read = 0 AND deleted = 0';
       queryParams = [employeeId, deviceId, 'assistant'];
     } else {
-      whereClause = 'employee_id = ? AND role = ? AND is_read = 0 AND deleted = 0';
+      whereClause =
+          'employee_id = ? AND role = ? AND is_read = 0 AND deleted = 0';
       queryParams = [employeeId, 'assistant'];
     }
 
@@ -554,7 +612,11 @@ class MessageStore {
 
   /// 基于 seq 批量标记已读
   ///
-  Future<int> markAsReadBySeq(String employeeId, int readSeq, {String deviceId = ''}) async {
+  Future<int> markAsReadBySeq(
+    String employeeId,
+    int readSeq, {
+    String deviceId = '',
+  }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (deviceId.isNotEmpty) {
       await _db.execute(
@@ -585,20 +647,26 @@ class MessageStore {
       [newSeq, now, uuid],
     );
     // 更新 sync_watermark.last_seq（子查询获取 employeeId + device_id）
-    await _db.execute('''
+    await _db.execute(
+      '''
       INSERT INTO sync_watermark (employee_id, device_id, last_seq, update_time)
         SELECT employee_id, COALESCE(device_id, ''), ?, ? FROM messages WHERE uuid = ?
       ON CONFLICT(employee_id, device_id) DO UPDATE SET
         last_seq = MAX(last_seq, excluded.last_seq),
         update_time = excluded.update_time
-    ''', [newSeq, now, uuid]);
+    ''',
+      [newSeq, now, uuid],
+    );
   }
 
   /// 按会话软删除所有消息并更新 seq（用于 clearCurrentSession 同步场景）
   ///
   /// 将指定 employeeId 的所有消息标记为 deleted=1，
   /// 并为每条消息分配新的 seq，使删除事件能被增量拉取。
-  Future<void> softDeleteBySessionForSync(String employeeId, {String deviceId = ''}) async {
+  Future<void> softDeleteBySessionForSync(
+    String employeeId, {
+    String deviceId = '',
+  }) async {
     final messages = await _db.getAll(
       'SELECT uuid FROM messages WHERE employee_id = ? AND device_id = ? AND deleted = 0',
       [employeeId, deviceId],
@@ -623,7 +691,11 @@ class MessageStore {
   /// 用于清空水位线场景：服务端设置 clear_seq 后，
   /// 客户端同步时删除本地所有 seq < clearSeq 的消息。
   /// 返回被删除的消息数量。
-  Future<int> deleteBeforeSeq(String employeeId, int beforeSeq, {String deviceId = ''}) async {
+  Future<int> deleteBeforeSeq(
+    String employeeId,
+    int beforeSeq, {
+    String deviceId = '',
+  }) async {
     if (deviceId.isNotEmpty) {
       await _db.execute(
         'DELETE FROM messages WHERE employee_id = ? AND device_id = ? AND seq < ?',

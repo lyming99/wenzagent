@@ -110,6 +110,10 @@ class RetryUtil {
       return false;
     }
 
+    if (isStreamCompletionError(error)) {
+      return true;
+    }
+
     if (error is DioException) {
       switch (error.type) {
         case DioExceptionType.connectionError:
@@ -148,6 +152,17 @@ class RetryUtil {
 
     // 其他未知异常，尝试重试
     return true;
+  }
+
+  /// 判断是否为 provider 流式响应异常结束。
+  ///
+  /// 这类错误通常不是业务逻辑错误，而是服务端/网络流提前结束：
+  /// 如果没有收到任何 delta，可以安全地重新发起同一次 LLM 请求。
+  static bool isStreamCompletionError(Object error) {
+    if (error is! StateError) return false;
+    return error.message == 'LLM stream completed without CompletionEvent' ||
+        error.message ==
+            'LLM stream completed without CompletionEvent or delta';
   }
 
   /// 判断错误是否为上下文/token 长度溢出。

@@ -288,21 +288,19 @@ void main() {
         strictMode: false,
       );
 
-      // 跨轮次模式下：
-      // 阶段一：tc1 在 knownToolCallIds 中，其 tool_result 被保留
-      // 阶段二：r1(tc1) 不在紧邻的 a2(toolCalls=[tc2]) 中 → 被丢弃
-      // 这是正确的修复行为，避免 Anthropic API "unexpected tool_use_id" 错误
+      // 跨轮次模式下，阶段二会把 tool_result 重排到对应 assistant 后面，
+      // 保留数据的同时满足 provider 的紧邻配对要求。
       expect(
         result.any((m) => m.id == 'r1'),
-        isFalse,
-        reason: 'tc1 的 tool_result 在阶段二验证时因不满足紧邻要求被丢弃',
+        isTrue,
+        reason: 'tc1 的 tool_result 应重排到 a1 后面并保留',
       );
       expect(
         result.any((m) => m.id == 'r2'),
         isTrue,
         reason: 'tc2 的 tool_result 紧邻 a2(toolCalls) 应被保留',
       );
-      // a2 的 toolCalls 中 tc2 有匹配的 r2，保留
+      // a1/a2 的 toolCalls 都有匹配结果，均应保留
       expect(
         result
             .where(
@@ -312,8 +310,8 @@ void main() {
                   m.toolCalls!.isNotEmpty,
             )
             .length,
-        equals(1),
-        reason: '只有 a2 保留 toolCalls（a1 被 strip 因为其 tc1 无紧邻 tool_result）',
+        equals(2),
+        reason: 'a1 和 a2 都有可重排匹配的 tool_result',
       );
     });
 

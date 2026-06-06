@@ -3,14 +3,14 @@ import 'package:test/test.dart';
 import 'package:wenzagent/src/agent/adapter/retry_util.dart';
 
 void main() {
-  final _reqOpts = RequestOptions();
+  final reqOpts = RequestOptions();
 
   group('RetryUtil.isRetryableError', () {
     test('连接错误可重试', () {
       expect(
         RetryUtil.isRetryableError(
           DioException(
-            requestOptions: _reqOpts,
+            requestOptions: reqOpts,
             type: DioExceptionType.connectionError,
             message: 'Connection refused',
           ),
@@ -23,10 +23,10 @@ void main() {
       expect(
         RetryUtil.isRetryableError(
           DioException(
-            requestOptions: _reqOpts,
+            requestOptions: reqOpts,
             type: DioExceptionType.badResponse,
             message: 'Too Many Requests',
-            response: Response(requestOptions: _reqOpts, statusCode: 429),
+            response: Response(requestOptions: reqOpts, statusCode: 429),
           ),
         ),
         isTrue,
@@ -37,10 +37,10 @@ void main() {
       expect(
         RetryUtil.isRetryableError(
           DioException(
-            requestOptions: _reqOpts,
+            requestOptions: reqOpts,
             type: DioExceptionType.badResponse,
             message: 'Internal Server Error',
-            response: Response(requestOptions: _reqOpts, statusCode: 500),
+            response: Response(requestOptions: reqOpts, statusCode: 500),
           ),
         ),
         isTrue,
@@ -51,7 +51,7 @@ void main() {
       expect(
         RetryUtil.isRetryableError(
           DioException(
-            requestOptions: _reqOpts,
+            requestOptions: reqOpts,
             type: DioExceptionType.cancel,
             message: 'Cancelled',
           ),
@@ -62,6 +62,15 @@ void main() {
 
     test('StateError 不可重试', () {
       expect(RetryUtil.isRetryableError(StateError('bad state')), isFalse);
+    });
+
+    test('流式响应空结束错误可重试', () {
+      final error = StateError(
+        'LLM stream completed without CompletionEvent or delta',
+      );
+
+      expect(RetryUtil.isStreamCompletionError(error), isTrue);
+      expect(RetryUtil.isRetryableError(error), isTrue);
     });
 
     test('TypeError 不可重试', () {
@@ -79,14 +88,14 @@ void main() {
         expect(
           RetryUtil.isRetryableError(
             DioException(
-              requestOptions: _reqOpts,
+              requestOptions: reqOpts,
               type: DioExceptionType.badResponse,
               message:
                   "Invalid request: This model's maximum context length is "
                   "1048576 tokens. However, you requested 1529666 tokens "
                   "(1497666 in the messages, 32000 in the completion). "
                   "Please reduce the length of the messages or completion.",
-              response: Response(requestOptions: _reqOpts, statusCode: 400),
+              response: Response(requestOptions: reqOpts, statusCode: 400),
             ),
           ),
           isFalse,
@@ -98,10 +107,10 @@ void main() {
         expect(
           RetryUtil.isRetryableError(
             DioException(
-              requestOptions: _reqOpts,
+              requestOptions: reqOpts,
               type: DioExceptionType.badResponse,
               message: "This model's maximum context length is 8192 tokens",
-              response: Response(requestOptions: _reqOpts, statusCode: 400),
+              response: Response(requestOptions: reqOpts, statusCode: 400),
             ),
           ),
           isFalse,
@@ -111,10 +120,10 @@ void main() {
 
       test('context_length_exceeded 不重试', () {
         final error = DioException(
-          requestOptions: _reqOpts,
+          requestOptions: reqOpts,
           type: DioExceptionType.badResponse,
           message: 'context_length_exceeded: Token limit exceeded',
-          response: Response(requestOptions: _reqOpts, statusCode: 400),
+          response: Response(requestOptions: reqOpts, statusCode: 400),
         );
 
         expect(
@@ -131,11 +140,11 @@ void main() {
 
       test('response body 中的 context overflow 可识别', () {
         final error = DioException(
-          requestOptions: _reqOpts,
+          requestOptions: reqOpts,
           type: DioExceptionType.badResponse,
           message: 'Bad request',
           response: Response(
-            requestOptions: _reqOpts,
+            requestOptions: reqOpts,
             statusCode: 400,
             data: {
               'error': {
@@ -154,10 +163,10 @@ void main() {
         expect(
           RetryUtil.isRetryableError(
             DioException(
-              requestOptions: _reqOpts,
+              requestOptions: reqOpts,
               type: DioExceptionType.badResponse,
               message: 'prompt is too long: 200000 tokens > 190000 max',
-              response: Response(requestOptions: _reqOpts, statusCode: 400),
+              response: Response(requestOptions: reqOpts, statusCode: 400),
             ),
           ),
           isFalse,
@@ -169,11 +178,11 @@ void main() {
         expect(
           RetryUtil.isRetryableError(
             DioException(
-              requestOptions: _reqOpts,
+              requestOptions: reqOpts,
               type: DioExceptionType.badResponse,
               message:
                   'Request too large: exceeds the maximum number of tokens per request',
-              response: Response(requestOptions: _reqOpts, statusCode: 400),
+              response: Response(requestOptions: reqOpts, statusCode: 400),
             ),
           ),
           isFalse,
@@ -186,10 +195,10 @@ void main() {
         expect(
           RetryUtil.isRetryableError(
             DioException(
-              requestOptions: _reqOpts,
+              requestOptions: reqOpts,
               type: DioExceptionType.badResponse,
               message: 'Bad request: invalid parameter',
-              response: Response(requestOptions: _reqOpts, statusCode: 400),
+              response: Response(requestOptions: reqOpts, statusCode: 400),
             ),
           ),
           isFalse,

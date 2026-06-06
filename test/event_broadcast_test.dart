@@ -25,11 +25,13 @@ void main() {
       // 模拟 AgentImpl 注入的回调
       void Function(String chunk)? onStreamDelta;
       onStreamDelta = (chunk) {
-        eventController.add(AgentEvent(
-          type: AgentEventType.streamDelta,
-          data: {'content': chunk},
-          employeeId: 'emp-001',
-        ));
+        eventController.add(
+          AgentEvent(
+            type: AgentEventType.streamDelta,
+            data: {'content': chunk},
+            employeeId: 'emp-001',
+          ),
+        );
       };
 
       // 模拟 LLM 产生多个 chunk
@@ -73,16 +75,23 @@ void main() {
           .listen((e) => chunks.add(e.data['content'] as String));
 
       for (var i = 0; i < 10; i++) {
-        eventController.add(AgentEvent(
-          type: AgentEventType.streamDelta,
-          data: {'content': 'chunk$i '},
-          employeeId: 'emp-001',
-        ));
+        eventController.add(
+          AgentEvent(
+            type: AgentEventType.streamDelta,
+            data: {'content': 'chunk$i '},
+            employeeId: 'emp-001',
+          ),
+        );
       }
 
       await Future.delayed(Duration(milliseconds: 50));
       expect(chunks.length, equals(10));
-      expect(chunks.join(), equals('chunk0 chunk1 chunk2 chunk3 chunk4 chunk5 chunk6 chunk7 chunk8 chunk9 '));
+      expect(
+        chunks.join(),
+        equals(
+          'chunk0 chunk1 chunk2 chunk3 chunk4 chunk5 chunk6 chunk7 chunk8 chunk9 ',
+        ),
+      );
 
       await sub.cancel();
       await eventController.close();
@@ -100,11 +109,13 @@ void main() {
 
       void Function(String delta)? onThinkingDelta;
       onThinkingDelta = (delta) {
-        eventController.add(AgentEvent(
-          type: AgentEventType.thinkingDelta,
-          data: {'content': delta},
-          employeeId: 'emp-001',
-        ));
+        eventController.add(
+          AgentEvent(
+            type: AgentEventType.thinkingDelta,
+            data: {'content': delta},
+            employeeId: 'emp-001',
+          ),
+        );
       };
 
       onThinkingDelta('让我分析一下...');
@@ -127,26 +138,34 @@ void main() {
       final sub = eventController.stream.listen(events.add);
 
       // 模拟 LLM 同时产生思考和输出
-      eventController.add(AgentEvent(
-        type: AgentEventType.thinkingDelta,
-        data: {'content': '思考中...'},
-        employeeId: 'emp-001',
-      ));
-      eventController.add(AgentEvent(
-        type: AgentEventType.streamDelta,
-        data: {'content': '回答'},
-        employeeId: 'emp-001',
-      ));
-      eventController.add(AgentEvent(
-        type: AgentEventType.thinkingDelta,
-        data: {'content': '继续思考...'},
-        employeeId: 'emp-001',
-      ));
-      eventController.add(AgentEvent(
-        type: AgentEventType.streamDelta,
-        data: {'content': '内容'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.thinkingDelta,
+          data: {'content': '思考中...'},
+          employeeId: 'emp-001',
+        ),
+      );
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.streamDelta,
+          data: {'content': '回答'},
+          employeeId: 'emp-001',
+        ),
+      );
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.thinkingDelta,
+          data: {'content': '继续思考...'},
+          employeeId: 'emp-001',
+        ),
+      );
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.streamDelta,
+          data: {'content': '内容'},
+          employeeId: 'emp-001',
+        ),
+      );
 
       await Future.delayed(Duration(milliseconds: 50));
 
@@ -210,17 +229,21 @@ void main() {
 
       // 模拟 MessageProcessor._processNext 的行为
       // 1. 先发射 messageStatusChanged(processing)
-      eventController.add(AgentEvent(
-        type: AgentEventType.messageStatusChanged,
-        data: {'messageId': 'msg-003', 'status': 'processing'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.messageStatusChanged,
+          data: {'messageId': 'msg-003', 'status': 'processing'},
+          employeeId: 'emp-001',
+        ),
+      );
       // 2. 再发射 messageStarted
-      eventController.add(AgentEvent(
-        type: AgentEventType.messageStarted,
-        data: {'messageId': 'msg-003', 'role': 'user'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.messageStarted,
+          data: {'messageId': 'msg-003', 'role': 'user'},
+          employeeId: 'emp-001',
+        ),
+      );
 
       await Future.delayed(Duration(milliseconds: 50));
 
@@ -249,7 +272,13 @@ void main() {
       expect(event.data['action'], equals('updated'));
     });
 
-    for (final configType in ['provider', 'context', 'project', 'tools', 'skills']) {
+    for (final configType in [
+      'provider',
+      'context',
+      'project',
+      'tools',
+      'skills',
+    ]) {
       test('configType=$configType 的 configChanged 可序列化', () {
         final event = AgentEvent(
           type: AgentEventType.configChanged,
@@ -273,11 +302,13 @@ void main() {
           .listen(events.add);
 
       // 模拟 setProvider 调用后的事件发射
-      eventController.add(AgentEvent(
-        type: AgentEventType.configChanged,
-        data: {'configType': 'provider', 'action': 'updated'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.configChanged,
+          data: {'configType': 'provider', 'action': 'updated'},
+          employeeId: 'emp-001',
+        ),
+      );
 
       await Future.delayed(Duration(milliseconds: 50));
 
@@ -296,11 +327,17 @@ void main() {
           .listen(events.add);
 
       // 模拟 registerTool 调用后的事件发射
-      eventController.add(AgentEvent(
-        type: AgentEventType.configChanged,
-        data: {'configType': 'tools', 'action': 'added', 'toolName': 'my_tool'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.configChanged,
+          data: {
+            'configType': 'tools',
+            'action': 'added',
+            'toolName': 'my_tool',
+          },
+          employeeId: 'emp-001',
+        ),
+      );
 
       await Future.delayed(Duration(milliseconds: 50));
 
@@ -320,11 +357,13 @@ void main() {
           .where((e) => e.type == AgentEventType.configChanged)
           .listen(events.add);
 
-      eventController.add(AgentEvent(
-        type: AgentEventType.configChanged,
-        data: {'configType': 'context', 'action': 'cleared'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.configChanged,
+          data: {'configType': 'context', 'action': 'cleared'},
+          employeeId: 'emp-001',
+        ),
+      );
 
       await Future.delayed(Duration(milliseconds: 50));
 
@@ -343,11 +382,17 @@ void main() {
           .where((e) => e.type == AgentEventType.configChanged)
           .listen(events.add);
 
-      eventController.add(AgentEvent(
-        type: AgentEventType.configChanged,
-        data: {'configType': 'skills', 'action': 'added', 'skillId': 'skill-001'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.configChanged,
+          data: {
+            'configType': 'skills',
+            'action': 'added',
+            'skillId': 'skill-001',
+          },
+          employeeId: 'emp-001',
+        ),
+      );
 
       await Future.delayed(Duration(milliseconds: 50));
 
@@ -391,27 +436,27 @@ void main() {
       final localOnlyTypes = {
         AgentEventType.streamDelta,
         AgentEventType.thinkingDelta,
+        AgentEventType.llmRetrying,
       };
 
       // unknown 不应有任何处理
-      final ignoredTypes = {
-        AgentEventType.unknown,
-      };
+      final ignoredTypes = {AgentEventType.unknown};
 
       final allTypes = AgentEventType.values.toSet();
-      final accountedTypes =
-          lanBroadcastTypes.union(localOnlyTypes).union(ignoredTypes);
+      final accountedTypes = lanBroadcastTypes
+          .union(localOnlyTypes)
+          .union(ignoredTypes);
 
       final unaccounted = allTypes.difference(accountedTypes);
-      expect(unaccounted, isEmpty,
-          reason: '以下事件类型未在任何处理策略中覆盖: $unaccounted');
+      expect(unaccounted, isEmpty, reason: '以下事件类型未在任何处理策略中覆盖: $unaccounted');
     });
 
-    test('streamDelta 和 thinkingDelta 不广播到 LAN', () {
-      // 验证高频事件被正确过滤
+    test('streamDelta、thinkingDelta 和 llmRetrying 不广播到 LAN', () {
+      // 验证高频/本地状态事件被正确过滤
       final localOnlyTypes = {
         AgentEventType.streamDelta,
         AgentEventType.thinkingDelta,
+        AgentEventType.llmRetrying,
       };
 
       // 这些事件类型不应出现在 LAN 广播列表中
@@ -435,8 +480,11 @@ void main() {
       };
 
       for (final localType in localOnlyTypes) {
-        expect(lanBroadcastTypes.contains(localType), isFalse,
-            reason: '$localType 不应出现在 LAN 广播列表中');
+        expect(
+          lanBroadcastTypes.contains(localType),
+          isFalse,
+          reason: '$localType 不应出现在 LAN 广播列表中',
+        );
       }
     });
 
@@ -460,8 +508,11 @@ void main() {
         AgentEventType.messageStarted,
       };
 
-      expect(lanBroadcastTypes.contains(AgentEventType.configChanged), isTrue,
-          reason: 'configChanged 应广播到 LAN');
+      expect(
+        lanBroadcastTypes.contains(AgentEventType.configChanged),
+        isTrue,
+        reason: 'configChanged 应广播到 LAN',
+      );
     });
 
     test('messageStarted 事件应广播到 LAN', () {
@@ -484,8 +535,11 @@ void main() {
         AgentEventType.messageStarted,
       };
 
-      expect(lanBroadcastTypes.contains(AgentEventType.messageStarted), isTrue,
-          reason: 'messageStarted 应广播到 LAN');
+      expect(
+        lanBroadcastTypes.contains(AgentEventType.messageStarted),
+        isTrue,
+        reason: 'messageStarted 应广播到 LAN',
+      );
     });
 
     test('confirmRequest/confirmResponse 应广播到 LAN', () {
@@ -495,7 +549,10 @@ void main() {
       };
 
       expect(lanBroadcastTypes.contains(AgentEventType.confirmRequest), isTrue);
-      expect(lanBroadcastTypes.contains(AgentEventType.confirmResponse), isTrue);
+      expect(
+        lanBroadcastTypes.contains(AgentEventType.confirmResponse),
+        isTrue,
+      );
     });
 
     test('todo/spec 事件应广播到 LAN', () {
@@ -505,8 +562,14 @@ void main() {
         AgentEventType.specChanged,
       };
 
-      expect(lanBroadcastTypes.contains(AgentEventType.todoTopicChanged), isTrue);
-      expect(lanBroadcastTypes.contains(AgentEventType.todoTaskItemChanged), isTrue);
+      expect(
+        lanBroadcastTypes.contains(AgentEventType.todoTopicChanged),
+        isTrue,
+      );
+      expect(
+        lanBroadcastTypes.contains(AgentEventType.todoTaskItemChanged),
+        isTrue,
+      );
       expect(lanBroadcastTypes.contains(AgentEventType.specChanged), isTrue);
     });
   });
@@ -522,59 +585,77 @@ void main() {
 
       // 模拟完整的消息处理生命周期
       // 1. 消息入队
-      eventController.add(AgentEvent(
-        type: AgentEventType.messageStatusChanged,
-        data: {'messageId': 'msg-life-001', 'status': 'queued'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.messageStatusChanged,
+          data: {'messageId': 'msg-life-001', 'status': 'queued'},
+          employeeId: 'emp-001',
+        ),
+      );
       // 2. Agent 状态变为 processing
-      eventController.add(AgentEvent(
-        type: AgentEventType.agentStatusChanged,
-        data: {'status': 'processing'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.agentStatusChanged,
+          data: {'status': 'processing'},
+          employeeId: 'emp-001',
+        ),
+      );
       // 3. 消息状态变为 processing
-      eventController.add(AgentEvent(
-        type: AgentEventType.messageStatusChanged,
-        data: {'messageId': 'msg-life-001', 'status': 'processing'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.messageStatusChanged,
+          data: {'messageId': 'msg-life-001', 'status': 'processing'},
+          employeeId: 'emp-001',
+        ),
+      );
       // 4. 消息开始处理
-      eventController.add(AgentEvent(
-        type: AgentEventType.messageStarted,
-        data: {'messageId': 'msg-life-001', 'role': 'user'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.messageStarted,
+          data: {'messageId': 'msg-life-001', 'role': 'user'},
+          employeeId: 'emp-001',
+        ),
+      );
       // 5. 思考过程
-      eventController.add(AgentEvent(
-        type: AgentEventType.thinkingDelta,
-        data: {'content': '分析中...'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.thinkingDelta,
+          data: {'content': '分析中...'},
+          employeeId: 'emp-001',
+        ),
+      );
       // 6. 流式输出
-      eventController.add(AgentEvent(
-        type: AgentEventType.streamDelta,
-        data: {'content': 'Hello'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.streamDelta,
+          data: {'content': 'Hello'},
+          employeeId: 'emp-001',
+        ),
+      );
       // 7. Agent 状态变为 streaming
-      eventController.add(AgentEvent(
-        type: AgentEventType.agentStatusChanged,
-        data: {'status': 'streaming'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.agentStatusChanged,
+          data: {'status': 'streaming'},
+          employeeId: 'emp-001',
+        ),
+      );
       // 8. 消息完成
-      eventController.add(AgentEvent(
-        type: AgentEventType.messageStatusChanged,
-        data: {'messageId': 'msg-life-001', 'status': 'completed'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.messageStatusChanged,
+          data: {'messageId': 'msg-life-001', 'status': 'completed'},
+          employeeId: 'emp-001',
+        ),
+      );
       // 9. Agent 状态变为 idle
-      eventController.add(AgentEvent(
-        type: AgentEventType.agentStatusChanged,
-        data: {'status': 'idle'},
-        employeeId: 'emp-001',
-      ));
+      eventController.add(
+        AgentEvent(
+          type: AgentEventType.agentStatusChanged,
+          data: {'status': 'idle'},
+          employeeId: 'emp-001',
+        ),
+      );
 
       await Future.delayed(Duration(milliseconds: 50));
 
@@ -594,12 +675,21 @@ void main() {
       expect(agentStatusChanges, equals(['processing', 'streaming', 'idle']));
 
       // messageStarted 在 processing 之后
-      final startedIdx = events.indexWhere((e) => e.type == AgentEventType.messageStarted);
+      final startedIdx = events.indexWhere(
+        (e) => e.type == AgentEventType.messageStarted,
+      );
       final processingIdx = events.indexWhere(
-          (e) => e.type == AgentEventType.messageStatusChanged && e.data['status'] == 'processing');
+        (e) =>
+            e.type == AgentEventType.messageStatusChanged &&
+            e.data['status'] == 'processing',
+      );
       expect(startedIdx, greaterThan(processingIdx - 1));
-      expect(startedIdx, lessThan(events.indexWhere(
-          (e) => e.type == AgentEventType.streamDelta)));
+      expect(
+        startedIdx,
+        lessThan(
+          events.indexWhere((e) => e.type == AgentEventType.streamDelta),
+        ),
+      );
 
       await sub.cancel();
       await eventController.close();
@@ -664,8 +754,11 @@ void main() {
       ];
 
       for (final typeName in deletedTypes) {
-        expect(AgentEventType.fromString(typeName), equals(AgentEventType.unknown),
-            reason: '$typeName 应已被删除，fromString 应返回 unknown');
+        expect(
+          AgentEventType.fromString(typeName),
+          equals(AgentEventType.unknown),
+          reason: '$typeName 应已被删除，fromString 应返回 unknown',
+        );
       }
     });
 
@@ -679,8 +772,11 @@ void main() {
       ];
 
       for (final name in deletedNames) {
-        expect(names.contains(name), isFalse,
-            reason: '$name 不应存在于 AgentEventType 枚举中');
+        expect(
+          names.contains(name),
+          isFalse,
+          reason: '$name 不应存在于 AgentEventType 枚举中',
+        );
       }
     });
   });
@@ -692,8 +788,15 @@ void main() {
     final newEventTypes = <AgentEventType, Map<String, dynamic>>{
       AgentEventType.streamDelta: {'content': 'Hello World', 'isDone': false},
       AgentEventType.thinkingDelta: {'content': '思考中...', 'index': 0},
-      AgentEventType.configChanged: {'configType': 'provider', 'action': 'updated'},
-      AgentEventType.messageStarted: {'messageId': 'msg-001', 'role': 'user', 'type': 'text'},
+      AgentEventType.configChanged: {
+        'configType': 'provider',
+        'action': 'updated',
+      },
+      AgentEventType.messageStarted: {
+        'messageId': 'msg-001',
+        'role': 'user',
+        'type': 'text',
+      },
     };
 
     for (final entry in newEventTypes.entries) {
@@ -707,10 +810,16 @@ void main() {
         final map = event.toMap();
         final restored = AgentEvent.fromMap(map);
 
-        expect(restored.type, equals(entry.key),
-            reason: '${entry.key.name} 往返后类型应一致');
-        expect(restored.data, equals(entry.value),
-            reason: '${entry.key.name} 往返后 data 应一致');
+        expect(
+          restored.type,
+          equals(entry.key),
+          reason: '${entry.key.name} 往返后类型应一致',
+        );
+        expect(
+          restored.data,
+          equals(entry.value),
+          reason: '${entry.key.name} 往返后 data 应一致',
+        );
         expect(restored.employeeId, equals('emp-001'));
       });
     }
@@ -729,17 +838,22 @@ void main() {
 
       const count = 1000;
       for (var i = 0; i < count; i++) {
-        eventController.add(AgentEvent(
-          type: AgentEventType.streamDelta,
-          data: {'content': 'chunk$i'},
-          employeeId: 'emp-001',
-        ));
+        eventController.add(
+          AgentEvent(
+            type: AgentEventType.streamDelta,
+            data: {'content': 'chunk$i'},
+            employeeId: 'emp-001',
+          ),
+        );
       }
 
       await Future.delayed(Duration(milliseconds: 200));
 
-      expect(events.length, equals(count),
-          reason: '应收到全部 $count 个 streamDelta 事件');
+      expect(
+        events.length,
+        equals(count),
+        reason: '应收到全部 $count 个 streamDelta 事件',
+      );
 
       await sub.cancel();
       await eventController.close();
@@ -764,24 +878,30 @@ void main() {
 
       // 模拟混合事件流
       for (var i = 0; i < 50; i++) {
-        eventController.add(AgentEvent(
-          type: AgentEventType.streamDelta,
-          data: {'content': 'text $i'},
-          employeeId: 'emp-001',
-        ));
-        if (i % 5 == 0) {
-          eventController.add(AgentEvent(
-            type: AgentEventType.thinkingDelta,
-            data: {'content': 'think $i'},
+        eventController.add(
+          AgentEvent(
+            type: AgentEventType.streamDelta,
+            data: {'content': 'text $i'},
             employeeId: 'emp-001',
-          ));
+          ),
+        );
+        if (i % 5 == 0) {
+          eventController.add(
+            AgentEvent(
+              type: AgentEventType.thinkingDelta,
+              data: {'content': 'think $i'},
+              employeeId: 'emp-001',
+            ),
+          );
         }
         if (i % 10 == 0) {
-          eventController.add(AgentEvent(
-            type: AgentEventType.configChanged,
-            data: {'configType': 'tools', 'action': 'added'},
-            employeeId: 'emp-001',
-          ));
+          eventController.add(
+            AgentEvent(
+              type: AgentEventType.configChanged,
+              data: {'configType': 'tools', 'action': 'added'},
+              employeeId: 'emp-001',
+            ),
+          );
         }
       }
 

@@ -15,8 +15,7 @@ enum MessageRole {
   user,
   assistant,
   system,
-  tool,
-  ;
+  tool;
 
   /// 兼容旧数据反序列化
   static MessageRole fromString(String value) {
@@ -61,8 +60,7 @@ enum MessageStatus {
   sendFailed,
 
   /// 已确认（仅 PendingMessage 场景）
-  confirmed,
-  ;
+  confirmed;
 
   static MessageStatus fromString(String value) {
     return MessageStatus.values.firstWhere(
@@ -105,23 +103,25 @@ class ToolCall {
       arguments: args is Map<String, dynamic>
           ? args
           : args is String
-              ? (jsonDecode(args) as Map<String, dynamic>)
-              : <String, dynamic>{},
+          ? (jsonDecode(args) as Map<String, dynamic>)
+          : <String, dynamic>{},
     );
   }
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'name': name,
-        'arguments': arguments,
-      };
+    'id': id,
+    'name': name,
+    'arguments': arguments,
+  };
 
   /// 从 JSON 字符串列表解析
   static List<ToolCall> parseList(dynamic raw) {
     if (raw == null) return [];
     if (raw is String && raw.isNotEmpty) {
       final list = jsonDecode(raw) as List;
-      return list.map((e) => ToolCall.fromMap(e as Map<String, dynamic>)).toList();
+      return list
+          .map((e) => ToolCall.fromMap(e as Map<String, dynamic>))
+          .toList();
     }
     if (raw is List) {
       return raw
@@ -157,13 +157,22 @@ class ToolResult {
   });
 
   /// 创建成功结果
-  factory ToolResult.success(String toolCallId, String content, {String? name}) {
+  factory ToolResult.success(
+    String toolCallId,
+    String content, {
+    String? name,
+  }) {
     return ToolResult(toolCallId: toolCallId, content: content, name: name);
   }
 
   /// 创建错误结果
   factory ToolResult.error(String toolCallId, String content, {String? name}) {
-    return ToolResult(toolCallId: toolCallId, content: content, isError: true, name: name);
+    return ToolResult(
+      toolCallId: toolCallId,
+      content: content,
+      isError: true,
+      name: name,
+    );
   }
 
   factory ToolResult.fromMap(Map<String, dynamic> map) {
@@ -176,11 +185,11 @@ class ToolResult {
   }
 
   Map<String, dynamic> toMap() => {
-        'toolCallId': toolCallId,
-        'content': content,
-        if (isError) 'isError': true,
-        if (name != null) 'name': name,
-      };
+    'toolCallId': toolCallId,
+    'content': content,
+    if (isError) 'isError': true,
+    if (name != null) 'name': name,
+  };
 
   /// 从 JSON 字符串列表解析
   static List<ToolResult> parseList(dynamic raw) {
@@ -466,8 +475,9 @@ class ChatMessage {
         'fileSize': fileSize,
         'fileHash': fileHash,
         'filePath': filePath,
-        if (fromDeviceId != null && fromDeviceId.isNotEmpty) 'fromDeviceId': fromDeviceId,
-        if (mimeType != null) 'mimeType': mimeType,
+        if (fromDeviceId != null && fromDeviceId.isNotEmpty)
+          'fromDeviceId': fromDeviceId,
+        'mimeType': ?mimeType,
       },
     );
   }
@@ -522,8 +532,10 @@ class ChatMessage {
   /// 从 JSON Map 创建（兼容旧数据格式）
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     // 兼容多种 ID 字段名
-    final id = (json['id'] ?? json['uuid'] ?? json['messageId'] ?? '') as String;
-    final employeeId = (json['employeeId'] ?? json['session_id'] ?? '') as String;
+    final id =
+        (json['id'] ?? json['uuid'] ?? json['messageId'] ?? '') as String;
+    final employeeId =
+        (json['employeeId'] ?? json['session_id'] ?? '') as String;
 
     // 兼容多种时间格式
     final createdAt = _parseDateTime(json['createdAt'] ?? json['createTime']);
@@ -554,12 +566,21 @@ class ChatMessage {
         : (isReadRaw is int ? isReadRaw != 0 : false);
 
     // 合并 toolResults：优先取 map 顶层的 toolResults
-    Map<String, dynamic>? metadata = json['metadata'] as Map<String, dynamic>?;
+    final metadataRaw = json['metadata'];
+    Map<String, dynamic>? metadata = metadataRaw is Map
+        ? Map<String, dynamic>.from(metadataRaw)
+        : null;
     List<ToolResult>? toolResults;
     if (json['toolResults'] != null) {
       toolResults = ToolResult.parseList(json['toolResults']);
       // 如果 metadata 中也有 toolResults，清除（避免重复）
       metadata?.remove('toolResults');
+    } else if (metadata?['toolResults'] != null) {
+      toolResults = ToolResult.parseList(metadata!['toolResults']);
+      metadata.remove('toolResults');
+    }
+    if (metadata != null && metadata.isEmpty) {
+      metadata = null;
     }
 
     // 工具调用列表
@@ -645,8 +666,9 @@ class ChatMessage {
       updatedAt: clearUpdatedAt ? null : (updatedAt ?? this.updatedAt),
       toolCallId: clearToolCallId ? null : (toolCallId ?? this.toolCallId),
       toolName: clearToolName ? null : (toolName ?? this.toolName),
-      toolArguments:
-          clearToolArguments ? null : (toolArguments ?? this.toolArguments),
+      toolArguments: clearToolArguments
+          ? null
+          : (toolArguments ?? this.toolArguments),
       toolResult: clearToolResult ? null : (toolResult ?? this.toolResult),
       toolCalls: clearToolCalls ? null : (toolCalls ?? this.toolCalls),
       toolResults: clearToolResults ? null : (toolResults ?? this.toolResults),
@@ -658,8 +680,9 @@ class ChatMessage {
       deleted: deleted ?? this.deleted,
       isRead: isRead ?? this.isRead,
       inputTokens: clearInputTokens ? null : (inputTokens ?? this.inputTokens),
-      outputTokens:
-          clearOutputTokens ? null : (outputTokens ?? this.outputTokens),
+      outputTokens: clearOutputTokens
+          ? null
+          : (outputTokens ?? this.outputTokens),
       deviceId: clearDeviceId ? null : (deviceId ?? this.deviceId),
       metadata: clearMetadata ? null : (metadata ?? this.metadata),
       thinking: clearThinking ? null : (thinking ?? this.thinking),
@@ -685,10 +708,9 @@ class ChatMessage {
 
   @override
   String toString() {
-    final preview =
-        content != null && content!.length > 20
-            ? '${content!.substring(0, 20)}...'
-            : content;
+    final preview = content != null && content!.length > 20
+        ? '${content!.substring(0, 20)}...'
+        : content;
     return 'ChatMessage(id: $id, role: ${role.name}, status: ${status.name}, content: $preview)';
   }
 

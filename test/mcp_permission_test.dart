@@ -8,9 +8,18 @@ import 'package:wenzagent/src/skill/mcp/mcp_client.dart';
 
 /// Mock MCP 客户端
 class _MockMcpClient implements McpClient {
+  final String content;
+
+  _MockMcpClient({this.content = ''});
+
   @override
-  Future<McpToolCallResult> callTool(String name, Map<String, dynamic> arguments) async {
-    return McpToolCallResult(content: 'result of $name');
+  Future<McpToolCallResult> callTool(
+    String name,
+    Map<String, dynamic> arguments,
+  ) async {
+    return McpToolCallResult(
+      content: content.isEmpty ? 'result of $name' : content,
+    );
   }
 
   @override
@@ -45,9 +54,9 @@ class _MockBuiltinTool extends AgentTool {
     required String name,
     required String permissionType,
     String? permissionArgKey,
-  })  : _name = name,
-        _permissionType = permissionType,
-        _permissionArgKey = permissionArgKey;
+  }) : _name = name,
+       _permissionType = permissionType,
+       _permissionArgKey = permissionArgKey;
 
   @override
   String get name => _name;
@@ -56,8 +65,10 @@ class _MockBuiltinTool extends AgentTool {
   String get description => 'mock tool: $name';
 
   @override
-  Map<String, dynamic> get inputJsonSchema =>
-      {'type': 'object', 'properties': <String, dynamic>{}};
+  Map<String, dynamic> get inputJsonSchema => {
+    'type': 'object',
+    'properties': <String, dynamic>{},
+  };
 
   @override
   bool get requiresPermission => true;
@@ -86,11 +97,17 @@ void main() {
       );
       final toolB = McpToolAdapter(
         client: client,
-        definition: McpToolDefinition(name: 'execute_command', description: '执行命令'),
+        definition: McpToolDefinition(
+          name: 'execute_command',
+          description: '执行命令',
+        ),
       );
       final toolC = McpToolAdapter(
         client: client,
-        definition: McpToolDefinition(name: 'delete_resource', description: '删除资源'),
+        definition: McpToolDefinition(
+          name: 'delete_resource',
+          description: '删除资源',
+        ),
       );
 
       // ✅ 修复后：每个 MCP 工具的 permissionType 等于其工具名
@@ -120,7 +137,10 @@ void main() {
       final client = _MockMcpClient();
       final tool = McpToolAdapter(
         client: client,
-        definition: McpToolDefinition(name: 'dangerous_op', description: '危险操作'),
+        definition: McpToolDefinition(
+          name: 'dangerous_op',
+          description: '危险操作',
+        ),
       );
 
       final manager = ToolPermissionManager();
@@ -151,7 +171,10 @@ void main() {
       );
       final toolB = McpToolAdapter(
         client: client,
-        definition: McpToolDefinition(name: 'dangerous_delete', description: '危险删除'),
+        definition: McpToolDefinition(
+          name: 'dangerous_delete',
+          description: '危险删除',
+        ),
       );
 
       final manager = ToolPermissionManager();
@@ -164,7 +187,10 @@ void main() {
 
       // ✅ 修复后：allowAlways 缓存中存的是 'mcp_safe_read'（而非 'mcp'）
       expect(manager.allowedAlwaysPatterns, contains('mcp_safe_read'));
-      expect(manager.allowedAlwaysPatterns, isNot(contains('mcp_dangerous_delete')));
+      expect(
+        manager.allowedAlwaysPatterns,
+        isNot(contains('mcp_dangerous_delete')),
+      );
 
       // dangerous_delete 仍需用户确认
       PermissionDecision? decisionB;
@@ -188,16 +214,21 @@ void main() {
       );
       final otherTool = McpToolAdapter(
         client: client,
-        definition: McpToolDefinition(name: 'dangerous_delete', description: '危险删除'),
+        definition: McpToolDefinition(
+          name: 'dangerous_delete',
+          description: '危险删除',
+        ),
       );
 
       // 只允许 mcp_safe_read
-      final config = PermissionConfig(whitelist: [
-        PermissionRule(
-          tool: 'mcp_safe_read', // ✅ 精确到工具名
-          mode: PermissionMatchMode.all,
-        ),
-      ]);
+      final config = PermissionConfig(
+        whitelist: [
+          PermissionRule(
+            tool: 'mcp_safe_read', // ✅ 精确到工具名
+            mode: PermissionMatchMode.all,
+          ),
+        ],
+      );
 
       final manager = ToolPermissionManager();
       manager.configure(config);
@@ -279,16 +310,21 @@ void main() {
       );
       final dangerTool = McpToolAdapter(
         client: client,
-        definition: McpToolDefinition(name: 'danger_delete', description: '危险删除'),
+        definition: McpToolDefinition(
+          name: 'danger_delete',
+          description: '危险删除',
+        ),
       );
 
       // 只阻止 mcp_danger_delete
-      final config = PermissionConfig(blacklist: [
-        PermissionRule(
-          tool: 'mcp_danger_delete', // ✅ 精确到工具名
-          mode: PermissionMatchMode.all,
-        ),
-      ]);
+      final config = PermissionConfig(
+        blacklist: [
+          PermissionRule(
+            tool: 'mcp_danger_delete', // ✅ 精确到工具名
+            mode: PermissionMatchMode.all,
+          ),
+        ],
+      );
 
       final manager = ToolPermissionManager();
       manager.configure(config);
@@ -412,7 +448,10 @@ void main() {
           PermissionRule(tool: 'mcp_read_file', mode: PermissionMatchMode.all),
         ],
         blacklist: [
-          PermissionRule(tool: 'mcp_delete_file', mode: PermissionMatchMode.all),
+          PermissionRule(
+            tool: 'mcp_delete_file',
+            mode: PermissionMatchMode.all,
+          ),
         ],
       );
 
@@ -420,10 +459,16 @@ void main() {
       manager.configure(config);
 
       // ✅ read_file 被允许
-      expect(await manager.checkPermission(readFile, {}), equals(PermissionDecision.allow));
+      expect(
+        await manager.checkPermission(readFile, {}),
+        equals(PermissionDecision.allow),
+      );
 
       // ✅ delete_file 被阻止
-      expect(await manager.checkPermission(deleteFile, {}), equals(PermissionDecision.deny));
+      expect(
+        await manager.checkPermission(deleteFile, {}),
+        equals(PermissionDecision.deny),
+      );
 
       // ✅ write_file 需要用户确认
       PermissionDecision? writeCaptured;
@@ -431,7 +476,10 @@ void main() {
         writeCaptured = PermissionDecision.allow;
         return PermissionDecision.allow;
       };
-      expect(await manager.checkPermission(writeFile, {}), equals(PermissionDecision.allow));
+      expect(
+        await manager.checkPermission(writeFile, {}),
+        equals(PermissionDecision.allow),
+      );
       expect(writeCaptured, isNotNull);
     });
 
@@ -463,6 +511,29 @@ void main() {
       // 仍存在的问题（需要后续优化）：
       // - P2: permissionArgKey 仍为 null（需从 inputSchema 推导）
       // - P5: 没有携带 MCP 服务器标识
+    });
+  });
+
+  group('MCP 工具结果截断', () {
+    test('超长 MCP 调用结果会在返回给 Agent 前截断', () async {
+      final longContent = List.filled(9000, 'a').join();
+      final client = _MockMcpClient(content: longContent);
+      final tool = McpToolAdapter(
+        client: client,
+        definition: const McpToolDefinition(
+          name: 'long_result',
+          description: 'returns long content',
+          inputSchema: {'type': 'object'},
+        ),
+      );
+
+      final result = await tool.execute({});
+
+      expect(result.isError, isFalse);
+      expect(result.content.length, lessThan(longContent.length));
+      expect(result.content, startsWith(longContent.substring(0, 8192)));
+      expect(result.content, contains('MCP结果已截断'));
+      expect(result.content, contains('原始9000字符'));
     });
   });
 }

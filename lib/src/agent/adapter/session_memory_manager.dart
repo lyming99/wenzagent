@@ -57,12 +57,16 @@ class SessionHistory {
 
   /// 获取所有设备的所有消息（合并），按 createdAt 升序排列
   List<ChatMessage> get allMessages {
-    final all = <ChatMessage>[];
-    for (final messages in messagesMap.values) {
-      all.addAll(messages);
+    final all = <({ChatMessage message, int index})>[];
+    var index = 0;
+    final deviceIds = messagesMap.keys.toList()..sort();
+    for (final deviceId in deviceIds) {
+      for (final message in messagesMap[deviceId]!) {
+        all.add((message: message, index: index++));
+      }
     }
-    all.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    return all;
+    all.sort(_compareIndexedMessages);
+    return all.map((item) => item.message).toList(growable: false);
   }
 
   /// 获取指定设备的消息列表
@@ -80,7 +84,17 @@ class SessionHistory {
 
   /// 按时间升序排列指定设备的消息
   void sortMessages(String deviceId) {
-    messagesMap[deviceId]?.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final messages = messagesMap[deviceId];
+    if (messages == null || messages.length < 2) return;
+    final indexed = messages
+        .asMap()
+        .entries
+        .map((entry) => (message: entry.value, index: entry.key))
+        .toList();
+    indexed.sort(_compareIndexedMessages);
+    messages
+      ..clear()
+      ..addAll(indexed.map((item) => item.message));
   }
 
   /// 添加 ChatMessage 到指定设备（与 addMessage 相同，保留语义）
@@ -125,7 +139,8 @@ class SessionHistory {
   List<String> get deviceIds => messagesMap.keys.toList()..sort();
 
   /// 获取消息总数（所有设备）
-  int get messageCount => messagesMap.values.fold(0, (sum, list) => sum + list.length);
+  int get messageCount =>
+      messagesMap.values.fold(0, (sum, list) => sum + list.length);
 
   /// 转换为 Map（用于持久化）
   Map<String, dynamic> toMap() => {
@@ -133,15 +148,14 @@ class SessionHistory {
     'title': title,
     'createdAt': createdAt.toIso8601String(),
     'messagesMap': messagesMap.map(
-      (deviceId, messages) => MapEntry(
-        deviceId,
-        messages.map((m) => m.toJson()).toList(),
-      ),
+      (deviceId, messages) =>
+          MapEntry(deviceId, messages.map((m) => m.toJson()).toList()),
     ),
     if (conversationSummary != null) 'conversationSummary': conversationSummary,
     if (summarizedUpToIndex > 0) 'summarizedUpToIndex': summarizedUpToIndex,
     if (pruneStartId.isNotEmpty) 'pruneStartId': pruneStartId,
-    if (messagesSinceCompression > 0) 'messagesSinceCompression': messagesSinceCompression,
+    if (messagesSinceCompression > 0)
+      'messagesSinceCompression': messagesSinceCompression,
     if (lastCompressionTime > 0) 'lastCompressionTime': lastCompressionTime,
   };
 
@@ -172,6 +186,22 @@ class SessionHistory {
       lastCompressionTime: map['lastCompressionTime'] as int? ?? 0,
     );
   }
+
+  static int _compareIndexedMessages(
+    ({ChatMessage message, int index}) a,
+    ({ChatMessage message, int index}) b,
+  ) {
+    final timeCompare = a.message.createdAt.compareTo(b.message.createdAt);
+    if (timeCompare != 0) return timeCompare;
+
+    final aSeq = a.message.seq;
+    final bSeq = b.message.seq;
+    if (aSeq > 0 && bSeq > 0 && aSeq != bSeq) {
+      return aSeq.compareTo(bSeq);
+    }
+
+    return a.index.compareTo(b.index);
+  }
 }
 
 /// 会话记忆管理器
@@ -198,16 +228,10 @@ class SessionMemoryManager {
   }
 
   /// 获取或创建会话历史
-  SessionHistory getOrCreateSession(
-    String employeeId, {
-    String? title,
-  }) {
+  SessionHistory getOrCreateSession(String employeeId, {String? title}) {
     return _sessions.putIfAbsent(
       employeeId,
-      () => SessionHistory(
-        employeeId: employeeId,
-        title: title,
-      ),
+      () => SessionHistory(employeeId: employeeId, title: title),
     );
   }
 
@@ -223,10 +247,7 @@ class SessionMemoryManager {
   }
 
   /// 获取会话在指定设备上的消息
-  List<ChatMessage> getMessagesForDevice(
-    String employeeId,
-    String deviceId,
-  ) {
+  List<ChatMessage> getMessagesForDevice(String employeeId, String deviceId) {
     final session = _sessions[employeeId];
     if (session == null) return [];
     return session.getMessagesForDevice(deviceId);
@@ -245,11 +266,7 @@ class SessionMemoryManager {
   /// [employeeId] 员工ID（作为会话ID）
   /// [deviceId] 设备ID，用于区分不同设备上的消息
   /// [message] ChatMessage（调用方负责设置 id 和 employeeId）
-  void addMessage(
-    String employeeId,
-    String deviceId,
-    ChatMessage message,
-  ) {
+  void addMessage(String employeeId, String deviceId, ChatMessage message) {
     final session = _sessions[employeeId];
     if (session != null) {
       session.addMessage(deviceId, message);
@@ -287,11 +304,13 @@ class SessionMemoryManager {
 
     // 添加系统提示
     if (systemPrompt != null && systemPrompt.isNotEmpty) {
-      messages.add(ChatMessage.system(
-        id: const Uuid().v4(),
-        employeeId: employeeId,
-        content: systemPrompt,
-      ));
+      messages.add(
+        ChatMessage.system(
+          id: const Uuid().v4(),
+          employeeId: employeeId,
+          content: systemPrompt,
+        ),
+      );
     }
 
     // 添加历史消息（已包含最新的用户消息）
@@ -299,7 +318,9 @@ class SessionMemoryManager {
     if (session != null) {
       // 提取所有消息，并合并连续的 tool 消息
       final rawMessages = session.allMessages;
-      messages.addAll(LlmMessageMapper.mergeConsecutiveToolResults(rawMessages));
+      messages.addAll(
+        LlmMessageMapper.mergeConsecutiveToolResults(rawMessages),
+      );
     }
 
     return messages;
@@ -314,7 +335,9 @@ class SessionMemoryManager {
 
     if (limit != null) {
       final messages = await _messageStore!.getMessagesWithDeviceId(
-        _deviceId!, employeeId, limit: limit,
+        _deviceId!,
+        employeeId,
+        limit: limit,
       );
       for (final msg in messages) {
         session.addMessage(_deviceId!, msg);
@@ -325,7 +348,10 @@ class SessionMemoryManager {
       int offset = 0;
       while (true) {
         final messages = await _messageStore!.getMessagesWithDeviceId(
-          _deviceId!, employeeId, limit: pageSize, offset: offset,
+          _deviceId!,
+          employeeId,
+          limit: pageSize,
+          offset: offset,
         );
         if (messages.isEmpty) break;
         for (final msg in messages) {
@@ -361,15 +387,21 @@ class SessionMemoryManager {
 
   /// 获取指定 employee 的最大 seq（含已软删除的消息）
   Future<int> getMaxSeq(String employeeId) async {
-    return await (_messageStore?.getMaxSeq(_deviceId!, employeeId) ?? Future.value(0));
+    return await (_messageStore?.getMaxSeq(_deviceId!, employeeId) ??
+        Future.value(0));
   }
 
   /// 更新消息状态（写 DB）
   Future<void> updateMessageStatusInDb(
-    String messageId, String status, {String? error}
-  ) async {
+    String messageId,
+    String status, {
+    String? error,
+  }) async {
     await _messageStore?.updateMessageStatus(
-      _deviceId!, messageId, MessageStatus.fromString(status), error: error,
+      _deviceId!,
+      messageId,
+      MessageStatus.fromString(status),
+      error: error,
     );
   }
 

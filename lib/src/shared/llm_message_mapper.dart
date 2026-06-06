@@ -374,10 +374,11 @@ class LlmMessageMapper {
   }) {
     if (messages.isEmpty) return messages;
 
-    // 判断是否启用跨轮次累积匹配模式
-    // 注意：即使在 strictMode 下，knownToolCallIds 也用于阶段一的跨轮次匹配
-    // 阶段二仍会执行紧邻验证，确保 Anthropic API 要求得到满足
-    final useKnownIds = knownToolCallIds != null && knownToolCallIds.isNotEmpty;
+    // 判断是否启用跨轮次累积匹配模式。
+    // strictMode 下禁用 knownToolCallIds，确保 Anthropic 这类 provider
+    // 只接受严格紧邻配对的 tool_result。
+    final useKnownIds =
+        !strictMode && knownToolCallIds != null && knownToolCallIds.isNotEmpty;
 
     final result = <ChatMessage>[];
     final expectedIds = <String>{};

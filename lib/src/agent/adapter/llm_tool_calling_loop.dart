@@ -5,13 +5,13 @@ part of 'llm_chat_adapter.dart';
 extension _ToolCallingLoop on LlmChatAdapter {
   /// 重复工具调用检测
   ///
-  /// 返回 null 表示无重复；返回非 null 表示检测到重复，包含更新后的签名和计数。
-  _DuplicateCheckResult? checkDuplicateToolCalls(
+  /// 返回更新后的签名和重复计数。
+  _DuplicateCheckResult checkDuplicateToolCalls(
     List<llm.ToolCall> toolCalls,
     String? lastSignature,
     int currentCount,
   ) {
-    const maxConsecutiveDuplicateRounds = 3;
+    const maxConsecutiveDuplicateRounds = 5;
 
     // 只比较工具名+参数（排除 toolCallId，因为 LLM 每次会生成不同的 id）
     final currentSignature = toolCalls
@@ -34,10 +34,14 @@ extension _ToolCallingLoop on LlmChatAdapter {
       );
     }
 
-    return null;
+    return _DuplicateCheckResult(
+      updatedSignature: currentSignature,
+      updatedCount: 0,
+      isDeadLoop: false,
+    );
   }
 
-  /// 工具权限检查 + 并行执行
+  /// 工具权限检查 + 串行执行
   ///
   /// 返回执行结果列表，结果顺序与 [toolCalls] 保持一致。
   /// 如果被取消，[cancelled] 为 true。
@@ -49,9 +53,6 @@ extension _ToolCallingLoop on LlmChatAdapter {
   }) async {
     // 使用 Map 存储结果（以 toolCallId 为键），最后按 toolCalls 原始顺序输出
     final resultMap = <String, shared.ToolResult>{};
-    // Phase 1: 权限检查（串行）+ 收集待执行工具
-    final pendingExecutions =
-        <({llm.ToolCall call, AgentTool tool, Map<String, dynamic> args})>[];
     var cancelled = false;
 
     for (final toolCall in toolCalls) {
@@ -83,13 +84,17 @@ extension _ToolCallingLoop on LlmChatAdapter {
 
       final toolName = toolCall.function.name;
       final toolCallId = toolCall.id;
-      LlmChatAdapter._log.info('执行工具调用: $toolName, toolCallId=$toolCallId, alreadyCallsSet.size=${alreadyCallsSet.length}');
+      LlmChatAdapter._log.info(
+        '执行工具调用: $toolName, toolCallId=$toolCallId, alreadyCallsSet.size=${alreadyCallsSet.length}',
+      );
       Map<String, dynamic> toolArguments;
       try {
         toolArguments =
             jsonDecode(toolCall.function.arguments) as Map<String, dynamic>;
       } catch (e) {
-        LlmChatAdapter._log.debug('failed to parse tool arguments as JSON, using empty map: $e');
+        LlmChatAdapter._log.debug(
+          'failed to parse tool arguments as JSON, using empty map: $e',
+        );
         toolArguments = {};
       }
 
@@ -151,35 +156,49 @@ extension _ToolCallingLoop on LlmChatAdapter {
         }
       }
 
-      pendingExecutions.add((call: toolCall, tool: tool, args: toolArguments));
-    }
-
-    // Phase 2: 并行执行已批准的工具
-    if (pendingExecutions.isNotEmpty) {
-      _runningTools.addAll(pendingExecutions.map((e) => e.tool));
-
-      final execResults = await Future.wait(
-        pendingExecutions.map(
-          (exec) => executeSingleTool(exec, cancellationToken),
-        ),
-      );
-
-      _runningTools.clear();
-
-      // 收集执行结果到 resultMap
-      for (final r in execResults) {
-        resultMap[r.toolCall.id] = shared.ToolResult(
-          toolCallId: r.toolCall.id,
-          content: r.result.content,
-          isError: r.result.isError || r.wasCancelled,
-          name: r.toolName,
-        );
+      if (streamCancelled || cancellationToken?.isCancelled == true) {
+        cancelled = true;
+        break;
       }
 
-      // 如果因取消导致任意工具被终止，标记为 cancelled
-      if (execResults.any((r) => r.wasCancelled) &&
+      _runningTools.add(tool);
+      final execResult = await executeSingleTool((
+        call: toolCall,
+        tool: tool,
+        args: toolArguments,
+      ), cancellationToken);
+      _runningTools.remove(tool);
+
+      resultMap[execResult.toolCall.id] = shared.ToolResult(
+        toolCallId: execResult.toolCall.id,
+        content: execResult.result.content,
+        isError: execResult.result.isError || execResult.wasCancelled,
+        name: execResult.toolName,
+      );
+
+      // 如果因取消导致当前工具被终止，标记为 cancelled 并停止后续工具
+      if (execResult.wasCancelled &&
           (streamCancelled || cancellationToken?.isCancelled == true)) {
         cancelled = true;
+        break;
+      }
+    }
+
+    _runningTools.clear();
+
+    // 如果取消发生在权限检查阶段，仍为未处理的 tool_call 生成结果，
+    // 避免结果排序时因缺失条目抛出空断言异常。
+    if (cancelled) {
+      for (final toolCall in toolCalls) {
+        resultMap.putIfAbsent(
+          toolCall.id,
+          () => shared.ToolResult(
+            toolCallId: toolCall.id,
+            content: '工具调用已取消: ${toolCall.function.name}',
+            isError: true,
+            name: toolCall.function.name,
+          ),
+        );
       }
     }
 
@@ -195,9 +214,7 @@ extension _ToolCallingLoop on LlmChatAdapter {
     List<llm.ToolCall> toolCalls,
     Map<String, shared.ToolResult> resultMap,
   ) {
-    return toolCalls
-        .map((tc) => resultMap[tc.id]!)
-        .toList(growable: false);
+    return toolCalls.map((tc) => resultMap[tc.id]!).toList(growable: false);
   }
 
   /// 执行单个工具调用
@@ -245,10 +262,6 @@ extension _ToolCallingLoop on LlmChatAdapter {
       employeeId: currentEmployeeUuid!,
       results: results,
     ).copyWith(metadata: {'toolNames': results.map((r) => r.name).toList()});
-    memoryManager.addMessage(
-      currentEmployeeUuid!,
-      deviceId!,
-      msg,
-    );
+    memoryManager.addMessage(currentEmployeeUuid!, deviceId!, msg);
   }
 }

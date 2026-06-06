@@ -85,6 +85,7 @@ class MessageMapper {
 
   /// 将 ChatMessage 转换为数据库行表示
   static MessageRecord toRecord(ChatMessage msg) {
+    final metadata = _metadataForRecord(msg);
     return MessageRecord(
       uuid: msg.id,
       employeeId: msg.employeeId,
@@ -105,9 +106,7 @@ class MessageMapper {
       inputTokens: msg.inputTokens,
       outputTokens: msg.outputTokens,
       isRead: msg.isRead ? 1 : 0,
-      metadata: msg.metadata != null && msg.metadata!.isNotEmpty
-          ? jsonEncode(msg.metadata)
-          : null,
+      metadata: metadata != null ? jsonEncode(metadata) : null,
       deleted: msg.deleted ? 1 : 0,
       createTime: msg.createdAt.millisecondsSinceEpoch,
       updateTime: (msg.updatedAt ?? msg.createdAt).millisecondsSinceEpoch,
@@ -149,6 +148,10 @@ class MessageMapper {
 
   /// 从 SQLite Row 直接创建 ChatMessage
   static ChatMessage fromRow(Map<String, Object?> row) {
+    final metadata = _parseJsonMap(row['metadata']);
+    final toolResults = _parseToolResultsFromMetadata(metadata);
+    final cleanMetadata = _metadataWithoutToolResults(metadata);
+
     return ChatMessage(
       id: row['uuid'] as String,
       employeeId: row['employee_id'] as String,
@@ -156,7 +159,8 @@ class MessageMapper {
       type: row['type'] as String? ?? 'text',
       content: row['content'] as String?,
       createdAt: DateTime.fromMillisecondsSinceEpoch(
-          row['create_time'] as int? ?? 0),
+        row['create_time'] as int? ?? 0,
+      ),
       updatedAt: (row['update_time'] as int?) != null
           ? DateTime.fromMillisecondsSinceEpoch(row['update_time'] as int)
           : null,
@@ -165,12 +169,15 @@ class MessageMapper {
       toolArguments: _parseJsonMap(row['tool_arguments']),
       toolResult: row['tool_result'] as String?,
       toolCalls: _parseToolCalls(row['tool_calls']),
-      status: MessageStatus.fromString(row['processing_status'] as String? ?? 'none'),
+      toolResults: toolResults,
+      status: MessageStatus.fromString(
+        row['processing_status'] as String? ?? 'none',
+      ),
       processingError: row['processing_error'] as String?,
       seq: row['seq'] as int? ?? 0,
       deleted: (row['deleted'] as int? ?? 0) != 0,
       isRead: (row['is_read'] as int? ?? 0) != 0,
-      metadata: _parseJsonMap(row['metadata']),
+      metadata: cleanMetadata,
       inputTokens: row['input_tokens'] as int?,
       outputTokens: row['output_tokens'] as int?,
     );
@@ -178,6 +185,10 @@ class MessageMapper {
 
   /// 从 MessageRecord 创建 ChatMessage
   static ChatMessage fromRecord(MessageRecord record) {
+    final metadata = _parseJsonMap(record.metadata);
+    final toolResults = _parseToolResultsFromMetadata(metadata);
+    final cleanMetadata = _metadataWithoutToolResults(metadata);
+
     return ChatMessage(
       id: record.uuid,
       employeeId: record.employeeId,
@@ -191,18 +202,49 @@ class MessageMapper {
       toolArguments: _parseJsonMap(record.toolArguments),
       toolResult: record.toolResult,
       toolCalls: _parseToolCalls(record.toolCalls),
+      toolResults: toolResults,
       status: MessageStatus.fromString(record.processingStatus),
       processingError: record.processingError,
       seq: record.seq,
       deleted: record.deleted != 0,
       isRead: record.isRead != 0,
-      metadata: _parseJsonMap(record.metadata),
+      metadata: cleanMetadata,
       inputTokens: record.inputTokens,
       outputTokens: record.outputTokens,
     );
   }
 
   // ── 内部解析工具 ──
+
+  /// 将 toolResults 合并进 metadata 持久化，兼容现有 messages 表结构。
+  static Map<String, dynamic>? _metadataForRecord(ChatMessage msg) {
+    final metadata = <String, dynamic>{...?msg.metadata};
+    if (msg.toolResults != null && msg.toolResults!.isNotEmpty) {
+      metadata['toolResults'] = msg.toolResults!
+          .map((result) => result.toMap())
+          .toList();
+    }
+    return metadata.isEmpty ? null : metadata;
+  }
+
+  /// 从 metadata 中恢复 toolResults。
+  static List<ToolResult>? _parseToolResultsFromMetadata(
+    Map<String, dynamic>? metadata,
+  ) {
+    final raw = metadata?['toolResults'];
+    if (raw == null) return null;
+    final parsed = ToolResult.parseList(raw);
+    return parsed.isEmpty ? null : parsed;
+  }
+
+  /// ChatMessage 已有顶层 toolResults，metadata 中移除副本避免重复暴露。
+  static Map<String, dynamic>? _metadataWithoutToolResults(
+    Map<String, dynamic>? metadata,
+  ) {
+    if (metadata == null || metadata.isEmpty) return null;
+    final clean = Map<String, dynamic>.from(metadata)..remove('toolResults');
+    return clean.isEmpty ? null : clean;
+  }
 
   /// 解析 JSON String → Map，兼容已是 Map 的情况
   static Map<String, dynamic>? _parseJsonMap(dynamic value) {

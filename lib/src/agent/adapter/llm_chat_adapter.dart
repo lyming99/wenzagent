@@ -47,7 +47,7 @@ class _NotReplyRecord {
   }
 }
 
-/// 并行工具执行结果（内部使用）
+/// 工具执行结果（内部使用）
 class _ToolExecResult {
   final llm.ToolCall toolCall;
   final String toolName;
@@ -97,6 +97,30 @@ class _LlmStreamResult {
     toolCalls: const [],
     error: msg,
   );
+}
+
+class _BufferedChatResponse implements llm.ChatResponse {
+  @override
+  final String? text;
+
+  @override
+  final List<llm.ToolCall>? toolCalls;
+
+  @override
+  final String? thinking;
+
+  _BufferedChatResponse({
+    String? text,
+    String? thinking,
+    List<llm.ToolCall>? toolCalls,
+  }) : text = text == null || text.isEmpty ? null : text,
+       thinking = thinking == null || thinking.isEmpty ? null : thinking,
+       toolCalls = toolCalls == null || toolCalls.isEmpty
+           ? null
+           : List.unmodifiable(toolCalls);
+
+  @override
+  llm.UsageInfo? get usage => null;
 }
 
 /// 重复工具调用检测结果（内部使用）
@@ -167,9 +191,10 @@ class LlmChatAdapter implements IChatAdapter {
   void Function(String delta)? onThinkingDelta;
 
   /// Token 用量回调（由 AgentImpl 注入，每次 LLM 调用后触发）
+  @override
   void Function(llm.UsageInfo usage)? onTokenUsage;
 
-  /// 当前正在并行执行的工具列表（用于取消）
+  /// 当前正在执行的工具列表（用于取消）
   final List<AgentTool> _runningTools = [];
 
   /// 上下文压缩器
@@ -420,31 +445,26 @@ class LlmChatAdapter implements IChatAdapter {
           );
 
           // 重复工具调用检测
-          final duplicateError = checkDuplicateToolCalls(
+          final duplicateCheck = checkDuplicateToolCalls(
             llmResult.toolCalls,
             lastToolCallsSignature,
             consecutiveDuplicateCount,
           );
-          if (duplicateError != null) {
-            lastToolCallsSignature = duplicateError.updatedSignature;
-            consecutiveDuplicateCount = duplicateError.updatedCount;
+          lastToolCallsSignature = duplicateCheck.updatedSignature;
+          consecutiveDuplicateCount = duplicateCheck.updatedCount;
 
-            if (duplicateError.isDeadLoop) {
-              LlmChatAdapter._log.error(
-                '工具调用死循环中断: 连续 $duplicateError.updatedCount 轮相同调用, '
-                'signature=${duplicateError.updatedSignature.length > 200 ? '${duplicateError.updatedSignature.substring(0, 200)}...' : duplicateError.updatedSignature}',
-              );
-              controller.add(
-                StreamResponse.error(
-                  '检测到工具调用死循环：LLM 连续 $duplicateError.updatedCount 轮发出相同的工具调用。'
-                  '请尝试修改您的需求或手动提供相关信息。',
-                ),
-              );
-              return;
-            }
-          } else {
-            lastToolCallsSignature = null;
-            consecutiveDuplicateCount = 0;
+          if (duplicateCheck.isDeadLoop) {
+            LlmChatAdapter._log.error(
+              '工具调用死循环中断: 连续 $duplicateCheck.updatedCount 轮相同调用, '
+              'signature=${duplicateCheck.updatedSignature.length > 200 ? '${duplicateCheck.updatedSignature.substring(0, 200)}...' : duplicateCheck.updatedSignature}',
+            );
+            controller.add(
+              StreamResponse.error(
+                '检测到工具调用死循环：LLM 连续 $duplicateCheck.updatedCount 轮发出相同的工具调用。'
+                '请尝试修改您的需求或手动提供相关信息。',
+              ),
+            );
+            return;
           }
 
           // 立即持久化 assistant 消息（含文本 + toolCalls），前端可即时看到 AI 回复
@@ -459,7 +479,7 @@ class LlmChatAdapter implements IChatAdapter {
             allSentToolCallIds.add(tc.id);
           }
 
-          // 权限检查 + 并行执行工具
+          // 权限检查 + 串行执行工具
           final execResult = await executeToolCalls(
             llmResult.toolCalls,
             alreadyCallsSet: alreadyCallsSet,
@@ -781,9 +801,11 @@ class LlmChatAdapter implements IChatAdapter {
     }
     builder.enableLogging(true);
     // Ollama 本地推理可能较慢，适当延长超时
-    final timeout = config.provider == LLMProvider.ollama
-        ? const Duration(minutes: 60)
-        : const Duration(minutes: 30);
+    final timeout =
+        config.requestTimeout ??
+        (config.provider == LLMProvider.ollama
+            ? const Duration(minutes: 60)
+            : const Duration(minutes: 30));
     builder.timeout(timeout);
     return await builder.build();
   }

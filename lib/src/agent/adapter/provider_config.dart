@@ -35,6 +35,18 @@ class ProviderConfig {
   /// 使用指数退避策略。未设置时使用 [RetryConfig.defaultConfig]。
   final RetryConfig? retryConfig;
 
+  /// 是否使用真实流式响应。
+  ///
+  /// 默认开启，使用真实流式接口实时读取文本、思考内容和工具调用。
+  /// DeepSeek 默认关闭，使用非流式 [chatWithTools] 调用。
+  /// 设置为 false 时回退到旧的非流式 [chatWithTools] 调用。
+  final bool streamEnabled;
+
+  /// 单次 LLM 请求超时时间。
+  ///
+  /// 未设置时：Ollama 默认 60 分钟，其他 provider 默认 30 分钟。
+  final Duration? requestTimeout;
+
   const ProviderConfig({
     required this.provider,
     required this.model,
@@ -44,7 +56,10 @@ class ProviderConfig {
     this.organization,
     this.compressionConfig,
     this.retryConfig,
-  });
+    bool? streamEnabled,
+    this.requestTimeout,
+  }) : streamEnabled =
+           streamEnabled ?? (provider == LLMProvider.deepseek ? false : true);
 
   /// 从 Map 创建配置
   factory ProviderConfig.fromMap(Map<String, dynamic> map) {
@@ -63,8 +78,14 @@ class ProviderConfig {
         : null;
 
     final retryMap = map['retry'] as Map<String, dynamic>?;
-    final retryConfig = retryMap != null
-        ? RetryConfig.fromMap(retryMap)
+    final retryConfig = retryMap != null ? RetryConfig.fromMap(retryMap) : null;
+
+    final timeoutMs = (map['requestTimeoutMs'] as num?)?.toInt();
+    final timeoutSeconds = (map['timeoutSeconds'] as num?)?.toInt();
+    final requestTimeout = timeoutMs != null
+        ? Duration(milliseconds: timeoutMs)
+        : timeoutSeconds != null
+        ? Duration(seconds: timeoutSeconds)
         : null;
 
     // Ollama 专用默认值
@@ -82,6 +103,12 @@ class ProviderConfig {
       }
     }
 
+    final streamEnabled = map.containsKey('streamEnabled')
+        ? map['streamEnabled'] as bool?
+        : map.containsKey('stream')
+        ? map['stream'] as bool?
+        : null;
+
     return ProviderConfig(
       provider: provider,
       model: model,
@@ -91,6 +118,8 @@ class ProviderConfig {
       organization: map['organization'] as String?,
       compressionConfig: compressionConfig,
       retryConfig: retryConfig,
+      streamEnabled: streamEnabled,
+      requestTimeout: requestTimeout,
     );
   }
 
@@ -104,6 +133,9 @@ class ProviderConfig {
     'organization': organization,
     if (compressionConfig != null) 'compression': compressionConfig!.toMap(),
     if (retryConfig != null) 'retry': retryConfig!.toMap(),
+    'streamEnabled': streamEnabled,
+    if (requestTimeout != null)
+      'requestTimeoutMs': requestTimeout!.inMilliseconds,
   };
 
   /// 验证配置

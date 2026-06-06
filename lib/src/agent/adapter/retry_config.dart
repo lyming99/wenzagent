@@ -10,18 +10,18 @@ class RetryConfig {
 
   /// 基础延迟（毫秒）
   ///
-  /// 指数退避的初始延迟时间，默认 5000ms（5 秒）。
+  /// 指数退避的初始延迟时间，默认 2000ms（2 秒）。
   final int baseDelayMs;
 
   /// 最大延迟（毫秒）
   ///
-  /// 指数退避的上限，默认 20000ms（20 秒）。
+  /// 指数退避的上限，默认 16000ms（16 秒）。
   final int maxDelayMs;
 
   /// 是否添加随机抖动
   ///
   /// 为 true 时在延迟上添加随机抖动（0~当前退避值之间），
-  /// 避免多个请求同时重试造成雪崩效应。默认 true。
+  /// 避免多个请求同时重试造成雪崩效应。默认 false，保持 2/4/8/16 秒固定序列。
   final bool jitter;
 
   /// 可重试的 HTTP 状态码
@@ -31,9 +31,9 @@ class RetryConfig {
 
   const RetryConfig({
     this.maxRetries = 5,
-    this.baseDelayMs = 5000,
-    this.maxDelayMs = 20000,
-    this.jitter = true,
+    this.baseDelayMs = 2000,
+    this.maxDelayMs = 16000,
+    this.jitter = false,
     this.retryableStatusCodes = const [408, 429, 500, 502, 503, 504],
   });
 
@@ -60,9 +60,9 @@ class RetryConfig {
   factory RetryConfig.fromMap(Map<String, dynamic> map) {
     return RetryConfig(
       maxRetries: (map['maxRetries'] as num?)?.toInt() ?? 5,
-      baseDelayMs: (map['baseDelayMs'] as num?)?.toInt() ?? 5000,
-      maxDelayMs: (map['maxDelayMs'] as num?)?.toInt() ?? 20000,
-      jitter: (map['jitter'] as bool?) ?? true,
+      baseDelayMs: (map['baseDelayMs'] as num?)?.toInt() ?? 2000,
+      maxDelayMs: (map['maxDelayMs'] as num?)?.toInt() ?? 16000,
+      jitter: (map['jitter'] as bool?) ?? false,
       retryableStatusCodes:
           (map['retryableStatusCodes'] as List<dynamic>?)
               ?.map((e) => e as int)

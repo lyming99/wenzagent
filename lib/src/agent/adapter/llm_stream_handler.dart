@@ -167,7 +167,9 @@ extension _StreamHandler on LlmChatAdapter {
 
     final aiContentBuffer = StringBuffer();
     final thinkingContentBuffer = StringBuffer();
-    llm.ChatResponse response;
+    final toolCallAggregator = llm.ToolCallAggregator();
+    llm.ChatResponse? response;
+    var hasReceivedStreamDelta = false;
 
     // 获取重试配置（未配置时使用默认值）
     final retryConfig = _providerConfig?.retryConfig ?? const RetryConfig();
@@ -221,22 +223,111 @@ extension _StreamHandler on LlmChatAdapter {
       return true;
     }
 
+    // 真实流式会在 TextDeltaEvent/ThinkingDeltaEvent 中实时填充 buffer；
+    // 部分 provider 仍会在 CompletionEvent 附带完整文本，这里只在未收到 delta 时回填。
+    Future<llm.ChatResponse> callNonStreamingLlm() async {
+      final nextResponse = await _chatCapability!.chatWithTools(
+        llmMessages!,
+        llmTools,
+        cancelToken: _dioCancelToken,
+      );
+
+      if (nextResponse.text != null && nextResponse.text!.isNotEmpty) {
+        aiContentBuffer.write(nextResponse.text);
+        onChunk?.call(nextResponse.text!);
+        onStreamDelta?.call(nextResponse.text!);
+      }
+
+      if (nextResponse.thinking != null && nextResponse.thinking!.isNotEmpty) {
+        thinkingContentBuffer.write(nextResponse.thinking);
+        onThinkingDelta?.call(nextResponse.thinking!);
+      }
+
+      for (final toolCall in nextResponse.toolCalls ?? <llm.ToolCall>[]) {
+        toolCallAggregator.addDelta(toolCall);
+      }
+
+      return nextResponse;
+    }
+
+    Future<llm.ChatResponse> callStreamingLlm() async {
+      llm.ChatResponse? finalResponse;
+
+      await for (final event in _chatCapability!.chatStream(
+        llmMessages!,
+        tools: llmTools,
+        cancelToken: _dioCancelToken,
+      )) {
+        if (streamCancelled || cancellationToken?.isCancelled == true) {
+          throw _RetryCancelledException();
+        }
+
+        switch (event) {
+          case llm.TextDeltaEvent(delta: final delta):
+            if (delta.isEmpty) break;
+            hasReceivedStreamDelta = true;
+            aiContentBuffer.write(delta);
+            onChunk?.call(delta);
+            onStreamDelta?.call(delta);
+          case llm.ThinkingDeltaEvent(delta: final delta):
+            if (delta.isEmpty) break;
+            hasReceivedStreamDelta = true;
+            thinkingContentBuffer.write(delta);
+            onThinkingDelta?.call(delta);
+          case llm.ToolCallDeltaEvent(toolCall: final toolCall):
+            hasReceivedStreamDelta = true;
+            toolCallAggregator.addDelta(toolCall);
+          case llm.CompletionEvent(response: final completedResponse):
+            finalResponse = completedResponse;
+          case llm.ErrorEvent(error: final error):
+            throw error;
+        }
+      }
+
+      if (finalResponse != null) {
+        return finalResponse;
+      }
+
+      if (hasReceivedStreamDelta) {
+        final text = aiContentBuffer.toString();
+        final thinking = thinkingContentBuffer.toString();
+        final toolCalls = toolCallAggregator.completedCalls;
+        LlmChatAdapter._log.warn(
+          'LLM stream completed without CompletionEvent; using buffered '
+          'deltas as final response: textLength=${text.length}, '
+          'thinkingLength=${thinking.length}, toolCalls=${toolCalls.length}',
+        );
+        return _BufferedChatResponse(
+          text: text,
+          thinking: thinking,
+          toolCalls: toolCalls,
+        );
+      }
+
+      throw StateError('LLM stream completed without CompletionEvent or delta');
+    }
+
     try {
-      // 使用重试机制包装 chatWithTools 调用
+      // 使用重试机制包装 LLM 调用。真实流式在收到首个 delta 后不再重试，避免重复输出。
       response = await RetryUtil.executeWithRetry<llm.ChatResponse>(
         () async {
           // 每次重试前检查取消状态
           if (streamCancelled || cancellationToken?.isCancelled == true) {
             throw _RetryCancelledException();
           }
-          return await _chatCapability!.chatWithTools(
-            llmMessages!,
-            llmTools,
-            cancelToken: _dioCancelToken,
-          );
+          return _providerConfig?.streamEnabled == false
+              ? await callNonStreamingLlm()
+              : await callStreamingLlm();
         },
         config: retryConfig,
         shouldRetry: (error) {
+          if (hasReceivedStreamDelta) {
+            LlmChatAdapter._log.warn('流式响应已收到增量，后续错误不再自动重试: $error');
+            return false;
+          }
+          if (RetryUtil.isStreamCompletionError(error)) {
+            return true;
+          }
           // StateError 和 TypeError 表示程序逻辑问题，不重试
           if (error is StateError || error is TypeError) {
             return false;
@@ -271,13 +362,17 @@ extension _StreamHandler on LlmChatAdapter {
       // 重试成功，恢复非重试状态
       onRetryStatus?.call(isRetrying: false);
 
-      if (response.text != null && response.text!.isNotEmpty) {
+      if (response.text != null &&
+          response.text!.isNotEmpty &&
+          aiContentBuffer.isEmpty) {
         aiContentBuffer.write(response.text);
         onChunk?.call(response.text!);
         onStreamDelta?.call(response.text!);
       }
 
-      if (response.thinking != null && response.thinking!.isNotEmpty) {
+      if (response.thinking != null &&
+          response.thinking!.isNotEmpty &&
+          thinkingContentBuffer.isEmpty) {
         thinkingContentBuffer.write(response.thinking);
         onThinkingDelta?.call(response.thinking!);
       }
@@ -340,8 +435,10 @@ extension _StreamHandler on LlmChatAdapter {
     return _LlmStreamResult(
       aiContentBuffer: aiContentBuffer,
       aiThinkingBuffer: thinkingContentBuffer,
-      isDone: aiContentBuffer.toString().trim().isNotEmpty,
-      toolCalls: response.toolCalls ?? <llm.ToolCall>[],
+      isDone:
+          aiContentBuffer.toString().trim().isNotEmpty ||
+          toolCallAggregator.completedCalls.isNotEmpty,
+      toolCalls: toolCallAggregator.completedCalls,
     );
   }
 

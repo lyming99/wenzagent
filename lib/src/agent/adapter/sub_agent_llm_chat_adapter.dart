@@ -73,9 +73,10 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
   void Function(String delta)? onThinkingDelta;
 
   /// Token 用量回调（由 AgentImpl 注入，每次 LLM 调用后触发）
+  @override
   void Function(llm.UsageInfo usage)? onTokenUsage;
 
-  /// 当前正在并行执行的工具列表（用于取消）
+  /// 当前正在执行的工具列表（用于取消）
   final List<AgentTool> _runningTools = [];
 
   /// dio CancelToken（用于取消 LLM 流式请求）
@@ -301,7 +302,7 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
             consecutiveDuplicateCount = 0;
           }
 
-          // 权限检查 + 并行执行工具
+          // 权限检查 + 串行执行工具
           final execResult = await _executeToolCalls(
             llmResult.toolCalls,
             alreadyCallsSet: alreadyCallsSet,
@@ -556,14 +557,17 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
       builder.maxTokens(config.options.maxTokens!);
     } else {
       // Ollama 本地模型上下文窗口通常较小，使用保守默认值
-      final defaultMaxTokens =
-          config.provider == LLMProvider.ollama ? 4096 : 32000;
+      final defaultMaxTokens = config.provider == LLMProvider.ollama
+          ? 4096
+          : 32000;
       builder.maxTokens(defaultMaxTokens);
     }
     builder.reasoning(false);
 
     if (config.options.reasoningEffort != null) {
-      final effort = llm.ReasoningEffort.fromString(config.options.reasoningEffort!);
+      final effort = llm.ReasoningEffort.fromString(
+        config.options.reasoningEffort!,
+      );
       if (effort != null) {
         builder.reasoningEffort(effort);
       }
@@ -578,9 +582,11 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
     }
     builder.enableLogging(true);
     // Ollama 本地推理可能较慢，适当延长超时
-    final timeout = config.provider == LLMProvider.ollama
-        ? const Duration(minutes: 60)
-        : const Duration(minutes: 30);
+    final timeout =
+        config.requestTimeout ??
+        (config.provider == LLMProvider.ollama
+            ? const Duration(minutes: 60)
+            : const Duration(minutes: 30));
     builder.timeout(timeout);
     return await builder.build();
   }
@@ -675,7 +681,10 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
       shared.LlmMessageMapper.mergeConsecutiveToolResults(_messages),
       strictMode: isStrictProvider,
     );
-    final llmMessages = shared.LlmMessageMapper.toLlmDartList(sanitized, provider: _providerConfig?.provider);
+    final llmMessages = shared.LlmMessageMapper.toLlmDartList(
+      sanitized,
+      provider: _providerConfig?.provider,
+    );
 
     if (systemPrompt != null && systemPrompt.isNotEmpty) {
       llmMessages.insert(0, llm.ChatMessage.system(systemPrompt));
@@ -684,7 +693,7 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
     return llmMessages;
   }
 
-  /// LLM 调用（非流式，使用 chatWithTools）
+  /// LLM 调用，默认使用真实流式接口，必要时回退到 chatWithTools。
   Future<_LlmStreamResult> _callLlmStream({
     required List<llm.ChatMessage> llmMessages,
     required List<llm.Tool>? llmTools,
@@ -694,23 +703,112 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
   }) async {
     final aiContentBuffer = StringBuffer();
     final thinkingContentBuffer = StringBuffer();
-    llm.ChatResponse response;
+    final toolCallAggregator = llm.ToolCallAggregator();
+    llm.ChatResponse? response;
+    var hasReceivedStreamDelta = false;
+
+    Future<llm.ChatResponse> callNonStreamingLlm() async {
+      final nextResponse = await _chatCapability!.chatWithTools(
+        llmMessages,
+        llmTools,
+        cancelToken: _dioCancelToken,
+      );
+
+      if (nextResponse.text != null && nextResponse.text!.isNotEmpty) {
+        aiContentBuffer.write(nextResponse.text);
+        onChunk?.call(nextResponse.text!);
+        onStreamDelta?.call(nextResponse.text!);
+      }
+
+      if (nextResponse.thinking != null && nextResponse.thinking!.isNotEmpty) {
+        thinkingContentBuffer.write(nextResponse.thinking);
+        onThinkingDelta?.call(nextResponse.thinking!);
+      }
+
+      for (final toolCall in nextResponse.toolCalls ?? <llm.ToolCall>[]) {
+        toolCallAggregator.addDelta(toolCall);
+      }
+
+      return nextResponse;
+    }
+
+    Future<llm.ChatResponse> callStreamingLlm() async {
+      llm.ChatResponse? finalResponse;
+
+      await for (final event in _chatCapability!.chatStream(
+        llmMessages,
+        tools: llmTools,
+        cancelToken: _dioCancelToken,
+      )) {
+        if (streamCancelled || cancellationToken?.isCancelled == true) {
+          throw const _SubRetryCancelledException();
+        }
+
+        switch (event) {
+          case llm.TextDeltaEvent(delta: final delta):
+            if (delta.isEmpty) break;
+            hasReceivedStreamDelta = true;
+            aiContentBuffer.write(delta);
+            onChunk?.call(delta);
+            onStreamDelta?.call(delta);
+          case llm.ThinkingDeltaEvent(delta: final delta):
+            if (delta.isEmpty) break;
+            hasReceivedStreamDelta = true;
+            thinkingContentBuffer.write(delta);
+            onThinkingDelta?.call(delta);
+          case llm.ToolCallDeltaEvent(toolCall: final toolCall):
+            hasReceivedStreamDelta = true;
+            toolCallAggregator.addDelta(toolCall);
+          case llm.CompletionEvent(response: final completedResponse):
+            finalResponse = completedResponse;
+          case llm.ErrorEvent(error: final error):
+            throw error;
+        }
+      }
+
+      if (finalResponse != null) {
+        return finalResponse;
+      }
+
+      if (hasReceivedStreamDelta) {
+        final text = aiContentBuffer.toString();
+        final thinking = thinkingContentBuffer.toString();
+        final toolCalls = toolCallAggregator.completedCalls;
+        _log.warn(
+          'Sub-agent LLM stream completed without CompletionEvent; using '
+          'buffered deltas as final response: textLength=${text.length}, '
+          'thinkingLength=${thinking.length}, toolCalls=${toolCalls.length}',
+        );
+        return _BufferedChatResponse(
+          text: text,
+          thinking: thinking,
+          toolCalls: toolCalls,
+        );
+      }
+
+      throw StateError('LLM stream completed without CompletionEvent or delta');
+    }
 
     try {
       response = await RetryUtil.executeWithRetry<llm.ChatResponse>(
         () async {
           // 每次重试前检查取消状态
           if (cancellationToken?.isCancelled == true || streamCancelled) {
-            throw _SubRetryCancelledException();
+            throw const _SubRetryCancelledException();
           }
-          return await _chatCapability!.chatWithTools(
-            llmMessages,
-            llmTools,
-            cancelToken: _dioCancelToken,
-          );
+          return _providerConfig?.streamEnabled == false
+              ? await callNonStreamingLlm()
+              : await callStreamingLlm();
         },
         config: _providerConfig?.retryConfig ?? const RetryConfig(),
         shouldRetry: (error) {
+          if (hasReceivedStreamDelta) {
+            _log.warn('子 Agent 流式响应已收到增量，后续错误不再自动重试: $error');
+            return false;
+          }
+          if (RetryUtil.isStreamCompletionError(error)) {
+            return true;
+          }
           if (error is StateError ||
               error is TypeError ||
               error is _SubRetryCancelledException) {
@@ -723,13 +821,17 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
         },
       );
 
-      if (response.text != null && response.text!.isNotEmpty) {
+      if (response.text != null &&
+          response.text!.isNotEmpty &&
+          aiContentBuffer.isEmpty) {
         aiContentBuffer.write(response.text);
         onChunk?.call(response.text!);
         onStreamDelta?.call(response.text!);
       }
 
-      if (response.thinking != null && response.thinking!.isNotEmpty) {
+      if (response.thinking != null &&
+          response.thinking!.isNotEmpty &&
+          thinkingContentBuffer.isEmpty) {
         thinkingContentBuffer.write(response.thinking);
         onThinkingDelta?.call(response.thinking!);
       }
@@ -749,7 +851,10 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
         return _LlmStreamResult.cancelled();
       }
       _log.error('LLM stream error after retries', e);
-      return _LlmStreamResult.error('LLM 调用异常: $e');
+      final lastError = e.errors.isNotEmpty
+          ? e.errors.last.toString()
+          : e.toString();
+      return _LlmStreamResult.error('LLM 最后一次错误: $lastError');
     } catch (e) {
       _log.error('LLM stream error', e);
       return _LlmStreamResult.error('LLM 调用异常: $e');
@@ -762,8 +867,10 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
     return _LlmStreamResult(
       aiContentBuffer: aiContentBuffer,
       aiThinkingBuffer: thinkingContentBuffer,
-      isDone: aiContentBuffer.toString().trim().isNotEmpty,
-      toolCalls: response.toolCalls ?? <llm.ToolCall>[],
+      isDone:
+          aiContentBuffer.toString().trim().isNotEmpty ||
+          toolCallAggregator.completedCalls.isNotEmpty,
+      toolCalls: toolCallAggregator.completedCalls,
     );
   }
 
@@ -773,7 +880,7 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
     String? lastSignature,
     int currentCount,
   ) {
-    const maxConsecutiveDuplicateRounds = 3;
+    const maxConsecutiveDuplicateRounds = 5;
 
     final currentSignature = toolCalls
         .map((tc) => '${tc.function.name}:${tc.function.arguments}')
@@ -792,16 +899,13 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
     return null;
   }
 
-  /// 工具权限检查 + 并行执行
+  /// 工具权限检查 + 串行执行
   Future<_ToolExecSummary> _executeToolCalls(
     List<llm.ToolCall> toolCalls, {
     required Set<String> alreadyCallsSet,
     required bool streamCancelled,
     CancellationToken? cancellationToken,
   }) async {
-    // Phase 1: 权限检查（串行）+ 收集待执行工具
-    final pendingExecutions =
-        <({llm.ToolCall call, AgentTool tool, Map<String, dynamic> args})>[];
     final allToolResults = <shared.ToolResult>[];
 
     for (final toolCall in toolCalls) {
@@ -903,54 +1007,35 @@ class SubAgentLlmChatAdapter implements IChatAdapter {
         }
       }
 
-      pendingExecutions.add((call: toolCall, tool: tool, args: toolArguments));
-    }
-
-    if (pendingExecutions.isEmpty) {
-      return _ToolExecSummary(cancelled: false, results: allToolResults);
-    }
-
-    // Phase 2: 并行执行已批准的工具
-    _runningTools.addAll(pendingExecutions.map((e) => e.tool));
-
-    final results = await Future.wait(
-      pendingExecutions.map(
-        (exec) => _executeSingleTool(exec, cancellationToken),
-      ),
-    );
-
-    _runningTools.clear();
-
-    // 取消处理
-    if (results.any((r) => r.wasCancelled) &&
-        (streamCancelled || cancellationToken?.isCancelled == true)) {
-      for (final r in results) {
-        if (r.wasCancelled) {
-          allToolResults.add(
-            shared.ToolResult(
-              toolCallId: r.toolCall.id,
-              content: r.result.content,
-              isError: true,
-              name: r.toolName,
-            ),
-          );
-        }
+      if (streamCancelled || cancellationToken?.isCancelled == true) {
+        return _ToolExecSummary(cancelled: true, results: allToolResults);
       }
-      return _ToolExecSummary(cancelled: true, results: allToolResults);
-    }
 
-    // 收集执行结果
-    for (final r in results) {
+      _runningTools.add(tool);
+      final result = await _executeSingleTool((
+        call: toolCall,
+        tool: tool,
+        args: toolArguments,
+      ), cancellationToken);
+      _runningTools.remove(tool);
+
       allToolResults.add(
         shared.ToolResult(
-          toolCallId: r.toolCall.id,
-          content: r.result.content,
-          isError: r.result.isError,
-          name: r.toolName,
+          toolCallId: result.toolCall.id,
+          content: result.result.content,
+          isError: result.result.isError || result.wasCancelled,
+          name: result.toolName,
         ),
       );
+
+      if (result.wasCancelled &&
+          (streamCancelled || cancellationToken?.isCancelled == true)) {
+        _runningTools.clear();
+        return _ToolExecSummary(cancelled: true, results: allToolResults);
+      }
     }
 
+    _runningTools.clear();
     return _ToolExecSummary(cancelled: false, results: allToolResults);
   }
 
@@ -1069,6 +1154,30 @@ class _LlmStreamResult {
     toolCalls: const [],
     error: msg,
   );
+}
+
+class _BufferedChatResponse implements llm.ChatResponse {
+  @override
+  final String? text;
+
+  @override
+  final List<llm.ToolCall>? toolCalls;
+
+  @override
+  final String? thinking;
+
+  _BufferedChatResponse({
+    String? text,
+    String? thinking,
+    List<llm.ToolCall>? toolCalls,
+  }) : text = text == null || text.isEmpty ? null : text,
+       thinking = thinking == null || thinking.isEmpty ? null : thinking,
+       toolCalls = toolCalls == null || toolCalls.isEmpty
+           ? null
+           : List.unmodifiable(toolCalls);
+
+  @override
+  llm.UsageInfo? get usage => null;
 }
 
 class _DuplicateCheckResult {
