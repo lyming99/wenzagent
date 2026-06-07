@@ -206,12 +206,15 @@ class SessionHistory {
 
 /// 会话记忆管理器
 class SessionMemoryManager {
+  static final _log = Logger('SessionMemoryManager');
+
   /// 会话历史映射（key: employeeId）
   final Map<String, SessionHistory> _sessions = {};
 
   MessageStoreService? _messageStore;
   CompressionMetaStore? _compressionMetaStore;
   String? _deviceId;
+  final Set<Future<void>> _pendingWrites = {};
 
   /// 判断是否已配置持久化
   bool get isPersisted => _messageStore != null;
@@ -274,7 +277,28 @@ class SessionMemoryManager {
     }
     // 同步写入 DB（消息始终以未读写入，由打开聊天窗口时 markMessagesAsRead 统一标记已读）
     if (_messageStore != null && _deviceId != null) {
-      _messageStore!.addMessage(_deviceId!, message);
+      late final Future<void> pendingWrite;
+      pendingWrite = _messageStore!
+          .addMessage(_deviceId!, message)
+          .then<void>((_) {})
+          .catchError((Object error, StackTrace stackTrace) {
+            _log.error(
+              'persist message failed: ${message.id}',
+              error,
+              stackTrace,
+            );
+          })
+          .whenComplete(() {
+            _pendingWrites.remove(pendingWrite);
+          });
+      _pendingWrites.add(pendingWrite);
+    }
+  }
+
+  /// Wait until all fire-and-forget message writes issued so far are done.
+  Future<void> waitForPendingWrites() async {
+    while (_pendingWrites.isNotEmpty) {
+      await Future.wait<void>(List<Future<void>>.of(_pendingWrites));
     }
   }
 
@@ -413,5 +437,6 @@ class SessionMemoryManager {
   /// 清理所有会话
   void dispose() {
     _sessions.clear();
+    _pendingWrites.clear();
   }
 }

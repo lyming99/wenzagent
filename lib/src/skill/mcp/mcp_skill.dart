@@ -8,10 +8,12 @@ import 'mcp_client_impl.dart';
 import 'mcp_client_provider.dart';
 import 'mcp_tool_adapter.dart';
 
-/// Type 1: MCP Skill 实现
+/// Type 1: MCP Skill implementation.
 ///
-/// 通过 MCP 协议连接远程服务器，获取工具列表并包装为 AgentTool。
-/// 执行时通过 MCP 客户端直接调用远程工具，无 prompt，无需二次 LLM 调用。
+/// In eager mode it connects to the MCP server and registers every remote tool
+/// during initialization. In lazy mode it only registers lightweight discovery
+/// and call entry tools; the actual MCP client is created and connected on the
+/// first MCP call.
 class McpSkill implements Skill {
   static final _log = Logger('McpSkill');
 
@@ -19,26 +21,23 @@ class McpSkill implements Skill {
   final String _name;
   final String _description;
   final McpServerConfig _serverConfig;
+  final bool _lazyLoad;
 
-  /// MCP 客户端提供者（实例级注入）
-  ///
-  /// 优先使用实例注入的 [_clientProvider]，
-  /// 回退到静态 [clientFactory]（向后兼容）。
+  /// MCP client provider. The instance provider has priority over the static
+  /// [clientFactory] fallback.
   final McpClientProvider? _clientProvider;
 
   SkillStatus _status = SkillStatus.uninitialized;
   List<AgentTool> _tools = [];
   McpClient? _client;
+  bool _connected = false;
+  Future<void>? _connectFuture;
+  Future<List<McpToolDefinition>>? _toolLoadFuture;
+  List<McpToolDefinition>? _mcpToolDefinitions;
 
-  /// MCP 客户端工厂（可注入，便于测试和扩展）
-  ///
-  /// 默认使用 [McpClientImpl]（基于 mcp_dart SDK）。
-  /// 测试时可通过 `McpSkill.clientFactory = (config) => MockMcpClient(...)` 注入 Mock。
-  ///
-  /// 向后兼容：实例级 [_clientProvider] 优先于静态工厂。
-  /// 新代码建议使用 [McpClientProvider] 注入方式。
-  static McpClient Function(McpServerConfig)? clientFactory =
-      (config) => McpClientImpl(config);
+  /// MCP client factory, injectable for tests and SDK users.
+  static McpClient Function(McpServerConfig)? clientFactory = (config) =>
+      McpClientImpl(config);
 
   McpSkill({
     required String id,
@@ -46,11 +45,13 @@ class McpSkill implements Skill {
     required String description,
     required McpServerConfig serverConfig,
     McpClientProvider? clientProvider,
-  })  : _id = id,
-        _name = name,
-        _description = description,
-        _serverConfig = serverConfig,
-        _clientProvider = clientProvider;
+    bool lazyLoad = false,
+  }) : _id = id,
+       _name = name,
+       _description = description,
+       _serverConfig = serverConfig,
+       _lazyLoad = lazyLoad,
+       _clientProvider = clientProvider;
 
   @override
   String get id => _id;
@@ -67,7 +68,6 @@ class McpSkill implements Skill {
   @override
   SkillStatus get status => _status;
 
-  /// 获取 MCP 服务器配置
   McpServerConfig get serverConfig => _serverConfig;
 
   @override
@@ -77,24 +77,29 @@ class McpSkill implements Skill {
   Future<void> initialize() async {
     _status = SkillStatus.initializing;
     try {
-      // 优先使用实例注入的 McpClientProvider，回退到静态 clientFactory
-      if (_clientProvider != null) {
-        _client = _clientProvider.createClient(_serverConfig);
+      if (_lazyLoad) {
+        _tools = [
+          McpToolListAdapter(
+            serverName: _serverConfig.name,
+            listTools: _ensureRemoteToolsLoaded,
+          ),
+          McpToolCallAdapter(
+            serverName: _serverConfig.name,
+            callTool: _callRemoteTool,
+          ),
+        ];
+        _log.debug(
+          'MCP lazy load ready: $_name, registered ${_tools.length} entry tools',
+        );
       } else {
-        final factory = clientFactory;
-        if (factory == null) {
-          throw UnsupportedError('McpSkill.clientFactory 未设置');
-        }
-        _client = factory(_serverConfig);
-      }
-      await _client!.connect();
-      final mcpTools = await _client!.listTools();
-      _tools = mcpTools
-          .map((t) => McpToolAdapter(client: _client!, definition: t))
-          .toList();
-      _log.debug('加载完成: $_name, 共 ${_tools.length} 个工具');
-      for (final tool in _tools) {
-        _log.debug('  工具名称: "${tool.name}" (原始MCP名称: "${mcpTools[_tools.indexOf(tool)].name}")');
+        final client = _ensureClient();
+        await _ensureConnected();
+        final mcpTools = await client.listTools();
+        _mcpToolDefinitions = mcpTools;
+        _tools = mcpTools
+            .map((t) => McpToolAdapter(client: client, definition: t))
+            .toList();
+        _log.debug('MCP eager load complete: $_name, tools=${_tools.length}');
       }
       _status = SkillStatus.active;
     } catch (e) {
@@ -109,19 +114,26 @@ class McpSkill implements Skill {
   @override
   Future<void> deactivate() async {
     await _client?.disconnect();
+    _client = null;
+    _connected = false;
+    _connectFuture = null;
   }
 
   @override
   Future<void> dispose() async {
     await _client?.disconnect();
     _client = null;
+    _connected = false;
+    _connectFuture = null;
+    _toolLoadFuture = null;
+    _mcpToolDefinitions = null;
     _tools.clear();
     _status = SkillStatus.disposed;
   }
 
   @override
   Future<bool> healthCheck() async {
-    if (_client == null) return false;
+    if (_client == null || !_connected) return false;
     try {
       return await _client!.ping();
     } catch (e) {
@@ -130,22 +142,87 @@ class McpSkill implements Skill {
     }
   }
 
-  /// 从 AiEmployeeSkillEntity 创建
+  McpClient _ensureClient() {
+    if (_client != null) return _client!;
+
+    if (_clientProvider != null) {
+      _client = _clientProvider.createClient(_serverConfig);
+    } else {
+      final factory = clientFactory;
+      if (factory == null) {
+        throw UnsupportedError('McpSkill.clientFactory is not configured');
+      }
+      _client = factory(_serverConfig);
+    }
+    return _client!;
+  }
+
+  Future<void> _ensureConnected() async {
+    if (_connected) return;
+
+    final currentConnect = _connectFuture;
+    if (currentConnect != null) {
+      await currentConnect;
+      return;
+    }
+
+    final client = _ensureClient();
+    _connectFuture = client
+        .connect()
+        .then((_) {
+          _connected = true;
+        })
+        .whenComplete(() {
+          _connectFuture = null;
+        });
+    await _connectFuture;
+  }
+
+  Future<List<McpToolDefinition>> _ensureRemoteToolsLoaded() async {
+    final cached = _mcpToolDefinitions;
+    if (cached != null) return cached;
+
+    final currentLoad = _toolLoadFuture;
+    if (currentLoad != null) return currentLoad;
+
+    _toolLoadFuture =
+        () async {
+          await _ensureConnected();
+          final tools = await _ensureClient().listTools();
+          _mcpToolDefinitions = tools;
+          _log.debug(
+            'MCP tools discovered lazily: $_name, count=${tools.length}',
+          );
+          return tools;
+        }().whenComplete(() {
+          _toolLoadFuture = null;
+        });
+    return _toolLoadFuture!;
+  }
+
+  Future<McpToolCallResult> _callRemoteTool(
+    String toolName,
+    Map<String, dynamic> arguments,
+  ) async {
+    await _ensureConnected();
+    return _ensureClient().callTool(toolName, arguments);
+  }
+
+  /// Creates a runtime MCP skill from persisted employee skill data.
   ///
-  /// config 格式为 McpServerConfig 列表的 JSON 字符串：
-  /// ```json
-  /// [{"name":"fs","transportType":"stdio","command":"npx","args":[...]}]
-  /// ```
+  /// Persisted/config driven MCP skills are lazy by default so changing config
+  /// and opening chat sessions never waits for remote MCP startup.
   static McpSkill fromEntity(AiEmployeeSkillEntity entity) {
     final configs = McpServerConfig.parseList(entity.config);
     if (configs.isEmpty) {
-      throw ArgumentError('MCP Skill 配置为空: ${entity.uuid}');
+      throw ArgumentError('MCP Skill config is empty: ${entity.uuid}');
     }
     return McpSkill(
       id: entity.uuid,
       name: entity.name,
       description: entity.description ?? '',
       serverConfig: configs.first,
+      lazyLoad: true,
     );
   }
 }

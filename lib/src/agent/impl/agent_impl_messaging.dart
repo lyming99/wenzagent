@@ -28,7 +28,9 @@ mixin _AgentImplMessaging on _AgentImplBase {
       // 关键：如果客户端提供了ID，强制使用它，覆盖metadata中的id
       if (clientProvidedId != null && clientProvidedId.isNotEmpty) {
         messageData['id'] = clientProvidedId;
-        _AgentImplBase._log.debug('使用客户端提供的消息ID: $clientProvidedId (强制覆盖metadata)');
+        _AgentImplBase._log.debug(
+          '使用客户端提供的消息ID: $clientProvidedId (强制覆盖metadata)',
+        );
       } else {
         // 客户端没有提供ID，检查messageData中是否有ID（可能来自metadata）
         final existingId = messageData['id'] as String?;
@@ -60,17 +62,15 @@ mixin _AgentImplMessaging on _AgentImplBase {
             fileName: meta['fileName'] as String? ?? input.content,
             fileSize: meta['fileSize'] as int? ?? 0,
             fileId: meta['fileId'] as String? ?? finalMessageId,
-            fileHash: meta['sha256'] as String? ?? meta['fileHash'] as String? ?? '',
+            fileHash:
+                meta['sha256'] as String? ?? meta['fileHash'] as String? ?? '',
             filePath: meta['filePath'] as String? ?? '',
             fromDeviceId: meta['fromDeviceId'] as String?,
             mimeType: meta['mimeType'] as String?,
             deviceId: deviceId,
           );
-          adapter.memoryManager.addMessage(
-            employeeId,
-            deviceId,
-            fileMessage,
-          );
+          adapter.memoryManager.addMessage(employeeId, deviceId, fileMessage);
+          await adapter.memoryManager.waitForPendingWrites();
           _AgentImplBase._log.debug('文件消息已提前持久化: $finalMessageId');
 
           // 广播 completed 事件，触发远程客户端增量同步
@@ -95,11 +95,7 @@ mixin _AgentImplMessaging on _AgentImplBase {
           employeeId: employeeId,
           content: input.content,
         );
-        adapter.memoryManager.addMessage(
-          employeeId,
-          deviceId,
-          userMessage,
-        );
+        adapter.memoryManager.addMessage(employeeId, deviceId, userMessage);
         _AgentImplBase._log.debug('用户消息已提前持久化: $finalMessageId');
       }
 
@@ -274,7 +270,10 @@ mixin _AgentImplMessaging on _AgentImplBase {
   }) async {
     final store = MessageStore(deviceId: deviceId);
     final chatMessages = await store.getMessagesAfterSeq(
-      employeeId, lastSeq, deviceId: deviceId, limit: limit,
+      employeeId,
+      lastSeq,
+      deviceId: deviceId,
+      limit: limit,
     );
 
     final messages = chatMessages.map((cm) {
@@ -308,11 +307,15 @@ mixin _AgentImplMessaging on _AgentImplBase {
   @override
   Future<int> getMinSeq({required String employeeId}) async {
     final store = MessageStore(deviceId: deviceId);
-    final minSeq = await store.getMinSeqForEmployee(employeeId, deviceId: deviceId);
+    final minSeq = await store.getMinSeqForEmployee(
+      employeeId,
+      deviceId: deviceId,
+    );
     if (minSeq > 0) return minSeq;
     // 无未删除消息时回退到 clear_seq
     final watermarkStore = SyncWatermarkStore(deviceId: deviceId);
-    return await watermarkStore.getClearSeq(employeeId, deviceId: deviceId) ?? 0;
+    return await watermarkStore.getClearSeq(employeeId, deviceId: deviceId) ??
+        0;
   }
 
   @override
@@ -331,7 +334,7 @@ mixin _AgentImplMessaging on _AgentImplBase {
       for (final messageId in ids) {
         await store.markAsReadByUuid(messageId);
         _messageReadStatus[messageId] ??= {};
-        _messageReadStatus[messageId]![deviceId??''] = DateTime.now();
+        _messageReadStatus[messageId]![deviceId ?? ''] = DateTime.now();
       }
       _AgentImplBase._log.info('已标记设备 $deviceId 对 ${ids.length} 条消息的已读状态');
     } else {
@@ -372,11 +375,18 @@ mixin _AgentImplMessaging on _AgentImplBase {
 
     // 1. 持久化到 DB：批量标记 seq <= readSeq 的 assistant 未读消息为已读
     final store = MessageStore(deviceId: deviceId);
-    final affected = await store.markAsReadBySeq(employeeId, readSeq, deviceId: deviceId);
+    final affected = await store.markAsReadBySeq(
+      employeeId,
+      readSeq,
+      deviceId: deviceId,
+    );
 
     // 2. 更新内存缓存：从 DB 已读结果同步，避免全量加载消息
     final now = DateTime.now();
-    final readStatusMap = await store.getReadStatusMap(employeeId, deviceId: deviceId);
+    final readStatusMap = await store.getReadStatusMap(
+      employeeId,
+      deviceId: deviceId,
+    );
     for (final entry in readStatusMap.entries) {
       if (entry.value) {
         _messageReadStatus[entry.key] ??= {};
@@ -409,7 +419,10 @@ mixin _AgentImplMessaging on _AgentImplBase {
   }) async {
     // 优先从 DB 读取已读状态（持久化数据，进程重启后仍有效）
     final store = MessageStore(deviceId: deviceId);
-    final dbReadStatus = await store.getReadStatusMap(employeeId, deviceId: deviceId);
+    final dbReadStatus = await store.getReadStatusMap(
+      employeeId,
+      deviceId: deviceId,
+    );
 
     // 合并内存缓存（内存中可能有尚未落盘的实时数据）
     final readStatus = <String, bool>{};
@@ -421,8 +434,7 @@ mixin _AgentImplMessaging on _AgentImplBase {
 
     // 再用内存数据补充（DB 中没有但内存中有的消息）
     for (final entry in _messageReadStatus.entries) {
-      readStatus[entry.key] =
-          entry.value.containsKey(deviceId);
+      readStatus[entry.key] = entry.value.containsKey(deviceId);
     }
 
     return MessagesReadStatusResult(
@@ -495,10 +507,7 @@ mixin _AgentImplMessaging on _AgentImplBase {
     _eventController.add(
       AgentEvent(
         type: AgentEventType.confirmResponse,
-        data: {
-          'requestId': requestId,
-          'selectedOption': selectedOption,
-        },
+        data: {'requestId': requestId, 'selectedOption': selectedOption},
         employeeId: employeeId,
       ),
     );
@@ -605,11 +614,7 @@ mixin _AgentImplMessaging on _AgentImplBase {
         : '【定时任务触发】\n$taskContent';
 
     if (_chatAdapter case final LlmChatAdapter adapter) {
-      adapter.injectSystemMessage(
-        systemMsgId,
-        systemContent,
-        'default',
-      );
+      adapter.injectSystemMessage(systemMsgId, systemContent, 'default');
     }
 
     // 2. 发送 user 消息触发 LLM 处理（metadata 标记 trigger=scheduled_task，
@@ -650,11 +655,7 @@ mixin _AgentImplMessaging on _AgentImplBase {
 
     // 等待持久化完成后再广播，确保消息已落盘、seq 已分配
     if (_chatAdapter case final LlmChatAdapter adapter) {
-      await adapter.injectAssistantMessage(
-        msgId,
-        content,
-        'system',
-      );
+      await adapter.injectAssistantMessage(msgId, content, 'system');
     }
 
     // 广播消息状态变更（completed），与正常助手消息完成流程一致

@@ -113,6 +113,10 @@ extension DeviceAgentManagerEvents on DeviceAgentManager {
                 (m) => m.role == 'assistant',
                 orElse: () => messages.last,
               );
+              final messageMetadata = <String, dynamic>{
+                ...?lastAssistant.metadata,
+                'deviceId': _deviceId,
+              };
               final msg = AgentMessage(
                 id: lastAssistant.id,
                 role: lastAssistant.role,
@@ -120,8 +124,7 @@ extension DeviceAgentManagerEvents on DeviceAgentManager {
                 content: lastAssistant.content,
                 createdAt: lastAssistant.createdAt,
                 status: status,
-                metadata: Map<String, dynamic>.from(data)
-                  ..['deviceId'] = _deviceId,
+                metadata: messageMetadata,
               );
               _stateHolder.notificationHub.onLocalMessage(
                 message: msg,
@@ -138,9 +141,12 @@ extension DeviceAgentManagerEvents on DeviceAgentManager {
               final lanClient = _connectionManager.lanClient;
               if (lanClient != null && lanClient.isConnected) {
                 final completedData = Map<String, dynamic>.from(data);
+                completedData['messageId'] = msg.id;
+                completedData['createdAt'] = msg.createdAt.toIso8601String();
                 completedData['role'] = msg.role;
                 completedData['content'] = msg.content;
                 completedData['type'] = msg.type;
+                completedData['metadata'] = msg.metadata;
                 final lanMsg = LanMessage(
                   type: LanMessageType.agentMessageStatusChanged,
                   fromId: _deviceId,

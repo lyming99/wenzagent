@@ -957,6 +957,7 @@ class LlmChatAdapter implements IChatAdapter {
       deviceIdentifier,
       chatMessage,
     );
+    await memoryManager.waitForPendingWrites();
   }
 
   /// 注入一条 system 消息到当前会话

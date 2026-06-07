@@ -21,6 +21,7 @@ import 'dart:async';
 
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
+import 'package:wenzagent/wenzagent.dart' as agent;
 import 'package:wenzagent/src/host/host_rpc_methods.dart';
 import 'package:wenzagent/src/persistence/persistence.dart';
 import 'package:wenzagent/src/service/message_store_service.dart';
@@ -74,7 +75,9 @@ ChatMessage _createFileMessage({
   String? id,
 }) {
   final fid = fileId ?? const Uuid().v4();
-  final hash = sha256 ?? 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+  final hash =
+      sha256 ??
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
   return ChatMessage.file(
     id: id ?? const Uuid().v4(),
     employeeId: employeeId,
@@ -109,6 +112,162 @@ ChatMessage _createAssistantMessage({
     status: status,
     seq: seq,
   );
+}
+
+class _InMemoryMessageStoreService implements MessageStoreService {
+  final _messages = <String, ChatMessage>{};
+  final _lastSeqBySession = <String, int>{};
+  final _summaries = <String, SessionSummaryEntity>{};
+  final _changeController = StreamController<MessageChangeEvent>.broadcast();
+
+  String _sessionKey(String deviceId, String employeeId) =>
+      '$deviceId::$employeeId';
+
+  String _messageKey(String deviceId, String messageId) =>
+      '$deviceId::$messageId';
+
+  @override
+  Stream<MessageChangeEvent> get onMessageChanged => _changeController.stream;
+
+  @override
+  Future<ChatMessage> addMessage(
+    String deviceId,
+    ChatMessage message, {
+    bool updateWatermark = true,
+  }) async {
+    _messages[_messageKey(deviceId, message.id)] = message;
+    if (updateWatermark && message.seq > 0) {
+      updateLastSeq(deviceId, message.employeeId, message.seq);
+    }
+    return message;
+  }
+
+  @override
+  Future<void> deleteMessages(String deviceId, String employeeId) async {
+    _messages.removeWhere(
+      (_, message) =>
+          message.deviceId == deviceId && message.employeeId == employeeId,
+    );
+    _lastSeqBySession.remove(_sessionKey(deviceId, employeeId));
+  }
+
+  @override
+  Future<int> deleteMessagesBeforeSeq(
+    String deviceId,
+    String employeeId,
+    int beforeSeq,
+  ) async {
+    var deletedCount = 0;
+    _messages.removeWhere((_, message) {
+      final shouldDelete =
+          message.deviceId == deviceId &&
+          message.employeeId == employeeId &&
+          message.seq < beforeSeq;
+      if (shouldDelete) deletedCount++;
+      return shouldDelete;
+    });
+    return deletedCount;
+  }
+
+  @override
+  Future<int> getLastSeq(String deviceId, String employeeId) async {
+    return _lastSeqBySession[_sessionKey(deviceId, employeeId)] ?? 0;
+  }
+
+  @override
+  Future<ChatMessage?> getMessage(String deviceId, String uuid) async {
+    return _messages[_messageKey(deviceId, uuid)];
+  }
+
+  @override
+  Future<List<ChatMessage>> getMessages(
+    String deviceId,
+    String employeeId, {
+    int? limit,
+    int? offset,
+  }) {
+    return getMessagesWithDeviceId(
+      deviceId,
+      employeeId,
+      limit: limit,
+      offset: offset,
+    );
+  }
+
+  @override
+  Future<List<ChatMessage>> getMessagesWithDeviceId(
+    String deviceId,
+    String employeeId, {
+    int? limit,
+    int? offset,
+  }) async {
+    final all =
+        _messages.values
+            .where(
+              (message) =>
+                  message.deviceId == deviceId &&
+                  message.employeeId == employeeId,
+            )
+            .toList()
+          ..sort((a, b) => a.seq.compareTo(b.seq));
+    final start = (offset ?? 0).clamp(0, all.length);
+    final end = limit == null
+        ? all.length
+        : (start + limit).clamp(0, all.length);
+    return all.sublist(start, end);
+  }
+
+  @override
+  Future<int> getMaxSeq(String deviceId, String employeeId) async {
+    final messages = await getMessages(deviceId, employeeId);
+    return messages.fold<int>(
+      0,
+      (max, message) => message.seq > max ? message.seq : max,
+    );
+  }
+
+  @override
+  Future<List<String>> getStaleLocalToolCallMessages(
+    String deviceId,
+    String employeeId,
+  ) async {
+    return const [];
+  }
+
+  @override
+  Future<void> hardDeleteMessage(String deviceId, String uuid) async {
+    _messages.remove(_messageKey(deviceId, uuid));
+  }
+
+  @override
+  void resetLastSeq(
+    String deviceId,
+    String employeeId,
+    int lastSeq, {
+    bool enforceMax = true,
+  }) {
+    final key = _sessionKey(deviceId, employeeId);
+    if (!enforceMax || lastSeq > (_lastSeqBySession[key] ?? 0)) {
+      _lastSeqBySession[key] = lastSeq;
+    }
+  }
+
+  @override
+  void updateLastSeq(String deviceId, String employeeId, int lastSeq) {
+    resetLastSeq(deviceId, employeeId, lastSeq);
+  }
+
+  @override
+  void upsertSummaryFromRemote(SessionSummaryEntity remote) {
+    _summaries[_sessionKey(remote.deviceId, remote.employeeId)] = remote;
+  }
+
+  Future<void> dispose() async {
+    await _changeController.close();
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 void main() {
@@ -148,8 +307,10 @@ void main() {
       );
       expect(messages, isNotEmpty);
       expect(messages.any((m) => m.id == msg.id), isTrue);
-      expect(messages.firstWhere((m) => m.id == msg.id).content,
-          equals('Hello from test!'));
+      expect(
+        messages.firstWhere((m) => m.id == msg.id).content,
+        equals('Hello from test!'),
+      );
     });
 
     // ── 1.2 发送消息自动分配递增 seq ──
@@ -157,18 +318,36 @@ void main() {
     test('1.2 发送消息自动分配递增 seq', () async {
       final empId = const Uuid().v4();
 
-      final msg1 = _createMessage(employeeId: empId, deviceId: fixture.deviceId);
-      final msg2 = _createMessage(employeeId: empId, deviceId: fixture.deviceId);
-      final msg3 = _createMessage(employeeId: empId, deviceId: fixture.deviceId);
+      final msg1 = _createMessage(
+        employeeId: empId,
+        deviceId: fixture.deviceId,
+      );
+      final msg2 = _createMessage(
+        employeeId: empId,
+        deviceId: fixture.deviceId,
+      );
+      final msg3 = _createMessage(
+        employeeId: empId,
+        deviceId: fixture.deviceId,
+      );
 
       await fixture.messageStore.addMessage(fixture.deviceId, msg1);
       await fixture.messageStore.addMessage(fixture.deviceId, msg2);
       await fixture.messageStore.addMessage(fixture.deviceId, msg3);
 
       // 重新查询获取 DB 分配的 seq
-      final saved1 = await fixture.messageStore.getMessage(fixture.deviceId, msg1.id);
-      final saved2 = await fixture.messageStore.getMessage(fixture.deviceId, msg2.id);
-      final saved3 = await fixture.messageStore.getMessage(fixture.deviceId, msg3.id);
+      final saved1 = await fixture.messageStore.getMessage(
+        fixture.deviceId,
+        msg1.id,
+      );
+      final saved2 = await fixture.messageStore.getMessage(
+        fixture.deviceId,
+        msg2.id,
+      );
+      final saved3 = await fixture.messageStore.getMessage(
+        fixture.deviceId,
+        msg3.id,
+      );
 
       // seq 应递增
       expect(saved1!.seq, greaterThan(0));
@@ -178,8 +357,7 @@ void main() {
 
     // ── 1.3 发送消息携带完整字段 ──
 
-    test('1.3 发送消息携带完整字段（role, type, content, employeeId, deviceId）',
-        () async {
+    test('1.3 发送消息携带完整字段（role, type, content, employeeId, deviceId）', () async {
       final empId = const Uuid().v4();
       final msg = _createMessage(
         employeeId: empId,
@@ -211,20 +389,28 @@ void main() {
 
       await fixture.messageStore.addMessage(
         fixture.deviceId,
-        _createMessage(employeeId: empA, deviceId: fixture.deviceId,
-            content: 'Message from A'),
+        _createMessage(
+          employeeId: empA,
+          deviceId: fixture.deviceId,
+          content: 'Message from A',
+        ),
       );
       await fixture.messageStore.addMessage(
         fixture.deviceId,
-        _createMessage(employeeId: empB, deviceId: fixture.deviceId,
-            content: 'Message from B'),
+        _createMessage(
+          employeeId: empB,
+          deviceId: fixture.deviceId,
+          content: 'Message from B',
+        ),
       );
 
       final messagesA = await fixture.messageStore.getMessages(
-        fixture.deviceId, empA,
+        fixture.deviceId,
+        empA,
       );
       final messagesB = await fixture.messageStore.getMessages(
-        fixture.deviceId, empB,
+        fixture.deviceId,
+        empB,
       );
 
       expect(messagesA.length, equals(1));
@@ -250,7 +436,8 @@ void main() {
       }
 
       final messages = await fixture.messageStore.getMessages(
-        fixture.deviceId, empId,
+        fixture.deviceId,
+        empId,
       );
 
       expect(messages.length, greaterThanOrEqualTo(5));
@@ -273,7 +460,8 @@ void main() {
       );
 
       final saved = await fixture.messageStore.addMessage(
-        fixture.deviceId, fileMsg,
+        fixture.deviceId,
+        fileMsg,
       );
 
       expect(saved.type, equals('file'));
@@ -316,23 +504,29 @@ void main() {
 
       // Client 端先本地保存
       await harness.client.messageStore.addMessage(
-        harness.client.deviceId, msg,
+        harness.client.deviceId,
+        msg,
       );
 
       // 通过 RPC 同步消息到 Server
       final result = await harness.server.callRpc(
         HostRpcConfig.methodSyncMessages,
-        {'messages': [msg.toJson()]},
+        {
+          'messages': [msg.toJson()],
+        },
       );
       expect(result['count'], equals(1));
 
       // Server 端验证消息已到达（RPC 按消息 deviceId 分组写入，需用 client 的 deviceId 查询）
       final serverMessages = await harness.server.messageStore.getMessages(
-        harness.client.deviceId, empId,
+        harness.client.deviceId,
+        empId,
       );
       expect(serverMessages.any((m) => m.id == msg.id), isTrue);
-      expect(serverMessages.firstWhere((m) => m.id == msg.id).content,
-          equals('Hello from Client A'));
+      expect(
+        serverMessages.firstWhere((m) => m.id == msg.id).content,
+        equals('Hello from Client A'),
+      );
     });
 
     // ── 2.2 Client B 发回复 → Client A 收到（双向对话） ──
@@ -347,14 +541,14 @@ void main() {
         content: 'Hello from A',
       );
       await harness.client.messageStore.addMessage(
-        harness.client.deviceId, msgA,
+        harness.client.deviceId,
+        msgA,
       );
 
       // 同步 A 的消息到 Server
-      await harness.server.callRpc(
-        HostRpcConfig.methodSyncMessages,
-        {'messages': [msgA.toJson()]},
-      );
+      await harness.server.callRpc(HostRpcConfig.methodSyncMessages, {
+        'messages': [msgA.toJson()],
+      });
 
       // Client B（模拟为另一个设备）创建并发送回复
       // 将回复消息作为 Server 端的 assistant 消息
@@ -364,7 +558,8 @@ void main() {
         content: 'Hello from B (AI response)',
       );
       await harness.server.messageStore.addMessage(
-        harness.server.deviceId, msgB,
+        harness.server.deviceId,
+        msgB,
       );
 
       // 同步 B 的消息回 Client A
@@ -375,7 +570,8 @@ void main() {
 
       // Client A 端应该能看到双向对话
       final clientMessages = await harness.client.messageStore.getMessages(
-        harness.client.deviceId, empId,
+        harness.client.deviceId,
+        empId,
       );
 
       final contents = clientMessages.map((m) => m.content).toList();
@@ -390,7 +586,8 @@ void main() {
 
       // 初始水位线应为 0（RPC 按消息 deviceId 分组写入，用 client 的 deviceId 查询）
       final initialSeq = harness.server.messageStore.getLastSeq(
-        harness.client.deviceId, empId,
+        harness.client.deviceId,
+        empId,
       );
       expect(initialSeq, equals(0));
 
@@ -402,17 +599,18 @@ void main() {
           content: 'Sync message #$i',
         );
         await harness.client.messageStore.addMessage(
-          harness.client.deviceId, msg,
+          harness.client.deviceId,
+          msg,
         );
-        await harness.server.callRpc(
-          HostRpcConfig.methodSyncMessages,
-          {'messages': [msg.toJson()]},
-        );
+        await harness.server.callRpc(HostRpcConfig.methodSyncMessages, {
+          'messages': [msg.toJson()],
+        });
       }
 
       // 水位线应更新（大于 0，且随着消息增多递增）
       final finalSeq = harness.server.messageStore.getLastSeq(
-        harness.client.deviceId, empId,
+        harness.client.deviceId,
+        empId,
       );
       expect(finalSeq, greaterThan(0));
     });
@@ -430,7 +628,8 @@ void main() {
           content: 'Batch message #$i',
         );
         await harness.client.messageStore.addMessage(
-          harness.client.deviceId, msg,
+          harness.client.deviceId,
+          msg,
         );
         messages.add(msg);
       }
@@ -444,12 +643,15 @@ void main() {
 
       // Server 端验证所有消息收到（RPC 按消息 deviceId 分组写入，用 client 的 deviceId 查询）
       final serverMessages = await harness.server.messageStore.getMessages(
-        harness.client.deviceId, empId,
+        harness.client.deviceId,
+        empId,
       );
       expect(serverMessages.length, greaterThanOrEqualTo(5));
       for (int i = 0; i < 5; i++) {
-        expect(serverMessages.any((m) => m.content == 'Batch message #$i'),
-            isTrue);
+        expect(
+          serverMessages.any((m) => m.content == 'Batch message #$i'),
+          isTrue,
+        );
       }
     });
 
@@ -474,33 +676,35 @@ void main() {
         );
 
         await Future.wait([
-          harness.client.messageStore.addMessage(
-            harness.client.deviceId, msgA,
-          ),
+          harness.client.messageStore.addMessage(harness.client.deviceId, msgA),
           clientB.messageStore.addMessage(clientB.deviceId, msgB),
         ]);
 
         // 各自同步到 Server
-        await harness.server.callRpc(
-          HostRpcConfig.methodSyncMessages,
-          {'messages': [msgA.toJson()]},
-        );
-        await harness.server.callRpc(
-          HostRpcConfig.methodSyncMessages,
-          {'messages': [msgB.toJson()]},
-        );
+        await harness.server.callRpc(HostRpcConfig.methodSyncMessages, {
+          'messages': [msgA.toJson()],
+        });
+        await harness.server.callRpc(HostRpcConfig.methodSyncMessages, {
+          'messages': [msgB.toJson()],
+        });
 
         // Server 端应包含两条消息（RPC 按各自 deviceId 分组写入，需分别查询）
         final serverMessagesA = await harness.server.messageStore.getMessages(
-          harness.client.deviceId, empId,
+          harness.client.deviceId,
+          empId,
         );
         final serverMessagesB = await harness.server.messageStore.getMessages(
-          clientB.deviceId, empId,
+          clientB.deviceId,
+          empId,
         );
-        expect(serverMessagesA.any((m) => m.content == 'Concurrent from A'),
-            isTrue);
-        expect(serverMessagesB.any((m) => m.content == 'Concurrent from B'),
-            isTrue);
+        expect(
+          serverMessagesA.any((m) => m.content == 'Concurrent from A'),
+          isTrue,
+        );
+        expect(
+          serverMessagesB.any((m) => m.content == 'Concurrent from B'),
+          isTrue,
+        );
       } finally {
         await clientB.dispose();
       }
@@ -525,20 +729,22 @@ void main() {
 
       // 本地保存并同步
       await harness.client.messageStore.addMessage(
-        harness.client.deviceId, userMsg,
+        harness.client.deviceId,
+        userMsg,
       );
       await harness.client.messageStore.addMessage(
-        harness.client.deviceId, assistantMsg,
+        harness.client.deviceId,
+        assistantMsg,
       );
 
-      await harness.server.callRpc(
-        HostRpcConfig.methodSyncMessages,
-        {'messages': [userMsg.toJson(), assistantMsg.toJson()]},
-      );
+      await harness.server.callRpc(HostRpcConfig.methodSyncMessages, {
+        'messages': [userMsg.toJson(), assistantMsg.toJson()],
+      });
 
       // Server 端验证（RPC 按消息 deviceId 分组写入，用 client 的 deviceId 查询）
       final serverMessages = await harness.server.messageStore.getMessages(
-        harness.client.deviceId, empId,
+        harness.client.deviceId,
+        empId,
       );
       expect(serverMessages.length, greaterThanOrEqualTo(2));
 
@@ -561,18 +767,19 @@ void main() {
 
       // Client 保存
       await harness.client.messageStore.addMessage(
-        harness.client.deviceId, fileMsg,
+        harness.client.deviceId,
+        fileMsg,
       );
 
       // 同步到 Server
-      await harness.server.callRpc(
-        HostRpcConfig.methodSyncMessages,
-        {'messages': [fileMsg.toJson()]},
-      );
+      await harness.server.callRpc(HostRpcConfig.methodSyncMessages, {
+        'messages': [fileMsg.toJson()],
+      });
 
       // Server 端验证文件消息收到（RPC 按消息 deviceId 分组写入，用 client 的 deviceId 查询）
       final serverMessages = await harness.server.messageStore.getMessages(
-        harness.client.deviceId, empId,
+        harness.client.deviceId,
+        empId,
       );
       expect(serverMessages.any((m) => m.type == 'file'), isTrue);
 
@@ -615,12 +822,12 @@ void main() {
         content: 'Before disconnect',
       );
       await harness.client.messageStore.addMessage(
-        harness.client.deviceId, beforeMsg,
+        harness.client.deviceId,
+        beforeMsg,
       );
-      await harness.server.callRpc(
-        HostRpcConfig.methodSyncMessages,
-        {'messages': [beforeMsg.toJson()]},
-      );
+      await harness.server.callRpc(HostRpcConfig.methodSyncMessages, {
+        'messages': [beforeMsg.toJson()],
+      });
 
       // 模拟断连
       harness.simulateNetworkDisconnect();
@@ -638,10 +845,12 @@ void main() {
         content: 'Offline message 2',
       );
       await harness.client.messageStore.addMessage(
-        harness.client.deviceId, offline1,
+        harness.client.deviceId,
+        offline1,
       );
       await harness.client.messageStore.addMessage(
-        harness.client.deviceId, offline2,
+        harness.client.deviceId,
+        offline2,
       );
 
       // 恢复连接
@@ -651,13 +860,16 @@ void main() {
       // 恢复后同步离线消息
       final result = await harness.server.callRpc(
         HostRpcConfig.methodSyncMessages,
-        {'messages': [offline1.toJson(), offline2.toJson()]},
+        {
+          'messages': [offline1.toJson(), offline2.toJson()],
+        },
       );
       expect(result['count'], equals(2));
 
       // Server 端应包含所有三条消息（RPC 按消息 deviceId 分组写入，用 client 的 deviceId 查询）
       final serverMessages = await harness.server.messageStore.getMessages(
-        harness.client.deviceId, empId,
+        harness.client.deviceId,
+        empId,
       );
       final contents = serverMessages.map((m) => m.content).toSet();
       expect(contents, contains('Before disconnect'));
@@ -678,7 +890,8 @@ void main() {
           content: 'Initial message #$i',
         );
         await harness.server.messageStore.addMessage(
-          harness.server.deviceId, msg,
+          harness.server.deviceId,
+          msg,
         );
         await harness.client.messageStore.addMessage(
           harness.client.deviceId,
@@ -688,7 +901,8 @@ void main() {
 
       // 记录 Client 端当前水位线
       final lastSeqBefore = harness.client.messageStore.getLastSeq(
-        harness.client.deviceId, empId,
+        harness.client.deviceId,
+        empId,
       );
       expect(lastSeqBefore, greaterThan(0));
 
@@ -702,7 +916,8 @@ void main() {
         content: 'Remote message during disconnect',
       );
       await harness.server.messageStore.addMessage(
-        harness.server.deviceId, remoteMsg,
+        harness.server.deviceId,
+        remoteMsg,
       );
 
       // 恢复连接
@@ -717,11 +932,13 @@ void main() {
 
       // Client 端应能查到远程消息
       final clientMessages = await harness.client.messageStore.getMessages(
-        harness.client.deviceId, empId,
+        harness.client.deviceId,
+        empId,
       );
       expect(
-        clientMessages.any((m) =>
-            m.content == 'Remote message during disconnect'),
+        clientMessages.any(
+          (m) => m.content == 'Remote message during disconnect',
+        ),
         isTrue,
       );
     });
@@ -738,15 +955,16 @@ void main() {
         content: 'Msg for watermark',
       );
       await harness.client.messageStore.addMessage(
-        harness.client.deviceId, msg1,
+        harness.client.deviceId,
+        msg1,
       );
-      await harness.server.callRpc(
-        HostRpcConfig.methodSyncMessages,
-        {'messages': [msg1.toJson()]},
-      );
+      await harness.server.callRpc(HostRpcConfig.methodSyncMessages, {
+        'messages': [msg1.toJson()],
+      });
 
       final seqBeforeDisconnect = harness.client.messageStore.getLastSeq(
-        harness.client.deviceId, empId,
+        harness.client.deviceId,
+        empId,
       );
       expect(seqBeforeDisconnect, greaterThan(0));
 
@@ -758,7 +976,8 @@ void main() {
 
       // 水位线应保持不变（不应回退）
       final seqAfterRecover = harness.client.messageStore.getLastSeq(
-        harness.client.deviceId, empId,
+        harness.client.deviceId,
+        empId,
       );
       expect(seqAfterRecover, equals(seqBeforeDisconnect));
     });
@@ -780,7 +999,8 @@ void main() {
           content: 'Cycle $cycle offline',
         );
         await harness.client.messageStore.addMessage(
-          harness.client.deviceId, offlineMsg,
+          harness.client.deviceId,
+          offlineMsg,
         );
 
         // 重连
@@ -788,23 +1008,315 @@ void main() {
         expect(harness.client.isConnected, isTrue);
 
         // 同步
-        await harness.server.callRpc(
-          HostRpcConfig.methodSyncMessages,
-          {'messages': [offlineMsg.toJson()]},
-        );
+        await harness.server.callRpc(HostRpcConfig.methodSyncMessages, {
+          'messages': [offlineMsg.toJson()],
+        });
       }
 
       // 所有消息都应在 Server 端（RPC 按消息 deviceId 分组写入，用 client 的 deviceId 查询）
       final serverMessages = await harness.server.messageStore.getMessages(
-        harness.client.deviceId, empId,
+        harness.client.deviceId,
+        empId,
       );
       expect(serverMessages.length, greaterThanOrEqualTo(3));
       for (int cycle = 0; cycle < 3; cycle++) {
         expect(
-          serverMessages.any((m) =>
-              m.content == 'Cycle $cycle offline'),
+          serverMessages.any((m) => m.content == 'Cycle $cycle offline'),
           isTrue,
         );
+      }
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // LAN 事件驱动消息同步
+  //
+  // 覆盖前端关闭定时刷新时，只依赖 AgentEvent/onMessagesChanged 的刷新路径。
+  // ═══════════════════════════════════════════════════════════════
+
+  group('LAN 事件驱动消息同步', () {
+    late _InMemoryMessageStoreService messageStore;
+
+    setUp(() {
+      messageStore = _InMemoryMessageStoreService();
+    });
+
+    tearDown(() async {
+      await messageStore.dispose();
+    });
+
+    test(
+      'completed event triggers assistant detail sync without polling',
+      () async {
+        final empId = const Uuid().v4();
+        final remoteDeviceId = 'remote-${const Uuid().v4()}';
+        final now = DateTime.now();
+        final remoteEvents = StreamController<agent.AgentEvent>.broadcast();
+
+        final userMessage = agent.AgentMessage(
+          id: 'remote-user-${const Uuid().v4()}',
+          role: 'user',
+          type: 'text',
+          content: 'User message before agent reply',
+          createdAt: now.subtract(const Duration(milliseconds: 10)),
+          status: 'completed',
+          metadata: {'seq': 1, 'updateTime': now.toIso8601String()},
+        );
+        final assistantMessage = agent.AgentMessage(
+          id: 'remote-assistant-${const Uuid().v4()}',
+          role: 'assistant',
+          type: 'text',
+          content: 'Assistant reply from completed event',
+          createdAt: now,
+          status: 'completed',
+          metadata: {'seq': 2, 'updateTime': now.toIso8601String()},
+        );
+        final remoteMessages = [userMessage, assistantMessage];
+        final remoteSummary = SessionSummaryEntity(
+          employeeId: empId,
+          deviceId: remoteDeviceId,
+          unreadCount: 1,
+          lastMsgId: assistantMessage.id,
+          lastMsgRole: assistantMessage.role,
+          lastMsgContent: assistantMessage.content,
+          lastMsgTime: now.millisecondsSinceEpoch,
+          lastMsgSeq: 2,
+          updateTime: now.millisecondsSinceEpoch,
+        );
+        final rpcMethods = <String>[];
+
+        Future<Map<String, dynamic>> rpcCall(
+          String method,
+          Map<String, dynamic> params,
+        ) async {
+          rpcMethods.add(method);
+          switch (method) {
+            case agent.AgentRpcConfig.methodGetClearSeq:
+              return {
+                'result': {'clearSeq': 0},
+              };
+            case agent.AgentRpcConfig.methodClearClearSeq:
+              return {'result': <String, dynamic>{}};
+            case agent.AgentRpcConfig.methodGetMaxSeq:
+              return {
+                'result': {'maxSeq': 2},
+              };
+            case agent.AgentRpcConfig.methodGetMessagesAfterSeq:
+              final lastSeq = params['lastSeq'] as int? ?? 0;
+              final limit = params['limit'] as int? ?? 20;
+              final messages = remoteMessages
+                  .where((message) {
+                    final seq = message.metadata?['seq'] as int? ?? 0;
+                    return seq > lastSeq;
+                  })
+                  .take(limit)
+                  .map((message) => message.toMap())
+                  .toList();
+              return {
+                'result': {'messages': messages},
+              };
+            case agent.AgentRpcConfig.methodGetSessionSummary:
+              return {'result': remoteSummary.toMap()};
+            default:
+              throw StateError('Unexpected RPC method: $method');
+          }
+        }
+
+        final remoteProxy = agent.AgentProxy.remote(
+          employeeId: empId,
+          deviceId: remoteDeviceId,
+          rpcCall: rpcCall,
+          remoteEventStream: remoteEvents.stream,
+        );
+        final cachedProxy = agent.CachedAgentProxy(
+          proxy: remoteProxy,
+          messageStore: messageStore,
+          deviceId: remoteDeviceId,
+          employeeId: empId,
+        );
+
+        StreamSubscription<List<agent.AgentMessage>>? messagesSub;
+        try {
+          await cachedProxy.initialize();
+
+          final synced = Completer<List<agent.AgentMessage>>();
+          messagesSub = cachedProxy.onMessagesChanged.listen((messages) {
+            final hasAssistant = messages.any(
+              (m) => m.id == assistantMessage.id,
+            );
+            if (hasAssistant && !synced.isCompleted) {
+              synced.complete(messages);
+            }
+          });
+
+          remoteEvents.add(
+            agent.AgentEvent(
+              type: agent.AgentEventType.messageStatusChanged,
+              data: {'messageId': userMessage.id, 'status': 'completed'},
+              employeeId: empId,
+              fromDeviceId: remoteDeviceId,
+            ),
+          );
+
+          final syncedMessages = await synced.future.timeout(
+            const Duration(seconds: 2),
+          );
+          expect(
+            syncedMessages.any(
+              (m) =>
+                  m.id == assistantMessage.id &&
+                  m.content == 'Assistant reply from completed event',
+            ),
+            isTrue,
+          );
+
+          final cachedMessages = await cachedProxy.getMessages();
+          expect(
+            cachedMessages.map((m) => m.id),
+            contains(assistantMessage.id),
+          );
+          expect(
+            rpcMethods,
+            contains(agent.AgentRpcConfig.methodGetMessagesAfterSeq),
+          );
+        } finally {
+          await messagesSub?.cancel();
+          await cachedProxy.dispose();
+          await remoteProxy.dispose();
+          await remoteEvents.close();
+        }
+      },
+    );
+
+    test('摘要 LAN 事件在无定时刷新时触发消息明细同步', () async {
+      final empId = const Uuid().v4();
+      final remoteDeviceId = 'remote-${const Uuid().v4()}';
+      final now = DateTime.now();
+      final remoteEvents = StreamController<agent.AgentEvent>.broadcast();
+
+      final remoteMessage = agent.AgentMessage(
+        id: 'remote-latest-${const Uuid().v4()}',
+        role: 'assistant',
+        type: 'text',
+        content: 'Latest message from LAN event',
+        createdAt: now,
+        status: 'completed',
+        metadata: {'seq': 1, 'updateTime': now.toIso8601String()},
+      );
+      final remoteMessages = [remoteMessage];
+      final remoteSummary = SessionSummaryEntity(
+        employeeId: empId,
+        deviceId: remoteDeviceId,
+        unreadCount: 1,
+        lastMsgId: remoteMessage.id,
+        lastMsgRole: remoteMessage.role,
+        lastMsgContent: remoteMessage.content,
+        lastMsgTime: now.millisecondsSinceEpoch,
+        lastMsgSeq: 1,
+        updateTime: now.millisecondsSinceEpoch,
+      );
+      final rpcMethods = <String>[];
+
+      Future<Map<String, dynamic>> rpcCall(
+        String method,
+        Map<String, dynamic> params,
+      ) async {
+        rpcMethods.add(method);
+        switch (method) {
+          case agent.AgentRpcConfig.methodGetClearSeq:
+            return {
+              'result': {'clearSeq': 0},
+            };
+          case agent.AgentRpcConfig.methodClearClearSeq:
+            return {'result': <String, dynamic>{}};
+          case agent.AgentRpcConfig.methodGetMaxSeq:
+            final maxSeq = remoteMessages.fold<int>(0, (max, message) {
+              final seq = message.metadata?['seq'] as int? ?? 0;
+              return seq > max ? seq : max;
+            });
+            return {
+              'result': {'maxSeq': maxSeq},
+            };
+          case agent.AgentRpcConfig.methodGetMessagesAfterSeq:
+            final lastSeq = params['lastSeq'] as int? ?? 0;
+            final limit = params['limit'] as int? ?? 20;
+            final messages = remoteMessages
+                .where((message) {
+                  final seq = message.metadata?['seq'] as int? ?? 0;
+                  return seq > lastSeq;
+                })
+                .take(limit)
+                .map((message) => message.toMap())
+                .toList();
+            return {
+              'result': {'messages': messages},
+            };
+          case agent.AgentRpcConfig.methodGetSessionSummary:
+            return {'result': remoteSummary.toMap()};
+          default:
+            throw StateError('Unexpected RPC method: $method');
+        }
+      }
+
+      final remoteProxy = agent.AgentProxy.remote(
+        employeeId: empId,
+        deviceId: remoteDeviceId,
+        rpcCall: rpcCall,
+        remoteEventStream: remoteEvents.stream,
+      );
+      final cachedProxy = agent.CachedAgentProxy(
+        proxy: remoteProxy,
+        messageStore: messageStore,
+        deviceId: remoteDeviceId,
+        employeeId: empId,
+      );
+
+      StreamSubscription<List<agent.AgentMessage>>? messagesSub;
+      try {
+        await cachedProxy.initialize();
+
+        final synced = Completer<List<agent.AgentMessage>>();
+        messagesSub = cachedProxy.onMessagesChanged.listen((messages) {
+          final hasRemoteMessage = messages.any(
+            (m) => m.id == remoteMessage.id,
+          );
+          if (hasRemoteMessage && !synced.isCompleted) {
+            synced.complete(messages);
+          }
+        });
+
+        remoteEvents.add(
+          agent.AgentEvent(
+            type: agent.AgentEventType.sessionSummaryChanged,
+            data: {'summary': remoteSummary.toMap()},
+            employeeId: empId,
+            fromDeviceId: remoteDeviceId,
+          ),
+        );
+
+        final syncedMessages = await synced.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(
+          syncedMessages.any(
+            (m) =>
+                m.id == remoteMessage.id &&
+                m.content == 'Latest message from LAN event',
+          ),
+          isTrue,
+        );
+
+        final cachedMessages = await cachedProxy.getMessages();
+        expect(cachedMessages.map((m) => m.id), contains(remoteMessage.id));
+        expect(
+          rpcMethods,
+          contains(agent.AgentRpcConfig.methodGetMessagesAfterSeq),
+        );
+      } finally {
+        await messagesSub?.cancel();
+        await cachedProxy.dispose();
+        await remoteProxy.dispose();
+        await remoteEvents.close();
       }
     });
   });
@@ -832,13 +1344,11 @@ void main() {
 
     test('4.1 新创建消息默认状态为 none', () async {
       final empId = const Uuid().v4();
-      final msg = _createMessage(
-        employeeId: empId,
-        deviceId: fixture.deviceId,
-      );
+      final msg = _createMessage(employeeId: empId, deviceId: fixture.deviceId);
 
       final saved = await fixture.messageStore.addMessage(
-        fixture.deviceId, msg,
+        fixture.deviceId,
+        msg,
       );
       expect(saved.status, equals(MessageStatus.none));
     });
@@ -847,13 +1357,11 @@ void main() {
 
     test('4.2 消息状态可更新为 completed', () async {
       final empId = const Uuid().v4();
-      final msg = _createMessage(
-        employeeId: empId,
-        deviceId: fixture.deviceId,
-      );
+      final msg = _createMessage(employeeId: empId, deviceId: fixture.deviceId);
 
       final saved = await fixture.messageStore.addMessage(
-        fixture.deviceId, msg,
+        fixture.deviceId,
+        msg,
       );
       expect(saved.status, equals(MessageStatus.none));
 
@@ -864,7 +1372,8 @@ void main() {
       );
 
       final updated = await fixture.messageStore.getMessage(
-        fixture.deviceId, saved.id,
+        fixture.deviceId,
+        saved.id,
       );
       expect(updated, isNotNull);
       expect(updated!.status, equals(MessageStatus.completed));
@@ -879,10 +1388,7 @@ void main() {
         events.add(e);
       });
 
-      final msg = _createMessage(
-        employeeId: empId,
-        deviceId: fixture.deviceId,
-      );
+      final msg = _createMessage(employeeId: empId, deviceId: fixture.deviceId);
       await fixture.messageStore.addMessage(fixture.deviceId, msg);
 
       // 等待事件传播
@@ -906,13 +1412,11 @@ void main() {
 
     test('4.4 消息状态可更新为 failed 并携带错误信息', () async {
       final empId = const Uuid().v4();
-      final msg = _createMessage(
-        employeeId: empId,
-        deviceId: fixture.deviceId,
-      );
+      final msg = _createMessage(employeeId: empId, deviceId: fixture.deviceId);
 
       final saved = await fixture.messageStore.addMessage(
-        fixture.deviceId, msg,
+        fixture.deviceId,
+        msg,
       );
 
       await fixture.messageStore.updateMessageStatus(
@@ -923,7 +1427,8 @@ void main() {
       );
 
       final updated = await fixture.messageStore.getMessage(
-        fixture.deviceId, saved.id,
+        fixture.deviceId,
+        saved.id,
       );
       expect(updated, isNotNull);
       expect(updated!.status, equals(MessageStatus.failed));
@@ -933,23 +1438,20 @@ void main() {
 
     test('4.5 消息软删除后 deleted=true 可被其他设备感知', () async {
       final empId = const Uuid().v4();
-      final msg = _createMessage(
-        employeeId: empId,
-        deviceId: fixture.deviceId,
-      );
+      final msg = _createMessage(employeeId: empId, deviceId: fixture.deviceId);
 
       final saved = await fixture.messageStore.addMessage(
-        fixture.deviceId, msg,
+        fixture.deviceId,
+        msg,
       );
 
       // 软删除
-      await fixture.messageStore.softDeleteMessage(
-        fixture.deviceId, saved.id,
-      );
+      await fixture.messageStore.softDeleteMessage(fixture.deviceId, saved.id);
 
       // 查询不到（getMessages 默认不返回已删除消息）
       final messages = await fixture.messageStore.getMessages(
-        fixture.deviceId, empId,
+        fixture.deviceId,
+        empId,
       );
       expect(messages.any((m) => m.id == saved.id), isFalse);
     });
@@ -978,7 +1480,8 @@ void main() {
           content: 'What is Flutter?',
         );
         await harness.client.messageStore.addMessage(
-          harness.client.deviceId, userMsg1,
+          harness.client.deviceId,
+          userMsg1,
         );
 
         // Round 1: assistant
@@ -988,7 +1491,8 @@ void main() {
           content: 'Flutter is a UI toolkit by Google...',
         );
         await harness.client.messageStore.addMessage(
-          harness.client.deviceId, assistantMsg1,
+          harness.client.deviceId,
+          assistantMsg1,
         );
 
         // Round 2: user
@@ -999,7 +1503,8 @@ void main() {
           content: 'How to create a widget?',
         );
         await harness.client.messageStore.addMessage(
-          harness.client.deviceId, userMsg2,
+          harness.client.deviceId,
+          userMsg2,
         );
 
         // Round 2: assistant
@@ -1009,23 +1514,24 @@ void main() {
           content: 'Use StatelessWidget or StatefulWidget...',
         );
         await harness.client.messageStore.addMessage(
-          harness.client.deviceId, assistantMsg2,
+          harness.client.deviceId,
+          assistantMsg2,
         );
 
         // 同步到 Server
-        await harness.server.callRpc(
-          HostRpcConfig.methodSyncMessages,
-          {
-            'messages': [
-              userMsg1.toJson(), assistantMsg1.toJson(),
-              userMsg2.toJson(), assistantMsg2.toJson(),
-            ],
-          },
-        );
+        await harness.server.callRpc(HostRpcConfig.methodSyncMessages, {
+          'messages': [
+            userMsg1.toJson(),
+            assistantMsg1.toJson(),
+            userMsg2.toJson(),
+            assistantMsg2.toJson(),
+          ],
+        });
 
         // 验证消息顺序和完整性（RPC 按消息 deviceId 分组写入，用 client 的 deviceId 查询）
         final messages = await harness.server.messageStore.getMessages(
-          harness.client.deviceId, empId,
+          harness.client.deviceId,
+          empId,
         );
         expect(messages.length, greaterThanOrEqualTo(4));
 
@@ -1033,10 +1539,14 @@ void main() {
         final sorted = List<ChatMessage>.from(messages)
           ..sort((a, b) => a.seq.compareTo(b.seq));
         final roles = sorted.map((m) => m.role).toList();
-        expect(roles.where((r) => r == MessageRole.user).length,
-            greaterThanOrEqualTo(2));
-        expect(roles.where((r) => r == MessageRole.assistant).length,
-            greaterThanOrEqualTo(2));
+        expect(
+          roles.where((r) => r == MessageRole.user).length,
+          greaterThanOrEqualTo(2),
+        );
+        expect(
+          roles.where((r) => r == MessageRole.assistant).length,
+          greaterThanOrEqualTo(2),
+        );
       } finally {
         await harness.dispose();
       }
@@ -1056,21 +1566,22 @@ void main() {
           content: 'Message on device A',
         );
         await harness.client.messageStore.addMessage(
-          harness.client.deviceId, msgOnA,
+          harness.client.deviceId,
+          msgOnA,
         );
 
         // 同步到 Server
-        await harness.server.callRpc(
-          HostRpcConfig.methodSyncMessages,
-          {'messages': [msgOnA.toJson()]},
-        );
+        await harness.server.callRpc(HostRpcConfig.methodSyncMessages, {
+          'messages': [msgOnA.toJson()],
+        });
 
         // 创建 Device B（模拟切换设备）
         final clientB = await ClientTestFixture.create('msg-device-b');
         try {
           // Device B 从 Server 拉取消息（RPC 按消息 deviceId 分组写入，用 client 的 deviceId 查询）
           final serverMessages = await harness.server.messageStore.getMessages(
-            harness.client.deviceId, empId,
+            harness.client.deviceId,
+            empId,
           );
           for (final msg in serverMessages) {
             await clientB.messageStore.addMessage(
@@ -1081,10 +1592,13 @@ void main() {
 
           // Device B 应能看到历史消息
           final deviceBMessages = await clientB.messageStore.getMessages(
-            clientB.deviceId, empId,
+            clientB.deviceId,
+            empId,
           );
-          expect(deviceBMessages.any((m) =>
-              m.content == 'Message on device A'), isTrue);
+          expect(
+            deviceBMessages.any((m) => m.content == 'Message on device A'),
+            isTrue,
+          );
         } finally {
           await clientB.dispose();
         }
@@ -1127,10 +1641,12 @@ void main() {
 
         // 查询隔离
         final msgsA = await fixture.messageStore.getMessages(
-          fixture.deviceId, sessionA,
+          fixture.deviceId,
+          sessionA,
         );
         final msgsB = await fixture.messageStore.getMessages(
-          fixture.deviceId, sessionB,
+          fixture.deviceId,
+          sessionB,
         );
 
         expect(msgsA.length, greaterThanOrEqualTo(3));
@@ -1162,29 +1678,36 @@ void main() {
           content: 'Event test message',
         );
         final saved = await fixture.messageStore.addMessage(
-          fixture.deviceId, msg,
+          fixture.deviceId,
+          msg,
         );
 
         // 2. 更新状态
         await fixture.messageStore.updateMessageStatus(
-          fixture.deviceId, saved.id, MessageStatus.completed,
+          fixture.deviceId,
+          saved.id,
+          MessageStatus.completed,
         );
 
         // 3. 软删除
         await fixture.messageStore.softDeleteMessage(
-          fixture.deviceId, saved.id,
+          fixture.deviceId,
+          saved.id,
         );
 
         await Future.delayed(const Duration(milliseconds: 50));
         await sub.cancel();
 
         // 验证事件序列
-        final addedEvents = events.where(
-            (e) => e.type == MessageChangeType.added).toList();
-        final updatedEvents = events.where(
-            (e) => e.type == MessageChangeType.updated).toList();
-        final deletedEvents = events.where(
-            (e) => e.type == MessageChangeType.deleted).toList();
+        final addedEvents = events
+            .where((e) => e.type == MessageChangeType.added)
+            .toList();
+        final updatedEvents = events
+            .where((e) => e.type == MessageChangeType.updated)
+            .toList();
+        final deletedEvents = events
+            .where((e) => e.type == MessageChangeType.deleted)
+            .toList();
 
         expect(addedEvents.length, greaterThanOrEqualTo(1));
         expect(updatedEvents.length, greaterThanOrEqualTo(1));
@@ -1279,11 +1802,14 @@ void main() {
       final fixture = await ClientTestFixture.create('msg-serialize-batch');
       try {
         final empId = const Uuid().v4();
-        final messages = List.generate(3, (i) => _createMessage(
-          employeeId: empId,
-          deviceId: fixture.deviceId,
-          content: 'Batch message #$i',
-        ));
+        final messages = List.generate(
+          3,
+          (i) => _createMessage(
+            employeeId: empId,
+            deviceId: fixture.deviceId,
+            content: 'Batch message #$i',
+          ),
+        );
 
         // 通过 toJson + fromJson 模拟网络传输序列化
         final jsonList = messages.map((m) => m.toJson()).toList();
@@ -1298,7 +1824,8 @@ void main() {
 
         // 验证所有消息可正确查询
         final stored = await fixture.messageStore.getMessages(
-          fixture.deviceId, empId,
+          fixture.deviceId,
+          empId,
         );
         expect(stored.length, greaterThanOrEqualTo(3));
         for (int i = 0; i < 3; i++) {
@@ -1363,7 +1890,8 @@ void main() {
       await fixture.messageStore.addMessage(fixture.deviceId, msg);
 
       final found = await fixture.messageStore.getMessage(
-        fixture.deviceId, msg.id,
+        fixture.deviceId,
+        msg.id,
       );
       expect(found, isNotNull);
       expect(found!.type, equals('permissionRequest'));
@@ -1403,11 +1931,7 @@ void main() {
               'label': '方案A：使用Docker部署',
               'description': '适合容器化环境',
             },
-            {
-              'key': 'plan_b',
-              'label': '方案B：直接部署',
-              'description': '适合简单场景',
-            },
+            {'key': 'plan_b', 'label': '方案B：直接部署', 'description': '适合简单场景'},
           ],
           'confirmDefaultOption': 'plan_a',
         },
@@ -1416,7 +1940,8 @@ void main() {
       await fixture.messageStore.addMessage(fixture.deviceId, msg);
 
       final found = await fixture.messageStore.getMessage(
-        fixture.deviceId, msg.id,
+        fixture.deviceId,
+        msg.id,
       );
       expect(found, isNotNull);
       expect(found!.type, equals('confirmRequest'));
@@ -1432,12 +1957,8 @@ void main() {
 
       // 验证选项内容
       final options = found.metadata!['confirmOptions'] as List;
-      expect(
-        (options[0] as Map).containsKey('key'), isTrue,
-      );
-      expect(
-        (options[1] as Map).containsKey('label'), isTrue,
-      );
+      expect((options[0] as Map).containsKey('key'), isTrue);
+      expect((options[1] as Map).containsKey('label'), isTrue);
     });
 
     // ── 7.3 MCP 权限请求消息 ──
@@ -1470,12 +1991,16 @@ void main() {
       await fixture.messageStore.addMessage(fixture.deviceId, msg);
 
       final found = await fixture.messageStore.getMessage(
-        fixture.deviceId, msg.id,
+        fixture.deviceId,
+        msg.id,
       );
       expect(found, isNotNull);
       expect(found!.type, equals('permissionRequest'));
       expect(found.metadata!['permissionType'], equals('mcp_tool'));
-      expect(found.metadata!['functionName'], equals('mcp__github__list_repos'));
+      expect(
+        found.metadata!['functionName'],
+        equals('mcp__github__list_repos'),
+      );
       expect(found.metadata!['permissionArgKey'], equals('server'));
       expect(found.metadata!['permissionArgValue'], equals('github'));
       expect(found.metadata!['suggestedPattern'], equals('mcp__github__*'));
@@ -1512,18 +2037,19 @@ void main() {
 
         // Client 保存
         await harness.client.messageStore.addMessage(
-          harness.client.deviceId, msg,
+          harness.client.deviceId,
+          msg,
         );
 
         // 同步到 Server
-        await harness.server.callRpc(
-          HostRpcConfig.methodSyncMessages,
-          {'messages': [msg.toJson()]},
-        );
+        await harness.server.callRpc(HostRpcConfig.methodSyncMessages, {
+          'messages': [msg.toJson()],
+        });
 
         // Server 端验证（消息按 client.deviceId 分区存储）
         final serverMessages = await harness.server.messageStore.getMessages(
-          harness.client.deviceId, empId,
+          harness.client.deviceId,
+          empId,
         );
         expect(serverMessages.any((m) => m.id == msg.id), isTrue);
         final synced = serverMessages.firstWhere((m) => m.id == msg.id);
@@ -1566,30 +2092,25 @@ void main() {
         );
 
         await harness.client.messageStore.addMessage(
-          harness.client.deviceId, msg,
+          harness.client.deviceId,
+          msg,
         );
 
-        await harness.server.callRpc(
-          HostRpcConfig.methodSyncMessages,
-          {'messages': [msg.toJson()]},
-        );
+        await harness.server.callRpc(HostRpcConfig.methodSyncMessages, {
+          'messages': [msg.toJson()],
+        });
 
         final serverMessages = await harness.server.messageStore.getMessages(
-          harness.client.deviceId, empId,
+          harness.client.deviceId,
+          empId,
         );
         expect(serverMessages.any((m) => m.id == msg.id), isTrue);
         final synced = serverMessages.firstWhere((m) => m.id == msg.id);
         expect(synced.type, equals('confirmRequest'));
         expect(synced.metadata!['requestId'], equals(requestId));
         expect(synced.metadata!['confirmTitle'], equals('是否继续操作？'));
-        expect(
-          synced.metadata!['confirmMessage'],
-          contains('修改系统配置'),
-        );
-        expect(
-          (synced.metadata!['confirmOptions'] as List).length,
-          equals(2),
-        );
+        expect(synced.metadata!['confirmMessage'], contains('修改系统配置'));
+        expect((synced.metadata!['confirmOptions'] as List).length, equals(2));
         expect(synced.metadata!['confirmDefaultOption'], equals('no'));
       } finally {
         await harness.dispose();
@@ -1632,7 +2153,8 @@ void main() {
 
       // 查询验证决策已持久化
       final updated = await fixture.messageStore.getMessage(
-        fixture.deviceId, msg.id,
+        fixture.deviceId,
+        msg.id,
       );
       expect(updated, isNotNull);
       expect(updated!.metadata!['permissionDecision'], equals('allow'));
@@ -1682,7 +2204,8 @@ void main() {
 
       // 查询验证
       final updated = await fixture.messageStore.getMessage(
-        fixture.deviceId, msg.id,
+        fixture.deviceId,
+        msg.id,
       );
       expect(updated, isNotNull);
       expect(updated!.metadata!['confirmChoice'], equals('prod'));
@@ -1697,50 +2220,70 @@ void main() {
       final empId = const Uuid().v4();
 
       // 创建混合消息：2条 permissionRequest + 2条 text + 1条 confirmRequest
-      await fixture.messageStore.addMessage(fixture.deviceId, ChatMessage(
-        id: const Uuid().v4(),
-        employeeId: empId,
-        role: MessageRole.assistant,
-        type: 'permissionRequest',
-        content: '权限请求1',
-        createdAt: DateTime.now(),
-        deviceId: fixture.deviceId,
-        metadata: {'requestId': const Uuid().v4(), 'functionName': 'tool_a'},
-      ));
-      await fixture.messageStore.addMessage(fixture.deviceId, _createMessage(
-        employeeId: empId, deviceId: fixture.deviceId, content: '普通文本',
-      ));
-      await fixture.messageStore.addMessage(fixture.deviceId, ChatMessage(
-        id: const Uuid().v4(),
-        employeeId: empId,
-        role: MessageRole.assistant,
-        type: 'permissionRequest',
-        content: '权限请求2',
-        createdAt: DateTime.now(),
-        deviceId: fixture.deviceId,
-        metadata: {
-          'requestId': const Uuid().v4(),
-          'functionName': 'tool_b',
-          'permissionType': 'mcp_tool',
-        },
-      ));
-      await fixture.messageStore.addMessage(fixture.deviceId, _createMessage(
-        employeeId: empId, deviceId: fixture.deviceId, content: '又一条文本',
-      ));
-      await fixture.messageStore.addMessage(fixture.deviceId, ChatMessage(
-        id: const Uuid().v4(),
-        employeeId: empId,
-        role: MessageRole.assistant,
-        type: 'confirmRequest',
-        content: '确认请求',
-        createdAt: DateTime.now(),
-        deviceId: fixture.deviceId,
-        metadata: {'requestId': const Uuid().v4(), 'confirmTitle': '确认'},
-      ));
+      await fixture.messageStore.addMessage(
+        fixture.deviceId,
+        ChatMessage(
+          id: const Uuid().v4(),
+          employeeId: empId,
+          role: MessageRole.assistant,
+          type: 'permissionRequest',
+          content: '权限请求1',
+          createdAt: DateTime.now(),
+          deviceId: fixture.deviceId,
+          metadata: {'requestId': const Uuid().v4(), 'functionName': 'tool_a'},
+        ),
+      );
+      await fixture.messageStore.addMessage(
+        fixture.deviceId,
+        _createMessage(
+          employeeId: empId,
+          deviceId: fixture.deviceId,
+          content: '普通文本',
+        ),
+      );
+      await fixture.messageStore.addMessage(
+        fixture.deviceId,
+        ChatMessage(
+          id: const Uuid().v4(),
+          employeeId: empId,
+          role: MessageRole.assistant,
+          type: 'permissionRequest',
+          content: '权限请求2',
+          createdAt: DateTime.now(),
+          deviceId: fixture.deviceId,
+          metadata: {
+            'requestId': const Uuid().v4(),
+            'functionName': 'tool_b',
+            'permissionType': 'mcp_tool',
+          },
+        ),
+      );
+      await fixture.messageStore.addMessage(
+        fixture.deviceId,
+        _createMessage(
+          employeeId: empId,
+          deviceId: fixture.deviceId,
+          content: '又一条文本',
+        ),
+      );
+      await fixture.messageStore.addMessage(
+        fixture.deviceId,
+        ChatMessage(
+          id: const Uuid().v4(),
+          employeeId: empId,
+          role: MessageRole.assistant,
+          type: 'confirmRequest',
+          content: '确认请求',
+          createdAt: DateTime.now(),
+          deviceId: fixture.deviceId,
+          metadata: {'requestId': const Uuid().v4(), 'confirmTitle': '确认'},
+        ),
+      );
 
       // 按 type 过滤
       final allMessages = await fixture.messageStore.getMessages(
-        fixture.deviceId, empId,
+        fixture.deviceId,
+        empId,
       );
       final permissionRequests = allMessages
           .where((m) => m.type == 'permissionRequest')
@@ -1762,25 +2305,31 @@ void main() {
 
       // 创建 3 条 confirmRequest
       for (int i = 0; i < 3; i++) {
-        await fixture.messageStore.addMessage(fixture.deviceId, ChatMessage(
-          id: const Uuid().v4(),
-          employeeId: empId,
-          role: MessageRole.assistant,
-          type: 'confirmRequest',
-          content: '确认请求 #$i',
-          createdAt: DateTime.now(),
-          deviceId: fixture.deviceId,
-          metadata: {
-            'requestId': const Uuid().v4(),
-            'confirmTitle': '确认 #$i',
-            'confirmMessage': '描述 #$i',
-            'confirmOptions': [{'key': 'opt', 'label': '选项'}],
-          },
-        ));
+        await fixture.messageStore.addMessage(
+          fixture.deviceId,
+          ChatMessage(
+            id: const Uuid().v4(),
+            employeeId: empId,
+            role: MessageRole.assistant,
+            type: 'confirmRequest',
+            content: '确认请求 #$i',
+            createdAt: DateTime.now(),
+            deviceId: fixture.deviceId,
+            metadata: {
+              'requestId': const Uuid().v4(),
+              'confirmTitle': '确认 #$i',
+              'confirmMessage': '描述 #$i',
+              'confirmOptions': [
+                {'key': 'opt', 'label': '选项'},
+              ],
+            },
+          ),
+        );
       }
 
       final allMessages = await fixture.messageStore.getMessages(
-        fixture.deviceId, empId,
+        fixture.deviceId,
+        empId,
       );
       final confirms = allMessages
           .where((m) => m.type == 'confirmRequest')

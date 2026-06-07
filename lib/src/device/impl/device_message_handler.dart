@@ -621,6 +621,15 @@ class DeviceMessageHandler {
 
       final summary = SessionSummaryEntity.fromMap(summaryData);
 
+      // agentSessionSummaryChanged 是独立的 LAN 消息类型，不会经过 _handleAgentEvent。
+      // 同步转发到 AgentEvent 流，确保远程 CachedAgentProxy 能拉取消息明细。
+      _stateHolder.eventController.add(AgentEvent(
+        type: AgentEventType.sessionSummaryChanged,
+        data: {'summary': summaryData},
+        employeeId: employeeId,
+        fromDeviceId: fromDeviceId,
+      ));
+
       // 保留远程摘要的原始 deviceId（employeeId + deviceId 隔离）
       final summaryStore = SessionSummaryStore(deviceId: _deviceId);
       summaryStore.upsertFromRemote(summary);

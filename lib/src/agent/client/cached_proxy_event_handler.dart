@@ -490,6 +490,10 @@ mixin _CachedProxyEventHandler on _CachedAgentProxyBase {
   void _handleSessionSummaryChanged(Map<String, dynamic> data) {
     _CachedAgentProxyBase._log.debug('收到会话摘要变更事件');
 
+    // 摘要广播通常意味着远端会话已有新消息，但摘要本身不包含完整消息体。
+    // 仅同步摘要会让聊天窗口在没有定时轮询时看不到最新消息。
+    _debouncedSyncMessages(delay: const Duration(milliseconds: 100));
+
     // 从远程同步最新摘要，更新本地未读计数和最新消息缓存
     _syncSessionSummaryFromRemote();
   }

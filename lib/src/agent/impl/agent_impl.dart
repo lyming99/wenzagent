@@ -437,8 +437,11 @@ class AgentImpl extends _AgentImplBase
       _syncProcessorStatus(processorStatus);
     };
 
-    // 消息完成前回调：将 Token 用量持久化到 MessageStore
+    // 消息完成前回调：确保消息落库，再广播 completed 事件。
     _processor!.onBeforeMessageCompleted = () async {
+      if (_chatAdapter case final LlmChatAdapter adapter) {
+        await adapter.memoryManager.waitForPendingWrites();
+      }
       await _persistTokenUsageToStore();
     };
 
@@ -1362,6 +1365,7 @@ class AgentImpl extends _AgentImplBase
               agentDeviceId,
               fileMessage,
             );
+            await adapter.memoryManager.waitForPendingWrites();
           }
 
           // 4. 广播 completed 事件（与 AI 循环 onMessageStatusChanged 模式一致）
