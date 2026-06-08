@@ -42,10 +42,10 @@ jobs:
         run: dart pub get
 
       - name: Compile server
-        run: dart compile exe bin/wenzagent_server.dart -o build/wenzagent_server${{ matrix.exe-suffix }}
+        run: dart build exe bin/wenzagent_server.dart -o build/wenzagent_server${{ matrix.exe-suffix }}
 
       - name: Compile client
-        run: dart compile exe bin/wenzagent_client.dart -o build/wenzagent_client${{ matrix.exe-suffix }}
+        run: dart build exe bin/wenzagent_client.dart -o build/wenzagent_client${{ matrix.exe-suffix }}
 
       - name: Prepare package files
         shell: bash
@@ -98,10 +98,10 @@ jobs:
         run: dart pub get
 
       - name: Compile server
-        run: dart compile exe bin/wenzagent_server.dart --target-os=linux --target-arch=arm64 -o build/wenzagent_server
+        run: dart build exe bin/wenzagent_server.dart --target-os=linux --target-arch=arm64 -o build/wenzagent_server
 
       - name: Compile client
-        run: dart compile exe bin/wenzagent_client.dart --target-os=linux --target-arch=arm64 -o build/wenzagent_client
+        run: dart build exe bin/wenzagent_client.dart --target-os=linux --target-arch=arm64 -o build/wenzagent_client
 
       - name: Prepare package files
         run: |
