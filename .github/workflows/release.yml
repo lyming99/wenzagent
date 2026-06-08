@@ -28,6 +28,10 @@ jobs:
           - platform: macos-arm64
             os: macos-latest
             exe-suffix: ""
+          # ── Linux ARM64 (native ARM runner) ──
+          - platform: linux-arm64
+            os: ubuntu-24.04-arm
+            exe-suffix: ""
 
     steps:
       - name: Checkout
@@ -42,17 +46,33 @@ jobs:
         run: dart pub get
 
       - name: Compile server
-        run: dart build exe bin/wenzagent_server.dart -o build/wenzagent_server${{ matrix.exe-suffix }}
+        run: dart build cli -t bin/wenzagent_server.dart -o build/wenzagent_server
 
       - name: Compile client
-        run: dart build exe bin/wenzagent_client.dart -o build/wenzagent_client${{ matrix.exe-suffix }}
+        run: dart build cli -t bin/wenzagent_client.dart -o build/wenzagent_client
 
-      - name: Prepare package files
+      - name: Prepare package files (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path pkg\config
+          Copy-Item -Path build\wenzagent_server\bundle\bin\* -Destination pkg\
+          Copy-Item -Path build\wenzagent_client\bundle\bin\* -Destination pkg\
+          Copy-Item -Path build\wenzagent_server\bundle\lib\* -Destination pkg\ -ErrorAction SilentlyContinue
+          Copy-Item -Path build\wenzagent_client\bundle\lib\* -Destination pkg\ -ErrorAction SilentlyContinue
+          Copy-Item -Path doc\RELEASE_README.md -Destination pkg\README.md
+          Copy-Item -Path config\wenzagent_server.yaml.example -Destination pkg\config\
+          Copy-Item -Path config\wenzagent_client.yaml.example -Destination pkg\config\
+
+      - name: Prepare package files (Linux/macOS)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           mkdir -p pkg/config
-          cp build/wenzagent_server${{ matrix.exe-suffix }} pkg/
-          cp build/wenzagent_client${{ matrix.exe-suffix }} pkg/
+          cp build/wenzagent_server/bundle/bin/* pkg/
+          cp build/wenzagent_client/bundle/bin/* pkg/
+          cp build/wenzagent_server/bundle/lib/* pkg/ 2>/dev/null || true
+          cp build/wenzagent_client/bundle/lib/* pkg/ 2>/dev/null || true
           cp doc/RELEASE_README.md pkg/README.md
           cp config/wenzagent_server.yaml.example pkg/config/
           cp config/wenzagent_client.yaml.example pkg/config/
@@ -78,55 +98,9 @@ jobs:
           path: dist/*
           retention-days: 1
 
-  # ──────────────────────────────────────────────────────────────────────
-  # Linux ARM64：使用 Dart 交叉编译
-  # ──────────────────────────────────────────────────────────────────────
-  build-linux-arm64:
-    name: Build linux-arm64
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Dart SDK
-        uses: dart-lang/setup-dart@v1
-        with:
-          sdk: stable
-
-      - name: Install dependencies
-        run: dart pub get
-
-      - name: Compile server
-        run: dart build exe bin/wenzagent_server.dart --target-os=linux --target-arch=arm64 -o build/wenzagent_server
-
-      - name: Compile client
-        run: dart build exe bin/wenzagent_client.dart --target-os=linux --target-arch=arm64 -o build/wenzagent_client
-
-      - name: Prepare package files
-        run: |
-          mkdir -p pkg/config
-          cp build/wenzagent_server pkg/
-          cp build/wenzagent_client pkg/
-          cp doc/RELEASE_README.md pkg/README.md
-          cp config/wenzagent_server.yaml.example pkg/config/
-          cp config/wenzagent_client.yaml.example pkg/config/
-
-      - name: Package artifacts
-        run: |
-          mkdir -p dist
-          tar czf dist/wenzagent-linux-arm64.tar.gz -C pkg .
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: wenzagent-linux-arm64
-          path: dist/*
-          retention-days: 1
-
   release:
     name: Create GitHub Release
-    needs: [build, build-linux-arm64]
+    needs: [build]
     runs-on: ubuntu-latest
 
     steps:
