@@ -41,9 +41,7 @@ class _ServerConfig {
 /// Simple CLI argument parser (no external dependency).
 _ServerConfig _parseArgs(List<String> args) {
   // Default config file: same name as the executable, next to the binary
-  final exePath = Platform.resolvedExecutable;
-  final exeDir = File(exePath).parent.path;
-  String configPath = '$exeDir${Platform.pathSeparator}wenzagent_server.yaml';
+  String configPath = _configPathNextToExecutable('wenzagent_server.yaml');
   int? cliPort;
   String? cliDeviceId;
   String? cliHostName;
@@ -94,21 +92,14 @@ _ServerConfig _parseArgs(List<String> args) {
     port: port,
     deviceId: cliDeviceId ?? _yamlStr(yaml, 'deviceId') ?? const Uuid().v4(),
     hostName: cliHostName ?? _yamlStr(yaml, 'hostName') ?? 'WenzAgent Server',
-    storagePath:
-        cliStoragePath ?? _yamlStr(yaml, 'storagePath') ?? './data',
+    storagePath: cliStoragePath ?? _yamlStr(yaml, 'storagePath') ?? './data',
     logLevel: cliLogLevel ?? _yamlStr(yaml, 'logLevel') ?? 'info',
   );
 }
 
 Map<String, dynamic> _loadYamlConfig(String path) {
-  var file = File(path);
-  // If the explicit path doesn't exist, try looking next to the executable
-  if (!file.existsSync()) {
-    final exeDir = File(Platform.resolvedExecutable).parent.path;
-    final fallback = '$exeDir${Platform.pathSeparator}${path.split(Platform.pathSeparator).last}';
-    file = File(fallback);
-  }
-  if (!file.existsSync()) return {};
+  final file = _resolveConfigFile(path);
+  if (file == null) return {};
   try {
     final content = file.readAsStringSync();
     final doc = loadYaml(content);
@@ -116,9 +107,47 @@ Map<String, dynamic> _loadYamlConfig(String path) {
       return doc.map((k, v) => MapEntry(k.toString(), v));
     }
   } catch (e) {
-    stderr.writeln('Warning: failed to parse config file $path: $e');
+    stderr.writeln('Warning: failed to parse config file ${file.path}: $e');
   }
   return {};
+}
+
+File? _resolveConfigFile(String path) {
+  for (final file in _configCandidates(path)) {
+    if (file.existsSync()) return file;
+  }
+  return null;
+}
+
+List<File> _configCandidates(String path) {
+  final exeDir = File(Platform.resolvedExecutable).parent.path;
+  final fileName = _fileName(path);
+  final candidates = [
+    File(path),
+    File(_joinPath(exeDir, fileName)),
+    File(_joinPath(_joinPath(exeDir, 'config'), fileName)),
+  ];
+
+  final seen = <String>{};
+  return [
+    for (final file in candidates)
+      if (seen.add(file.path)) file,
+  ];
+}
+
+String _configPathNextToExecutable(String fileName) {
+  final exeDir = File(Platform.resolvedExecutable).parent.path;
+  return _joinPath(exeDir, fileName);
+}
+
+String _fileName(String path) {
+  final normalized = path.replaceAll(r'\', '/');
+  final slash = normalized.lastIndexOf('/');
+  return slash == -1 ? normalized : normalized.substring(slash + 1);
+}
+
+String _joinPath(String parent, String child) {
+  return '$parent${Platform.pathSeparator}$child';
 }
 
 String? _yamlStr(Map<String, dynamic> yaml, String key) {
@@ -141,7 +170,8 @@ WenzAgent LAN Server
 Usage: dart run bin/wenzagent_server.dart [options]
 
 Options:
-  --config <path>       YAML config file path (default: <exe_dir>/wenzagent_server.yaml)
+  --config <path>       YAML config file path (default: <exe_dir>/wenzagent_server.yaml,
+                        fallback: <exe_dir>/config/wenzagent_server.yaml)
   --port <int>          Service port (default: 9090)
   --device-id <id>      Device ID (default: auto-generated UUID)
   --host-name <name>    Device display name (default: "WenzAgent Server")
@@ -152,7 +182,7 @@ Options:
 
 Priority: CLI args > YAML config > defaults
 
-YAML config example (wenzagent_server.yaml, place next to the executable):
+YAML config example (place next to the executable or in config/):
   port: 9090
   deviceId: "host-server-001"
   hostName: "WenzAgent Server"
@@ -196,8 +226,7 @@ class _HostLanClientServiceAdapter implements LanClientService {
   int get hostPort => _hostService.port;
 
   @override
-  Stream<LanMessage> get messageStream =>
-      const Stream.empty();
+  Stream<LanMessage> get messageStream => const Stream.empty();
 
   @override
   double get uploadProgress => 0.0;
@@ -301,12 +330,14 @@ Future<void> main(List<String> args) async {
 
   // 6. Initialize DeviceClient (unified entry point for all services)
   final deviceClient = DeviceClient.getInstance(config.deviceId);
-  await deviceClient.initialize(DeviceClientConfig(
-    storagePath: config.storagePath,
-    host: '',
-    port: config.port,
-    deviceName: config.hostName,
-  ));
+  await deviceClient.initialize(
+    DeviceClientConfig(
+      storagePath: config.storagePath,
+      host: '',
+      port: config.port,
+      deviceName: config.hostName,
+    ),
+  );
   final db = DatabaseManager.getInstance(config.deviceId);
 
   // 7. Get service instances from DeviceClient

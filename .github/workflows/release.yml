@@ -55,12 +55,15 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path pkg\config
+          New-Item -ItemType Directory -Force -Path pkg\config, pkg\lib
           Copy-Item -Path build\wenzagent_server\bundle\bin\* -Destination pkg\
           Copy-Item -Path build\wenzagent_client\bundle\bin\* -Destination pkg\
-          Copy-Item -Path build\wenzagent_server\bundle\lib\* -Destination pkg\ -ErrorAction SilentlyContinue
-          Copy-Item -Path build\wenzagent_client\bundle\lib\* -Destination pkg\ -ErrorAction SilentlyContinue
+          Copy-Item -Path build\wenzagent_server\bundle\lib\* -Destination pkg\lib\ -ErrorAction SilentlyContinue
+          Copy-Item -Path build\wenzagent_client\bundle\lib\* -Destination pkg\lib\ -ErrorAction SilentlyContinue
+          dart tool\patch_native_asset_paths.dart pkg\wenzagent_server.exe pkg\wenzagent_client.exe
           Copy-Item -Path doc\RELEASE_README.md -Destination pkg\README.md
+          Copy-Item -Path config\wenzagent_server.yaml.example -Destination pkg\config\wenzagent_server.yaml
+          Copy-Item -Path config\wenzagent_client.yaml.example -Destination pkg\config\wenzagent_client.yaml
           Copy-Item -Path config\wenzagent_server.yaml.example -Destination pkg\config\
           Copy-Item -Path config\wenzagent_client.yaml.example -Destination pkg\config\
 
@@ -68,12 +71,17 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          mkdir -p pkg/config
+          mkdir -p pkg/config pkg/lib
           cp build/wenzagent_server/bundle/bin/* pkg/
           cp build/wenzagent_client/bundle/bin/* pkg/
-          cp build/wenzagent_server/bundle/lib/* pkg/ 2>/dev/null || true
-          cp build/wenzagent_client/bundle/lib/* pkg/ 2>/dev/null || true
+          cp build/wenzagent_server/bundle/lib/* pkg/lib/ 2>/dev/null || true
+          cp build/wenzagent_client/bundle/lib/* pkg/lib/ 2>/dev/null || true
+          dart tool/patch_native_asset_paths.dart \
+            "pkg/wenzagent_server${{ matrix.exe-suffix }}" \
+            "pkg/wenzagent_client${{ matrix.exe-suffix }}"
           cp doc/RELEASE_README.md pkg/README.md
+          cp config/wenzagent_server.yaml.example pkg/config/wenzagent_server.yaml
+          cp config/wenzagent_client.yaml.example pkg/config/wenzagent_client.yaml
           cp config/wenzagent_server.yaml.example pkg/config/
           cp config/wenzagent_client.yaml.example pkg/config/
 

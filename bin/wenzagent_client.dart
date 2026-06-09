@@ -38,9 +38,7 @@ class _ClientConfig {
 
 _ClientConfig _parseArgs(List<String> args) {
   // Default config file: same name as the executable, next to the binary
-  final exePath = Platform.resolvedExecutable;
-  final exeDir = File(exePath).parent.path;
-  String configPath = '$exeDir${Platform.pathSeparator}wenzagent_client.yaml';
+  String configPath = _configPathNextToExecutable('wenzagent_client.yaml');
   String? cliHost;
   int? cliPort;
   String? cliDeviceId;
@@ -104,12 +102,10 @@ _ClientConfig _parseArgs(List<String> args) {
   return _ClientConfig(
     host: host,
     port: port,
-    deviceId:
-        cliDeviceId ?? _yamlStr(yaml, 'deviceId') ?? const Uuid().v4(),
+    deviceId: cliDeviceId ?? _yamlStr(yaml, 'deviceId') ?? const Uuid().v4(),
     deviceName:
         cliDeviceName ?? _yamlStr(yaml, 'deviceName') ?? 'WenzAgent Client',
-    storagePath:
-        cliStoragePath ?? _yamlStr(yaml, 'storagePath') ?? './data',
+    storagePath: cliStoragePath ?? _yamlStr(yaml, 'storagePath') ?? './data',
     logLevel: cliLogLevel ?? _yamlStr(yaml, 'logLevel') ?? 'info',
     topic: cliTopic ?? _yamlStr(yaml, 'topic'),
   );
@@ -120,14 +116,8 @@ _ClientConfig _parseArgs(List<String> args) {
 // ---------------------------------------------------------------------------
 
 Map<String, dynamic> _loadYamlConfig(String path) {
-  var file = File(path);
-  // If the explicit path doesn't exist, try looking next to the executable
-  if (!file.existsSync()) {
-    final exeDir = File(Platform.resolvedExecutable).parent.path;
-    final fallback = '$exeDir${Platform.pathSeparator}${path.split(Platform.pathSeparator).last}';
-    file = File(fallback);
-  }
-  if (!file.existsSync()) return {};
+  final file = _resolveConfigFile(path);
+  if (file == null) return {};
   try {
     final content = file.readAsStringSync();
     final doc = loadYaml(content);
@@ -135,9 +125,47 @@ Map<String, dynamic> _loadYamlConfig(String path) {
       return doc.map((k, v) => MapEntry(k.toString(), v));
     }
   } catch (e) {
-    stderr.writeln('Warning: failed to parse config file $path: $e');
+    stderr.writeln('Warning: failed to parse config file ${file.path}: $e');
   }
   return {};
+}
+
+File? _resolveConfigFile(String path) {
+  for (final file in _configCandidates(path)) {
+    if (file.existsSync()) return file;
+  }
+  return null;
+}
+
+List<File> _configCandidates(String path) {
+  final exeDir = File(Platform.resolvedExecutable).parent.path;
+  final fileName = _fileName(path);
+  final candidates = [
+    File(path),
+    File(_joinPath(exeDir, fileName)),
+    File(_joinPath(_joinPath(exeDir, 'config'), fileName)),
+  ];
+
+  final seen = <String>{};
+  return [
+    for (final file in candidates)
+      if (seen.add(file.path)) file,
+  ];
+}
+
+String _configPathNextToExecutable(String fileName) {
+  final exeDir = File(Platform.resolvedExecutable).parent.path;
+  return _joinPath(exeDir, fileName);
+}
+
+String _fileName(String path) {
+  final normalized = path.replaceAll(r'\', '/');
+  final slash = normalized.lastIndexOf('/');
+  return slash == -1 ? normalized : normalized.substring(slash + 1);
+}
+
+String _joinPath(String parent, String child) {
+  return '$parent${Platform.pathSeparator}$child';
 }
 
 String? _yamlStr(Map<String, dynamic> yaml, String key) {
@@ -164,7 +192,8 @@ WenzAgent LAN Client
 Usage: dart run bin/wenzagent_client.dart --host <ip> [options]
 
 Options:
-  --config <path>       YAML config file path (default: <exe_dir>/wenzagent_client.yaml)
+  --config <path>       YAML config file path (default: <exe_dir>/wenzagent_client.yaml,
+                        fallback: <exe_dir>/config/wenzagent_client.yaml)
   --host <ip>           Server IP address (required, or set in config)
   --port <int>          Server port (default: 9090)
   --device-id <id>      Device ID (default: auto-generated UUID)
@@ -177,7 +206,7 @@ Options:
 
 Priority: CLI args > YAML config > defaults
 
-YAML config example (wenzagent_client.yaml, place next to the executable):
+YAML config example (place next to the executable or in config/):
   host: "192.168.1.100"
   port: 9090
   deviceId: "my-laptop"
@@ -230,13 +259,15 @@ Future<void> main(List<String> args) async {
   final client = DeviceClient.getInstance(config.deviceId);
 
   // Initialize
-  await client.initialize(DeviceClientConfig(
-    storagePath: config.storagePath,
-    host: config.host,
-    port: config.port,
-    deviceName: config.deviceName,
-    topic: config.topic,
-  ));
+  await client.initialize(
+    DeviceClientConfig(
+      storagePath: config.storagePath,
+      host: config.host,
+      port: config.port,
+      deviceName: config.deviceName,
+      topic: config.topic,
+    ),
+  );
 
   // Listen to connection state changes
   client.onConnectionStateChanged.listen((state) {
