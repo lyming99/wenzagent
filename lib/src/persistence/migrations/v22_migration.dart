@@ -11,7 +11,7 @@ class V22Migration implements Migration {
   int get version => 22;
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS context_compression_meta (
         employee_id   TEXT NOT NULL,

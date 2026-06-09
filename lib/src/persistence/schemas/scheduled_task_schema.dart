@@ -2,7 +2,7 @@ import 'package:sqlite_async/sqlite_async.dart';
 
 /// scheduled_tasks 表 schema
 class ScheduledTaskSchema {
-  static Future<void> create(SqliteDatabase db) async {
+  static Future<void> create(SqliteWriteContext db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS scheduled_tasks (
         uuid                     TEXT PRIMARY KEY,

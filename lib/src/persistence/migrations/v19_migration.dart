@@ -13,7 +13,7 @@ class V19Migration extends Migration {
   int get version => 19;
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     // 1. 删除可能存在的旧索引（联合索引或单列索引同名）
     await _dropIndexIfExists(db, 'idx_skills_employee');
 
@@ -28,7 +28,7 @@ class V19Migration extends Migration {
 
   /// 安全删除索引（如果存在）
   Future<void> _dropIndexIfExists(
-    SqliteDatabase db,
+    SqliteWriteContext db,
     String indexName,
   ) async {
     try {

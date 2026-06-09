@@ -10,6 +10,6 @@ abstract class Migration {
 
   /// 执行升级 SQL
   ///
-  /// [db] 数据库连接
-  Future<void> onUpgrade(SqliteDatabase db);
+  /// [db] 当前迁移事务上下文
+  Future<void> onUpgrade(SqliteWriteContext db);
 }

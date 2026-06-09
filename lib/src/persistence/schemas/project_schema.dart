@@ -2,7 +2,7 @@ import 'package:sqlite_async/sqlite_async.dart';
 
 /// wenz_projects / wenz_project_modules / wenz_project_skills / wenz_project_issues 表 schema
 class ProjectSchema {
-  static Future<void> create(SqliteDatabase db) async {
+  static Future<void> create(SqliteWriteContext db) async {
     // 项目表
     await db.execute('''
       CREATE TABLE IF NOT EXISTS wenz_projects (

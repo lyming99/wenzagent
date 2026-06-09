@@ -2,7 +2,7 @@ import 'package:sqlite_async/sqlite_async.dart';
 
 /// messages 表 schema
 class MessageSchema {
-  static Future<void> create(SqliteDatabase db) async {
+  static Future<void> create(SqliteWriteContext db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS messages (
         uuid              TEXT PRIMARY KEY,

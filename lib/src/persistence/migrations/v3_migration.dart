@@ -14,7 +14,7 @@ class V3Migration extends Migration {
 
   /// 检查表中是否存在指定列
   Future<bool> _columnExists(
-    SqliteDatabase db,
+    SqliteWriteContext db,
     String table,
     String column,
   ) async {
@@ -26,7 +26,7 @@ class V3Migration extends Migration {
   }
 
   /// 检查表是否存在
-  Future<bool> _tableExists(SqliteDatabase db, String table) async {
+  Future<bool> _tableExists(SqliteWriteContext db, String table) async {
     final result = await db.getAll(
       "SELECT count(*) as cnt FROM sqlite_master WHERE type='table' AND name='$table'",
     );
@@ -34,7 +34,7 @@ class V3Migration extends Migration {
   }
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     // 1. messages 表添加 seq 列
     if (!await _columnExists(db, 'messages', 'seq')) {
       // SQLite 不支持直接添加 NOT NULL 列（无默认值），

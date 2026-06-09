@@ -9,7 +9,7 @@ class V17Migration extends Migration {
   int get version => 17;
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     await ProjectSchema.create(db);
   }
 }

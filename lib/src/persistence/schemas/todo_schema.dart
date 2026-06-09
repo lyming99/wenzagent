@@ -2,7 +2,7 @@ import 'package:sqlite_async/sqlite_async.dart';
 
 /// todo_topics 表 schema
 class TodoTopicSchema {
-  static Future<void> create(SqliteDatabase db) async {
+  static Future<void> create(SqliteWriteContext db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS todo_topics (
         id           TEXT PRIMARY KEY,
@@ -26,7 +26,7 @@ class TodoTopicSchema {
   }
 
   static Future<void> _ensureColumn(
-    SqliteDatabase db,
+    SqliteWriteContext db,
     String table,
     String column,
     String type,
@@ -41,7 +41,7 @@ class TodoTopicSchema {
 
 /// todo_task_items 表 schema
 class TodoTaskItemSchema {
-  static Future<void> create(SqliteDatabase db) async {
+  static Future<void> create(SqliteWriteContext db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS todo_task_items (
         id           TEXT PRIMARY KEY,

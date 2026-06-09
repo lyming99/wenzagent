@@ -11,7 +11,7 @@ class V21Migration implements Migration {
   int get version => 21;
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     // 先检查列是否已存在，防止因历史部分迁移导致 duplicate column 错误
     final result = await db.getAll(
       "SELECT count(*) AS cnt FROM pragma_table_info('skills') WHERE name = 'origin_name'",

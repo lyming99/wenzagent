@@ -11,14 +11,14 @@ class V20Migration extends Migration {
   int get version => 20;
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     // 安全添加列（如果已存在则忽略）
     await _addColumnIfNotExists(db, 'skills', 'global_skill_id', 'TEXT');
   }
 
   /// 安全添加列（如果已存在则忽略）
   Future<void> _addColumnIfNotExists(
-    SqliteDatabase db,
+    SqliteWriteContext db,
     String table,
     String column,
     String type,

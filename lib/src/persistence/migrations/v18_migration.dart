@@ -8,7 +8,7 @@ class V18Migration extends Migration {
   int get version => 18;
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     if (!await _columnExists(db, 'skills', 'delete_time')) {
       await db.execute('ALTER TABLE skills ADD COLUMN delete_time INTEGER');
     }
@@ -20,7 +20,7 @@ class V18Migration extends Migration {
   }
 
   Future<bool> _columnExists(
-    SqliteDatabase db,
+    SqliteWriteContext db,
     String table,
     String column,
   ) async {

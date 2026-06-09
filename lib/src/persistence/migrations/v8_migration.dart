@@ -11,7 +11,7 @@ class V8Migration extends Migration {
   int get version => 8;
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     // --- sync_watermark: 重建表（SQLite 不支持 ALTER PRIMARY KEY）---
     await _migrateSyncWatermark(db);
 
@@ -19,13 +19,11 @@ class V8Migration extends Migration {
     await _addDeviceIdToSkills(db);
   }
 
-  Future<void> _migrateSyncWatermark(SqliteDatabase db) async {
+  Future<void> _migrateSyncWatermark(SqliteWriteContext db) async {
     // 幂等检查：如果新表已存在（含 device_id 列），跳过
     if (await _columnExists(db, 'sync_watermark', 'device_id')) return;
 
-    await db.execute(
-      'ALTER TABLE sync_watermark RENAME TO sync_watermark_old',
-    );
+    await db.execute('ALTER TABLE sync_watermark RENAME TO sync_watermark_old');
 
     await db.execute('''
       CREATE TABLE sync_watermark (
@@ -48,7 +46,7 @@ class V8Migration extends Migration {
     await db.execute('DROP TABLE sync_watermark_old');
   }
 
-  Future<void> _addDeviceIdToSkills(SqliteDatabase db) async {
+  Future<void> _addDeviceIdToSkills(SqliteWriteContext db) async {
     if (await _columnExists(db, 'skills', 'device_id')) return;
     await db.execute(
       "ALTER TABLE skills ADD COLUMN device_id TEXT NOT NULL DEFAULT ''",
@@ -57,7 +55,7 @@ class V8Migration extends Migration {
 
   /// 检查表中是否已存在指定列（幂等保护）
   Future<bool> _columnExists(
-    SqliteDatabase db,
+    SqliteWriteContext db,
     String table,
     String column,
   ) async {

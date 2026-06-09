@@ -13,7 +13,7 @@ class V12Migration extends Migration {
   int get version => 12;
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     // 原始 spec_groups 表（v13 中将被删除）
     await db.execute('''
       CREATE TABLE IF NOT EXISTS spec_groups (

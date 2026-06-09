@@ -13,7 +13,7 @@ class V10Migration extends Migration {
   int get version => 10;
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     // 原始 todo_groups 表（v13 中将被迁移为 todo_topics）
     await db.execute('''
       CREATE TABLE IF NOT EXISTS todo_groups (

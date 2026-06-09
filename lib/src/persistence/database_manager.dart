@@ -51,7 +51,7 @@ import 'migrations/v22_migration.dart';
 ///   int get version => 2;
 ///
 ///   @override
-///   Future<void> onUpgrade(SqliteDatabase db) async {
+///   Future<void> onUpgrade(SqliteWriteContext db) async {
 ///     await db.execute('ALTER TABLE employees ADD COLUMN new_field TEXT');
 ///   }
 /// }
@@ -180,7 +180,7 @@ class DatabaseManager {
 
       try {
         await _db!.writeTransaction((tx) async {
-          await migration.onUpgrade(_db!);
+          await migration.onUpgrade(tx);
           await tx.execute('PRAGMA user_version = $version');
         });
         _cachedVersion = version;

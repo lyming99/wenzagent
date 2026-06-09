@@ -12,7 +12,7 @@ class V13Migration extends Migration {
   int get version => 13;
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     // ===== 1. 重构 spec_items 表（去掉 group_id） =====
     await db.execute('''
       CREATE TABLE IF NOT EXISTS spec_items_new (
@@ -72,7 +72,7 @@ class V13Migration extends Migration {
     await _recalculateTopicStatuses(db);
   }
 
-  Future<void> _recalculateTopicStatuses(SqliteDatabase db) async {
+  Future<void> _recalculateTopicStatuses(SqliteWriteContext db) async {
     // 有 in_progress 子项的 topic
     await db.execute('''
       UPDATE todo_topics SET status = 'in_progress'
@@ -83,7 +83,8 @@ class V13Migration extends Migration {
     ''');
 
     // 所有活跃子项都 completed 的 topic
-    await db.execute('''
+    await db.execute(
+      '''
       UPDATE todo_topics SET status = 'completed', completed_at = ?
       WHERE id IN (
         SELECT t.topic_id FROM todo_task_items t
@@ -91,7 +92,9 @@ class V13Migration extends Migration {
         GROUP BY t.topic_id
         HAVING COUNT(*) = SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END)
       ) AND deleted = 0 AND status != 'completed'
-    ''', [DateTime.now().millisecondsSinceEpoch]);
+    ''',
+      [DateTime.now().millisecondsSinceEpoch],
+    );
 
     // 其余保持 pending（默认值）
   }

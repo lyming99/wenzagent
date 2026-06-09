@@ -5,7 +5,7 @@ import 'package:sqlite_async/sqlite_async.dart';
 /// 记录每个 employee（会话）的消息同步水位线，
 /// 客户端通过 last_seq 知道自己已同步到哪条消息。
 class SyncWatermarkSchema {
-  static Future<void> create(SqliteDatabase db) async {
+  static Future<void> create(SqliteWriteContext db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS sync_watermark (
         employee_id  TEXT NOT NULL,

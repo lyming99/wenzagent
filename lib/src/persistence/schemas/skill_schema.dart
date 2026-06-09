@@ -5,7 +5,7 @@ import 'package:sqlite_async/sqlite_async.dart';
 /// Skill 绑定员工（employeeId），不绑定设备（deviceId）。
 /// device_id 保留作为元数据，不建索引，不用于查询过滤。
 class SkillSchema {
-  static Future<void> create(SqliteDatabase db) async {
+  static Future<void> create(SqliteWriteContext db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS skills (
         uuid         TEXT PRIMARY KEY,

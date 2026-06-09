@@ -11,7 +11,7 @@ class V11Migration extends Migration {
   int get version => 11;
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     await FileOperationSchema.create(db);
   }
 }

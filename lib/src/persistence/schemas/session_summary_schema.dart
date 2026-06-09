@@ -5,7 +5,7 @@ import 'package:sqlite_async/sqlite_async.dart';
 /// 会话摘要表，作为未读计数和最新消息的权威数据源。
 /// 通过 UPSERT 原子操作维护，O(1) 读写。
 class SessionSummarySchema {
-  static Future<void> create(SqliteDatabase db) async {
+  static Future<void> create(SqliteWriteContext db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS session_summary (
         employee_id      TEXT    NOT NULL,
@@ -42,11 +42,9 @@ class SessionSummarySchema {
   ///
   /// 在 CREATE TABLE 之后调用，处理表已存在但缺少 pending 列的情况。
   /// ALTER TABLE ADD COLUMN 对已存在的列是安全的（SQLite 会忽略）。
-  static Future<void> ensurePendingColumns(SqliteDatabase db) async {
+  static Future<void> ensurePendingColumns(SqliteWriteContext db) async {
     // 检查 pending_permission 列是否已存在
-    final columns = await db.getAll(
-      "PRAGMA table_info(session_summary)",
-    );
+    final columns = await db.getAll("PRAGMA table_info(session_summary)");
     final columnNames = columns.map((row) => row['name'] as String).toSet();
 
     if (!columnNames.contains('pending_permission')) {

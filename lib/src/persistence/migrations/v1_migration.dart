@@ -14,7 +14,7 @@ class V1Migration extends Migration {
   int get version => 1;
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     await EmployeeSchema.create(db);
     await SessionSchema.create(db);
     await MessageSchema.create(db);

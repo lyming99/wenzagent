@@ -12,7 +12,7 @@ class V7Migration extends Migration {
 
   /// 检查表中是否存在指定列
   Future<bool> _columnExists(
-    SqliteDatabase db,
+    SqliteWriteContext db,
     String table,
     String column,
   ) async {
@@ -24,10 +24,12 @@ class V7Migration extends Migration {
   }
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     // messages 表增加 device_id 列（如果不存在）
     if (!await _columnExists(db, 'messages', 'device_id')) {
-      await db.execute('ALTER TABLE messages ADD COLUMN device_id TEXT DEFAULT \'\'');
+      await db.execute(
+        'ALTER TABLE messages ADD COLUMN device_id TEXT DEFAULT \'\'',
+      );
     }
 
     // 重建索引（加上 device_id 列便于按设备统计）

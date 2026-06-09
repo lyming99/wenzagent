@@ -15,7 +15,7 @@ class V15Migration extends Migration {
 
   /// 检查表中是否存在指定列
   Future<bool> _columnExists(
-    SqliteDatabase db,
+    SqliteWriteContext db,
     String table,
     String column,
   ) async {
@@ -27,7 +27,7 @@ class V15Migration extends Migration {
   }
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     if (!await _columnExists(db, 'messages', 'metadata')) {
       await db.execute('ALTER TABLE messages ADD COLUMN metadata TEXT');
     }

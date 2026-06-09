@@ -11,7 +11,7 @@ class V6Migration extends Migration {
   int get version => 6;
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS mark_read_queue (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

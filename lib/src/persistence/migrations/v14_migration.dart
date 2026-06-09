@@ -15,7 +15,7 @@ class V14Migration extends Migration {
   int get version => 14;
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     // 先确保 session_summary 表存在（V9 创建，但此迁移可能在测试环境独立运行）
     await SessionSummarySchema.create(db);
 

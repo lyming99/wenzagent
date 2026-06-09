@@ -13,7 +13,7 @@ class V2Migration extends Migration {
 
   /// 检查表中是否存在指定列
   Future<bool> _columnExists(
-    SqliteDatabase db,
+    SqliteWriteContext db,
     String table,
     String column,
   ) async {
@@ -25,7 +25,7 @@ class V2Migration extends Migration {
   }
 
   @override
-  Future<void> onUpgrade(SqliteDatabase db) async {
+  Future<void> onUpgrade(SqliteWriteContext db) async {
     // 如果 space_id 列不存在，说明已经是 V2 schema，无需迁移
     if (!await _columnExists(db, 'employees', 'space_id')) {
       return;
