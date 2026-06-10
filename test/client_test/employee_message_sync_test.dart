@@ -18,10 +18,12 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 import 'package:wenzagent/wenzagent.dart' as agent;
+import 'package:wenzagent/src/device/impl/device_message_handler.dart';
 import 'package:wenzagent/src/host/host_rpc_methods.dart';
 import 'package:wenzagent/src/persistence/persistence.dart';
 import 'package:wenzagent/src/service/message_store_service.dart';
@@ -1317,6 +1319,174 @@ void main() {
         await cachedProxy.dispose();
         await remoteProxy.dispose();
         await remoteEvents.close();
+      }
+    });
+
+    test('客户端收到 agent 回复 LAN 广播后通过水位线同步消息', () async {
+      final fixture = await ClientTestFixture.create('lan-reply-watermark');
+      final empId = const Uuid().v4();
+      final remoteDeviceId = 'remote-${const Uuid().v4()}';
+      final now = DateTime.now();
+
+      final userMessage = agent.AgentMessage(
+        id: 'remote-user-${const Uuid().v4()}',
+        role: 'user',
+        type: 'text',
+        content: 'Question before the agent reply',
+        createdAt: now.subtract(const Duration(milliseconds: 10)),
+        status: 'completed',
+        metadata: {'seq': 1, 'updateTime': now.toIso8601String()},
+      );
+      final assistantMessage = agent.AgentMessage(
+        id: 'remote-assistant-${const Uuid().v4()}',
+        role: 'assistant',
+        type: 'text',
+        content: 'Agent reply synced through watermark',
+        createdAt: now,
+        status: 'completed',
+        metadata: {'seq': 2, 'updateTime': now.toIso8601String()},
+      );
+      final remoteMessages = [userMessage, assistantMessage];
+      final remoteSummary = SessionSummaryEntity(
+        employeeId: empId,
+        deviceId: remoteDeviceId,
+        unreadCount: 1,
+        lastMsgId: assistantMessage.id,
+        lastMsgRole: assistantMessage.role,
+        lastMsgContent: assistantMessage.content,
+        lastMsgTime: now.millisecondsSinceEpoch,
+        lastMsgSeq: 2,
+        updateTime: now.millisecondsSinceEpoch,
+      );
+      final rpcMethods = <String>[];
+      final requestedLastSeqs = <int>[];
+      final receivedEvents = <agent.AgentEvent>[];
+
+      Future<Map<String, dynamic>> rpcCall(
+        String method,
+        Map<String, dynamic> params,
+      ) async {
+        rpcMethods.add(method);
+        switch (method) {
+          case agent.AgentRpcConfig.methodGetClearSeq:
+            return {
+              'result': {'clearSeq': 0},
+            };
+          case agent.AgentRpcConfig.methodClearClearSeq:
+            return {'result': <String, dynamic>{}};
+          case agent.AgentRpcConfig.methodGetMaxSeq:
+            return {
+              'result': {'maxSeq': 2},
+            };
+          case agent.AgentRpcConfig.methodGetMessagesAfterSeq:
+            final lastSeq = params['lastSeq'] as int? ?? 0;
+            requestedLastSeqs.add(lastSeq);
+            final limit = params['limit'] as int? ?? 20;
+            final messages = remoteMessages
+                .where((message) {
+                  final seq = message.metadata?['seq'] as int? ?? 0;
+                  return seq > lastSeq;
+                })
+                .take(limit)
+                .map((message) => message.toMap())
+                .toList();
+            return {
+              'result': {'messages': messages},
+            };
+          case agent.AgentRpcConfig.methodGetSessionSummary:
+            return {'result': remoteSummary.toMap()};
+          default:
+            throw StateError('Unexpected RPC method: $method');
+        }
+      }
+
+      final remoteProxy = agent.AgentProxy.remote(
+        employeeId: empId,
+        deviceId: remoteDeviceId,
+        rpcCall: rpcCall,
+        remoteEventStream: fixture.client.onAgentEvent,
+      );
+      final cachedProxy = agent.CachedAgentProxy(
+        proxy: remoteProxy,
+        messageStore: fixture.messageStore,
+        deviceId: remoteDeviceId,
+        employeeId: empId,
+      );
+
+      StreamSubscription<agent.AgentEvent>? eventSub;
+      StreamSubscription<List<agent.AgentMessage>>? messagesSub;
+      try {
+        await cachedProxy.initialize();
+        eventSub = fixture.client.onAgentEvent.listen(receivedEvents.add);
+
+        final synced = Completer<List<agent.AgentMessage>>();
+        messagesSub = cachedProxy.onMessagesChanged.listen((messages) {
+          final hasAssistant = messages.any(
+            (m) =>
+                m.id == assistantMessage.id &&
+                m.content == 'Agent reply synced through watermark',
+          );
+          if (hasAssistant && !synced.isCompleted) {
+            synced.complete(messages);
+          }
+        });
+
+        final handler = DeviceMessageHandler.getInstance(fixture.deviceId);
+        handler.handleMessage(
+          agent.LanMessage(
+            type: agent.LanMessageType.agentMessageStatusChanged,
+            fromId: remoteDeviceId,
+            content: jsonEncode({
+              'employeeId': empId,
+              'type': agent.AgentEventType.messageStatusChanged.value,
+              'data': {
+                'messageId': assistantMessage.id,
+                'status': 'completed',
+                'role': assistantMessage.role,
+                'type': assistantMessage.type,
+                'content': assistantMessage.content,
+                'metadata': assistantMessage.metadata,
+              },
+            }),
+          ),
+        );
+
+        final syncedMessages = await synced.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(
+          receivedEvents.any(
+            (event) =>
+                event.type == agent.AgentEventType.messageStatusChanged &&
+                event.employeeId == empId &&
+                event.fromDeviceId == remoteDeviceId,
+          ),
+          isTrue,
+        );
+        expect(syncedMessages.map((m) => m.id), contains(assistantMessage.id));
+        expect(
+          rpcMethods,
+          contains(agent.AgentRpcConfig.methodGetMessagesAfterSeq),
+        );
+        expect(requestedLastSeqs, contains(0));
+
+        final cachedMessages = await fixture.messageStore.getMessages(
+          remoteDeviceId,
+          empId,
+        );
+        expect(cachedMessages.map((m) => m.id), contains(assistantMessage.id));
+
+        final lastSeq = await fixture.messageStore.getLastSeq(
+          remoteDeviceId,
+          empId,
+        );
+        expect(lastSeq, equals(2));
+      } finally {
+        await messagesSub?.cancel();
+        await eventSub?.cancel();
+        await cachedProxy.dispose();
+        await remoteProxy.dispose();
+        await fixture.dispose();
       }
     });
   });

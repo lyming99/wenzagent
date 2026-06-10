@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>远程文件管理 - 设置设计稿</title>
+  <style>
+    :root {
+      --bg: #f6f1e8;
+      --paper: #fffaf0;
+      --paper-soft: #fbf4e6;
+      --ink: #2d2a25;
+      --muted: #81786b;
+      --line: #ded0bd;
+      --line-dark: #c8b69e;
+      --blue: #3b74b7;
+      --green: #4f8b67;
+      --red: #c05b4d;
+      --yellow: #e0a53d;
+      --shadow: 0 22px 50px rgba(75, 55, 32, .16);
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --sans: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --serif: Georgia, "Times New Roman", "Songti SC", serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: var(--sans);
+      background:
+        linear-gradient(90deg, rgba(222, 208, 189, .32) 1px, transparent 1px) 0 0 / 32px 32px,
+        linear-gradient(rgba(222, 208, 189, .32) 1px, transparent 1px) 0 0 / 32px 32px,
+        radial-gradient(circle at 18% 12%, rgba(224, 165, 61, .15), transparent 26%),
+        radial-gradient(circle at 82% 24%, rgba(59, 116, 183, .13), transparent 24%),
+        var(--bg);
+    }
+
+    button { font: inherit; color: inherit; cursor: default; }
+
+    .canvas {
+      width: min(1440px, calc(100vw - 48px));
+      min-height: 900px;
+      margin: 24px auto;
+      padding: 26px;
+      border: 1px solid rgba(200, 182, 158, .8);
+      border-radius: 22px;
+      background: rgba(255, 250, 240, .78);
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .canvas::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image: linear-gradient(rgba(45, 42, 37, .035) 1px, transparent 1px);
+      background-size: 100% 28px;
+      mix-blend-mode: multiply;
+    }
+
+    .topbar,
+    .content,
+    .footer-notes { position: relative; z-index: 1; }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 280px 1fr 300px;
+      gap: 18px;
+      align-items: center;
+      padding-bottom: 22px;
+      border-bottom: 2px solid var(--ink);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .logo-mark {
+      width: 44px;
+      height: 44px;
+      border: 2px solid var(--ink);
+      border-radius: 12px;
+      background: #f2d77f;
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+      box-shadow: 4px 4px 0 var(--ink);
+      flex: none;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font: 700 20px/1.15 var(--serif);
+      letter-spacing: 0;
+    }
+
+    .brand p,
+    .device p,
+    .path-meta,
+    .hint,
+    .small { margin: 0; color: var(--muted); font-size: 12px; }
+
+    .search {
+      height: 44px;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 16px;
+      background: #fffdf6;
+      box-shadow: 3px 3px 0 rgba(45, 42, 37, .18);
+      min-width: 0;
+    }
+
+    .search span:first-child { font-size: 18px; }
+    .search .placeholder { color: #9a8c7a; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .device {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border: 2px solid var(--ink);
+      border-radius: 50%;
+      background: #78c98b;
+      box-shadow: 0 0 0 4px rgba(120, 201, 139, .18);
+      flex: none;
+    }
+
+    .device strong { display: block; font-size: 14px; white-space: nowrap; }
+
+    .content {
+      display: grid;
+      grid-template-columns: 238px minmax(560px, 1fr) 320px;
+      gap: 18px;
+      padding-top: 20px;
+    }
+
+    .panel {
+      border: 2px solid var(--ink);
+      border-radius: 16px;
+      background: var(--paper);
+      box-shadow: 5px 5px 0 rgba(45, 42, 37, .16);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      min-height: 50px;
+      padding: 14px 16px;
+      border-bottom: 2px solid var(--ink);
+      background: var(--paper-soft);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-head h2,
+    .section-title {
+      margin: 0;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    .nav-list,
+    .tree,
+    .activity { list-style: none; margin: 0; padding: 12px; }
+
+    .nav-item,
+    .tree-item,
+    .file-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 38px;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+
+    .nav-item.active,
+    .tree-item.active {
+      background: #f5df9c;
+      outline: 2px solid var(--ink);
+      box-shadow: 3px 3px 0 rgba(45, 42, 37, .16);
+      font-weight: 700;
+    }
+
+    .nav-icon,
+    .file-icon,
+    .tool-btn,
+    .crumb-home {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border: 1.5px solid var(--ink);
+      border-radius: 8px;
+      background: #fffdf6;
+      flex: none;
+    }
+
+    .storage-card {
+      margin: 0 12px 12px;
+      padding: 14px;
+      border: 1.5px dashed var(--line-dark);
+      border-radius: 14px;
+      background: rgba(255, 253, 246, .72);
+    }
+
+    .meter {
+      height: 10px;
+      margin: 12px 0 8px;
+      border: 1.5px solid var(--ink);
+      border-radius: 999px;
+      background: #eee1cc;
+      overflow: hidden;
+    }
+
+    .meter span { display: block; width: 58%; height: 100%; background: linear-gradient(90deg, #6aa274, #e0a53d); }
+
+    .main {
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .pathbar {
+      border: 2px solid var(--ink);
+      border-radius: 16px;
+      background: #fffdf6;
+      box-shadow: 5px 5px 0 rgba(45, 42, 37, .14);
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .crumbs { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .crumb { font: 600 13px/1 var(--mono); color: var(--ink); white-space: nowrap; }
+    .slash { color: var(--line-dark); font-weight: 700; }
+
+    .actions { display: flex; gap: 8px; flex: none; }
+    .tool-btn { width: 36px; height: 36px; border-width: 2px; background: var(--paper); font-size: 15px; }
+    .tool-btn.primary { background: #cce2f6; }
+    .tool-btn.warn { background: #f2d77f; }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stat {
+      min-height: 82px;
+      border: 2px solid var(--ink);
+      border-radius: 14px;
+      background: var(--paper);
+      padding: 12px;
+      box-shadow: 4px 4px 0 rgba(45, 42, 37, .12);
+    }
+
+    .stat b { display: block; margin-top: 8px; font-size: 22px; line-height: 1; }
+    .stat span { color: var(--muted); font-size: 12px; }
+    .stat.blue { background: #e6f0fb; }
+    .stat.green { background: #e8f3e6; }
+    .stat.red { background: #f9e8e3; }
+
+    .file-table { min-height: 555px; }
+
+    .table-head,
+    .file-row {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) 96px 112px 90px 72px;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .table-head {
+      padding: 10px 18px;
+      border-bottom: 1.5px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .file-list { padding: 8px 10px 12px; }
+    .file-row { border-bottom: 1px solid rgba(222, 208, 189, .72); border-radius: 0; padding: 10px 8px; }
+    .file-row.selected { background: #fff1bf; outline: 2px solid var(--ink); border-radius: 12px; box-shadow: 3px 3px 0 rgba(45,42,37,.12); }
+    .file-name { display: flex; align-items: center; gap: 10px; min-width: 0; font-weight: 700; }
+    .file-name span:last-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .file-meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .tag { width: fit-content; padding: 4px 8px; border: 1.5px solid var(--ink); border-radius: 999px; font-size: 11px; font-weight: 800; background: #fffdf6; }
+    .tag.sync { background: #dff0df; }
+    .tag.lock { background: #f8ddd6; }
+
+    .side-stack { display: grid; gap: 14px; align-content: start; }
+
+    .preview {
+      padding: 16px;
+      background:
+        linear-gradient(90deg, rgba(222,208,189,.4) 1px, transparent 1px) 0 0 / 24px 24px,
+        linear-gradient(rgba(222,208,189,.4) 1px, transparent 1px) 0 0 / 24px 24px,
+        #fffdf6;
+    }
+
+    .file-sheet {
+      min-height: 190px;
+      border: 2px solid var(--ink);
+      border-radius: 12px;
+      background: #fffaf0;
+      padding: 18px 16px;
+      box-shadow: 6px 6px 0 rgba(45,42,37,.12);
+      transform: rotate(-1.2deg);
+    }
+
+    .file-sheet h3 { margin: 0 0 12px; font: 700 18px/1.2 var(--serif); }
+    .sheet-line { height: 10px; margin: 12px 0; border-radius: 999px; background: #e4d4bd; }
+    .sheet-line.short { width: 62%; }
+
+    .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 14px; }
+    .action-btn {
+      height: 42px;
+      border: 2px solid var(--ink);
+      border-radius: 10px;
+      background: #fffdf6;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 3px 3px 0 rgba(45,42,37,.14);
+      font-size: 13px;
+    }
+    .action-btn.fill { background: #d8e9fb; }
+
+    .activity li {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .activity strong { display: block; color: var(--ink); font-size: 13px; margin-bottom: 3px; }
+
+    .annotation {
+      position: absolute;
+      color: var(--red);
+      font: 700 15px/1.35 "Segoe Print", "Comic Sans MS", cursive;
+      transform: rotate(-5deg);
+      pointer-events: none;
+    }
+    .annotation.one { right: 365px; top: 118px; }
+    .annotation.two { left: 318px; bottom: 62px; color: var(--blue); transform: rotate(3deg); }
+
+    .footer-notes {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      margin-top: 18px;
+    }
+    .note {
+      border: 1.5px dashed var(--line-dark);
+      border-radius: 14px;
+      padding: 13px 14px;
+      background: rgba(255, 253, 246, .65);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .note b { display: block; color: var(--ink); margin-bottom: 4px; }
+
+    @media (max-width: 1120px) {
+      .canvas { width: calc(100vw - 28px); padding: 18px; }
+      .topbar { grid-template-columns: 1fr; align-items: stretch; }
+      .device { justify-content: flex-start; }
+      .content { grid-template-columns: 220px 1fr; }
+      .side-stack { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; }
+      .footer-notes { grid-template-columns: 1fr; }
+      .annotation { display: none; }
+    }
+
+    @media (max-width: 760px) {
+      .canvas { margin: 12px auto; border-radius: 16px; }
+      .content { grid-template-columns: 1fr; }
+      .side-stack { grid-template-columns: 1fr; }
+      .summary-grid { grid-template-columns: 1fr 1fr; }
+      .table-head { display: none; }
+      .file-row { grid-template-columns: 1fr auto; gap: 8px; }
+      .file-row > :nth-child(3), .file-row > :nth-child(4) { display: none; }
+      .pathbar { align-items: flex-start; flex-direction: column; }
+      .crumbs { max-width: 100%; overflow: hidden; }
+    }
+  </style>
+</head>
+<body>
+  <main class="canvas" aria-label="远程文件管理界面设计稿">
+    <header class="topbar">
+      <section class="brand">
+        <div class="logo-mark">W</div>
+        <div>
+          <h1>远程文件管理</h1>
+          <p>Desktop Settings / File Explorer</p>
+        </div>
+      </section>
+
+      <div class="search" role="search">
+        <span>⌕</span>
+        <span class="placeholder">搜索文件名、扩展名或远程路径...</span>
+      </div>
+
+      <section class="device">
+        <span class="status-dot"></span>
+        <div>
+          <strong>MacBook-Pro · 在线</strong>
+          <p>延迟 24ms · 最后同步 09:42</p>
+        </div>
+      </section>
+    </header>
+
+    <section class="content">
+      <aside class="panel">
+        <div class="panel-head">
+          <h2>位置</h2>
+          <span class="small">6 台设备</span>
+        </div>
+        <ul class="nav-list">
+          <li class="nav-item active"><span class="nav-icon">⌂</span><span>常用目录</span></li>
+          <li class="nav-item"><span class="nav-icon">▣</span><span>项目工作区</span></li>
+          <li class="nav-item"><span class="nav-icon">⇄</span><span>传输队列</span></li>
+          <li class="nav-item"><span class="nav-icon">◇</span><span>共享文件</span></li>
+          <li class="nav-item"><span class="nav-icon">!</span><span>权限请求</span></li>
+        </ul>
+        <div class="storage-card">
+          <div class="section-title">远程磁盘</div>
+          <div class="meter"><span></span></div>
+          <p class="small">186.4 GB 可用 / 512 GB</p>
+        </div>
+        <ul class="tree">
+          <li class="tree-item"><span>▾</span><span>Users</span></li>
+          <li class="tree-item active"><span>↳</span><span>liming</span></li>
+          <li class="tree-item"><span>↳</span><span>Projects</span></li>
+          <li class="tree-item"><span>↳</span><span>Downloads</span></li>
+        </ul>
+      </aside>
+
+      <section class="main">
+        <div class="pathbar">
+          <div>
+            <div class="crumbs">
+              <span class="crumb-home">⌂</span>
+              <span class="crumb">MacBook-Pro</span><span class="slash">/</span>
+              <span class="crumb">Users</span><span class="slash">/</span>
+              <span class="crumb">liming</span><span class="slash">/</span>
+              <span class="crumb">Projects</span>
+            </div>
+            <p class="path-meta">当前路径支持拖拽上传、复制远程路径、批量下载</p>
+          </div>
+          <div class="actions" aria-label="文件操作">
+            <button class="tool-btn" title="返回">←</button>
+            <button class="tool-btn" title="前进">→</button>
+            <button class="tool-btn warn" title="新建文件夹">＋</button>
+            <button class="tool-btn primary" title="上传">⇧</button>
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <div class="stat blue"><span>文件夹</span><b>18</b></div>
+          <div class="stat green"><span>文件</span><b>246</b></div>
+          <div class="stat"><span>已选择</span><b>3</b></div>
+          <div class="stat red"><span>待确认</span><b>2</b></div>
+        </div>
+
+        <section class="panel file-table">
+          <div class="panel-head">
+            <h2>文件列表</h2>
+            <span class="hint">按名称排序 · 详细视图</span>
+          </div>
+          <div class="table-head">
+            <span>名称</span><span>大小</span><span>修改时间</span><span>状态</span><span>操作</span>
+          </div>
+          <div class="file-list">
+            <div class="file-row selected">
+              <div class="file-name"><span class="file-icon">▣</span><span>wenzagent</span></div>
+              <span class="file-meta">--</span><span class="file-meta">今天 09:38</span><span class="tag sync">同步中</span><span class="file-meta">⋯</span>
+            </div>
+            <div class="file-row">
+              <div class="file-name"><span class="file-icon">▣</span><span>design-drafts</span></div>
+              <span class="file-meta">--</span><span class="file-meta">昨天 21:16</span><span class="tag">正常</span><span class="file-meta">⋯</span>
+            </div>
+            <div class="file-row selected">
+              <div class="file-name"><span class="file-icon">MD</span><span>remote-file-notes.md</span></div>
+              <span class="file-meta">18 KB</span><span class="file-meta">今天 08:12</span><span class="tag">正常</span><span class="file-meta">⋯</span>
+            </div>
+            <div class="file-row">
+              <div class="file-name"><span class="file-icon">JS</span><span>file-transfer-worker.js</span></div>
+              <span class="file-meta">42 KB</span><span class="file-meta">周一 17:20</span><span class="tag lock">只读</span><span class="file-meta">⋯</span>
+            </div>
+            <div class="file-row selected">
+              <div class="file-name"><span class="file-icon">PNG</span><span>share-preview.png</span></div>
+              <span class="file-meta">1.8 MB</span><span class="file-meta">周一 13:03</span><span class="tag">正常</span><span class="file-meta">⋯</span>
+            </div>
+            <div class="file-row">
+              <div class="file-name"><span class="file-icon">ZIP</span><span>release-assets.zip</span></div>
+              <span class="file-meta">86 MB</span><span class="file-meta">05/28</span><span class="tag">正常</span><span class="file-meta">⋯</span>
+            </div>
+            <div class="file-row">
+              <div class="file-name"><span class="file-icon">LOG</span><span>sync-session.log</span></div>
+              <span class="file-meta">128 KB</span><span class="file-meta">05/27</span><span class="tag">正常</span><span class="file-meta">⋯</span>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <aside class="side-stack">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>预览</h2>
+            <span class="small">Markdown</span>
+          </div>
+          <div class="preview">
+            <div class="file-sheet">
+              <h3>remote-file-notes.md</h3>
+              <div class="sheet-line"></div>
+              <div class="sheet-line"></div>
+              <div class="sheet-line short"></div>
+              <p class="small">选中文件后在这里显示摘要、权限和下载入口。</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>快捷操作</h2></div>
+          <div class="quick-actions">
+            <button class="action-btn fill">⇩ 下载</button>
+            <button class="action-btn">⧉ 复制</button>
+            <button class="action-btn">✎ 重命名</button>
+            <button class="action-btn">⌦ 删除</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>操作记录</h2><span class="small">实时</span></div>
+          <ul class="activity">
+            <li><strong>上传完成</strong>share-preview.png 已写入远程目录</li>
+            <li><strong>权限确认</strong>file-transfer-worker.js 请求只读访问</li>
+            <li><strong>批量选择</strong>当前已选择 3 个项目</li>
+          </ul>
+        </section>
+      </aside>
+    </section>
+
+    <div class="annotation one">笔记感：纸张、压线、重点高亮</div>
+    <div class="annotation two">桌面端保留高密度列表，右侧做上下文预览</div>
+
+    <section class="footer-notes">
+      <div class="note"><b>设计关键词</b>轻纸感、手账批注、清晰层级、设置页里的工具属性。</div>
+      <div class="note"><b>交互重点</b>路径面包屑、搜索、批量选择、上传下载、远程权限状态。</div>
+      <div class="note"><b>落地提示</b>Flutter 实现可拆为 Sidebar、PathBar、FileTable、PreviewInspector 四块。</div>
+    </section>
+  </main>
+</body>
+</html>
