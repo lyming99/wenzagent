@@ -18,8 +18,8 @@ import 'dart:isolate';
 
 const _host = '127.0.0.1';
 const _port = '9900';
-const _deviceId = 'test-device-kimi';
-const _deviceName = 'test-device-kimi';
+const _deviceId = 'test-device-666';
+const _deviceName = 'test-device-666';
 
 const _extraArgs = <String>[]; // 可追加额外参数，如 '--log-level', 'debug'
 
